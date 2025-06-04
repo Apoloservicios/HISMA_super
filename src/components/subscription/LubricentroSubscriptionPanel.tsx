@@ -950,15 +950,23 @@ const LubricentroSubscriptionPanel: React.FC<LubricentroSubscriptionPanelProps> 
                       ></div>
                     </div>
                     <div className="mt-1 flex justify-between">
-                      <span className="text-xs text-gray-500">
-                        {lubricentro.estado === 'trial' ? 
-                          `${Math.min(10, 10 - (lubricentro.servicesUsedThisMonth || 0))} disponibles` : 
-                          lubricentro.subscriptionPlan && 
-                          isValidSubscriptionPlan(lubricentro.subscriptionPlan) && 
-                          SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType]?.maxMonthlyServices !== null ? 
-                            `${Math.max(0, SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType].maxMonthlyServices - (lubricentro.servicesUsedThisMonth || 0))} disponibles` : 
-                            'Ilimitados'}
-                      </span>
+                        <span className="text-xs text-gray-500">
+                        {(() => {
+                            if (lubricentro.estado === 'trial') {
+                            return `${Math.min(10, 10 - (lubricentro.servicesUsedThisMonth || 0))} disponibles`;
+                            }
+                            
+                            if (lubricentro.subscriptionPlan && isValidSubscriptionPlan(lubricentro.subscriptionPlan)) {
+                            const plan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType];
+                            if (plan && plan.maxMonthlyServices !== null) {
+                                const remaining = Math.max(0, plan.maxMonthlyServices - (lubricentro.servicesUsedThisMonth || 0));
+                                return `${remaining} disponibles`;
+                            }
+                            }
+                            
+                            return 'Ilimitados';
+                        })()}
+                        </span>
                       <Button
                         size="sm"
                         color="secondary"
