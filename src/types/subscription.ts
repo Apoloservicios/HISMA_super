@@ -16,6 +16,40 @@ export interface SubscriptionPlan {
   recommended?: boolean;
 }
 
+// Interfaz extendida para planes gestionados dinámicamente
+export interface ManagedSubscriptionPlan extends SubscriptionPlan {
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+  usageCount: number; // Cantidad de lubricentros usando este plan
+  isDefault: boolean; // Si es un plan por defecto del sistema
+}
+
+// Interfaz para el historial de cambios (corregida)
+export interface PlanChangeHistory {
+  id: string;
+  planId: SubscriptionPlanType;
+  changeType: 'created' | 'updated' | 'deleted' | 'activated' | 'deactivated';
+  oldValues?: Partial<ManagedSubscriptionPlan>; // Cambiado a ManagedSubscriptionPlan
+  newValues?: Partial<ManagedSubscriptionPlan>; // Cambiado a ManagedSubscriptionPlan
+  changedBy: string;
+  timestamp: Date;
+  reason?: string;
+}
+
+// Interfaz para configuración del sistema de planes
+export interface PlanSystemSettings {
+  allowCustomPlans: boolean;
+  maxPlansCount: number;
+  defaultTrialDays: number;
+  defaultTrialServices: number;
+  defaultTrialUsers: number;
+  lastUpdated: Date;
+  updatedBy: string;
+}
+
 export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> = {
   starter: {
     id: 'starter',
@@ -84,7 +118,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
       semiannual: 37500
     },
     maxUsers: 999,
-    maxMonthlyServices: null, // Ilimitado
+    maxMonthlyServices: null,
     features: [
       'Usuarios ilimitados',
       'Servicios ilimitados',
