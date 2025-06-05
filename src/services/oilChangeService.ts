@@ -1,4 +1,4 @@
-// src/services/oilChangeService.ts
+// src/services/oilChangeService.ts - CORRECCIÓN FINAL PARA ERRORES FIREBASE
 import { 
   collection, 
   doc, 
@@ -55,8 +55,60 @@ const ensureDateObject = (date: any): Date => {
     }
   }
   
-  // Si no se pudo determinar el formato, devolver una nueva fecha
   return new Date();
+};
+
+// ✅ NUEVA FUNCIÓN: Limpiar datos para Firebase (eliminar undefined y null)
+const cleanDataForFirebase = (data: any): any => {
+  const cleanData: any = {};
+  
+  for (const [key, value] of Object.entries(data)) {
+    // Solo incluir valores que no sean undefined o null
+    if (value !== undefined && value !== null) {
+      if (typeof value === 'object' && value instanceof Date) {
+        // Mantener fechas como están
+        cleanData[key] = value;
+      } else if (typeof value === 'object' && !Array.isArray(value)) {
+        // Limpiar objetos anidados recursivamente
+        const cleanedNested = cleanDataForFirebase(value);
+        if (Object.keys(cleanedNested).length > 0) {
+          cleanData[key] = cleanedNested;
+        }
+      } else {
+        // Incluir valores primitivos válidos
+        cleanData[key] = value;
+      }
+    }
+  }
+  
+  return cleanData;
+};
+
+// Validar datos para duplicación
+const validateDataForCloning = (data: Partial<OilChange>): string[] => {
+  const errors: string[] = [];
+  
+  if (!data.kmActuales || data.kmActuales <= 0) {
+    errors.push('El kilometraje actual es obligatorio y debe ser mayor a 0');
+  }
+  
+  if (!data.fechaServicio || data.fechaServicio > new Date()) {
+    errors.push('La fecha de servicio no puede ser futura');
+  }
+  
+  if (!data.nombreCliente?.trim()) {
+    errors.push('El nombre del cliente es obligatorio');
+  }
+  
+  if (!data.dominioVehiculo?.trim()) {
+    errors.push('El dominio del vehículo es obligatorio');
+  }
+  
+  if (!data.marcaAceite?.trim() || !data.tipoAceite?.trim() || !data.sae?.trim()) {
+    errors.push('Los datos del aceite son obligatorios');
+  }
+  
+  return errors;
 };
 
 // Obtener cambio de aceite por ID
@@ -145,7 +197,7 @@ export const getOilChangesByLubricentro = async (
   }
 };
 
-// Búsqueda de cambios de aceite (versión mejorada, insensible a mayúsculas/minúsculas)
+// Búsqueda de cambios de aceite
 export const searchOilChanges = async (
   lubricentroId: string,
   searchType: 'cliente' | 'dominio',
@@ -153,26 +205,22 @@ export const searchOilChanges = async (
   pageSize: number = 20
 ): Promise<OilChange[]> => {
   try {
-    // Determine si busca por cliente o dominio
     const field = searchType === 'cliente' ? 'nombreCliente' : 'dominioVehiculo';
     const term = searchTerm.trim();
     
-    // Si el campo de búsqueda está vacío, devolver una lista vacía
     if (!term) {
       return [];
     }
     
-    // Consulta a Firestore
     const q = query(
       collection(db, COLLECTION_NAME),
       where('lubricentroId', '==', lubricentroId),
       orderBy(field),
-      limit(pageSize * 5) // Obtenemos más resultados para luego filtrar
+      limit(pageSize * 5)
     );
     
     const querySnapshot = await getDocs(q);
     
-    // Convertir y filtrar resultados
     const oilChanges = querySnapshot.docs
       .map(doc => convertFirestoreOilChange(doc))
       .filter(oilChange => {
@@ -182,7 +230,7 @@ export const searchOilChanges = async (
         
         return fieldValue.includes(term.toLowerCase());
       })
-      .slice(0, pageSize); // Limitamos a la cantidad solicitada
+      .slice(0, pageSize);
     
     return oilChanges;
   } catch (error) {
@@ -197,10 +245,7 @@ export const getUpcomingOilChanges = async (
   daysAhead: number = 30
 ): Promise<OilChange[]> => {
   try {
-    // Calcular la fecha de inicio (hoy)
     const startDate = new Date();
-    
-    // Calcular la fecha límite (hoy + daysAhead)
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + daysAhead);
     
@@ -221,10 +266,9 @@ export const getUpcomingOilChanges = async (
   }
 };
 
-// Obtener cambios de aceite por vehículo (dominio)
+// Obtener cambios de aceite por vehículo
 export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<OilChange[]> => {
   try {
-    // Convertir a mayúsculas para estandarizar
     const dominio = dominioVehiculo.toUpperCase();
     
     const q = query(
@@ -242,44 +286,52 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
   }
 };
 
-// Crear cambio de aceite con validación de límites de prueba mejorada
+// ✅ FUNCIÓN CORREGIDA: Crear cambio de aceite sin errores de Firebase
 export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>): Promise<string> => {
   try {
-    // Obtener información del lubricentro
-    const lubricentro = await getLubricentroById(data.lubricentroId);
+    console.log('🔧 Creando cambio de aceite:', data);
     
+    // Validar si es duplicación
+    const isDuplication = data.nroCambio && data.nroCambio.includes('-');
+    if (isDuplication) {
+      const validationErrors = validateDataForCloning(data);
+      if (validationErrors.length > 0) {
+        throw new Error(`Errores de validación: ${validationErrors.join(', ')}`);
+      }
+    }
+    
+    // Verificar lubricentro
+    const lubricentro = await getLubricentroById(data.lubricentroId);
     if (!lubricentro) {
       throw new Error('No se encontró el lubricentro');
     }
 
     // Verificar estado del lubricentro
     if (lubricentro.estado === 'inactivo') {
-      throw new Error('El lubricentro no tiene una suscripción activa. Contacte al administrador para activar su cuenta.');
+      throw new Error('El lubricentro no tiene una suscripción activa.');
     }
 
-    // Verificar si el período de prueba ha expirado
+    // Verificar período de prueba
     if (lubricentro.estado === 'trial' && lubricentro.trialEndDate) {
       const now = new Date();
       const trialEnd = new Date(lubricentro.trialEndDate);
       
       if (trialEnd < now) {
-        throw new Error('El período de prueba ha expirado. Contacte al soporte para activar su suscripción.');
+        throw new Error('El período de prueba ha expirado.');
       }
     }
 
-    // Verificar límites durante el período de prueba
+    // Verificar límites de prueba
     if (lubricentro.estado === 'trial') {
-      const trialServiceLimit = 10; // Límite de servicios en período de prueba
-      
-      // Contar servicios del mes actual
-      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const trialServiceLimit = 10;
+      const currentMonth = new Date().toISOString().slice(0, 7);
       const currentServices = lubricentro.servicesUsedThisMonth || 0;
       
       if (currentServices >= trialServiceLimit) {
-        throw new Error(`Has alcanzado el límite de ${trialServiceLimit} servicios durante el período de prueba. Contacta al soporte para activar tu suscripción y continuar registrando cambios de aceite.`);
+        throw new Error(`Has alcanzado el límite de ${trialServiceLimit} servicios durante el período de prueba.`);
       }
       
-      // Actualizar contador de servicios usados
+      // Actualizar contador
       await updateLubricentro(data.lubricentroId, {
         servicesUsedThisMonth: currentServices + 1,
         servicesUsedHistory: {
@@ -288,36 +340,93 @@ export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>)
         }
       });
     } else {
-      // Para lubricentros activos, verificar límites según plan de suscripción
+      // Para lubricentros activos
       const canCreateService = await incrementServiceCount(data.lubricentroId);
-      
       if (!canCreateService) {
-        throw new Error('Has alcanzado el límite mensual de servicios según tu plan de suscripción. Contacta al administrador para actualizar tu plan.');
+        throw new Error('Has alcanzado el límite mensual de servicios.');
       }
     }
     
-    // Asegurarse de que el dominio del vehículo esté en mayúsculas
+    // ✅ CORRECCIÓN CRÍTICA: Preparar datos limpios para Firebase
     const dominioVehiculo = data.dominioVehiculo.toUpperCase();
-    
-    // Asegurar que fechaServicio sea un objeto Date
     const fechaServicio = ensureDateObject(data.fechaServicio);
-    
-    // Generar fecha del próximo cambio basado en la periodicidad
     const fechaProximoCambio = new Date(fechaServicio);
     fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + data.perioricidad_servicio);
     
-    const docRef = await addDoc(collection(db, COLLECTION_NAME), {
-      ...data,
-      dominioVehiculo,
-      fechaServicio,
-      fechaProximoCambio,
+    // Calcular kmProximo si es inválido
+    let kmProximo = data.kmProximo;
+    if (!kmProximo || kmProximo <= data.kmActuales) {
+      kmProximo = data.kmActuales + 10000;
+    }
+    
+    // ✅ PREPARAR DATOS SEGUROS PARA FIREBASE
+    const baseData = {
+      lubricentroId: data.lubricentroId,
+      lubricentroNombre: data.lubricentroNombre || '',
       fecha: new Date(),
+      fechaServicio: fechaServicio,
+      nroCambio: data.nroCambio,
+      nombreCliente: data.nombreCliente,
+      celular: data.celular || '',
+      
+      // Datos del vehículo
+      dominioVehiculo: dominioVehiculo,
+      marcaVehiculo: data.marcaVehiculo,
+      modeloVehiculo: data.modeloVehiculo,
+      tipoVehiculo: data.tipoVehiculo,
+      añoVehiculo: data.añoVehiculo || null,
+      kmActuales: data.kmActuales,
+      kmProximo: kmProximo,
+      perioricidad_servicio: data.perioricidad_servicio,
+      fechaProximoCambio: fechaProximoCambio,
+      
+      // Datos del aceite
+      marcaAceite: data.marcaAceite,
+      tipoAceite: data.tipoAceite,
+      sae: data.sae,
+      cantidadAceite: data.cantidadAceite,
+      
+      // Filtros y servicios (usar false como default para booleanos)
+      filtroAceite: data.filtroAceite || false,
+      filtroAceiteNota: data.filtroAceiteNota || '',
+      filtroAire: data.filtroAire || false,
+      filtroAireNota: data.filtroAireNota || '',
+      filtroHabitaculo: data.filtroHabitaculo || false,
+      filtroHabitaculoNota: data.filtroHabitaculoNota || '',
+      filtroCombustible: data.filtroCombustible || false,
+      filtroCombustibleNota: data.filtroCombustibleNota || '',
+      aditivo: data.aditivo || false,
+      aditivoNota: data.aditivoNota || '',
+      refrigerante: data.refrigerante || false,
+      refrigeranteNota: data.refrigeranteNota || '',
+      diferencial: data.diferencial || false,
+      diferencialNota: data.diferencialNota || '',
+      caja: data.caja || false,
+      cajaNota: data.cajaNota || '',
+      engrase: data.engrase || false,
+      engraseNota: data.engraseNota || '',
+      
+      // Observaciones y operario
+      observaciones: data.observaciones || '',
+      nombreOperario: data.nombreOperario,
+      operatorId: data.operatorId,
+      
+      // Timestamp
       createdAt: serverTimestamp()
-    });
+    };
+    
+    // ✅ LIMPIAR DATOS ANTES DE ENVIAR A FIREBASE
+    const cleanedData = cleanDataForFirebase(baseData);
+    
+    console.log('🔧 Datos limpios para Firebase:', cleanedData);
+    
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
+    
+    console.log('✅ Cambio de aceite creado exitosamente:', docRef.id);
     
     return docRef.id;
   } catch (error) {
-    console.error('Error al crear el cambio de aceite:', error);
+    console.error('❌ Error al crear el cambio de aceite:', error);
     throw error;
   }
 };
@@ -327,21 +436,18 @@ export const updateOilChange = async (id: string, data: Partial<OilChange>): Pro
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
     
-    // Asegurarse de que si se actualiza el dominio, esté en mayúsculas
     const updateData: any = { ...data };
     
     if (data.dominioVehiculo) {
       updateData.dominioVehiculo = data.dominioVehiculo.toUpperCase();
     }
     
-    // Convertir fechaServicio a Date si existe
     if (data.fechaServicio) {
       updateData.fechaServicio = ensureDateObject(data.fechaServicio);
     }
     
-    // Si se actualiza la fecha del servicio o la periodicidad, recalcular la fecha del próximo cambio
+    // Recalcular fechaProximoCambio si es necesario
     if (data.fechaServicio || data.perioricidad_servicio) {
-      // Primero, obtener el documento actual
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) {
         throw new Error('El cambio de aceite no existe');
@@ -349,13 +455,11 @@ export const updateOilChange = async (id: string, data: Partial<OilChange>): Pro
       
       const currentData = docSnap.data();
       
-      // Determinar qué fecha de servicio usar
       let fechaServicioToUse;
       if (data.fechaServicio) {
         fechaServicioToUse = ensureDateObject(data.fechaServicio);
       } else {
         try {
-          // Convertir fecha existente al formato adecuado
           if (currentData.fechaServicio && typeof currentData.fechaServicio.toDate === 'function') {
             fechaServicioToUse = currentData.fechaServicio.toDate();
           } else {
@@ -369,20 +473,22 @@ export const updateOilChange = async (id: string, data: Partial<OilChange>): Pro
       
       const perioricidad = data.perioricidad_servicio !== undefined ? data.perioricidad_servicio : currentData.perioricidad_servicio;
       
-      // Recalcular fecha del próximo cambio
       const fechaProximoCambio = new Date(fechaServicioToUse);
       fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + perioricidad);
       
       updateData.fechaProximoCambio = fechaProximoCambio;
     }
     
-    // Nunca actualizar el ID, createdAt o lubricentroId directamente
+    // Limpiar datos no permitidos
     const { id: _, createdAt: __, lubricentroId: ___, ...cleanData } = updateData;
     
-    await updateDoc(docRef, {
+    // ✅ LIMPIAR DATOS ANTES DE ACTUALIZAR
+    const finalData = cleanDataForFirebase({
       ...cleanData,
       updatedAt: serverTimestamp()
     });
+    
+    await updateDoc(docRef, finalData);
   } catch (error) {
     console.error('Error al actualizar el cambio de aceite:', error);
     throw error;
@@ -399,10 +505,11 @@ export const deleteOilChange = async (id: string): Promise<void> => {
   }
 };
 
-// Generar el próximo número de cambio
+// Generar próximo número de cambio
 export const getNextOilChangeNumber = async (lubricentroId: string, prefix: string): Promise<string> => {
   try {
-    // Obtener el último cambio de aceite para este lubricentro
+    console.log(`🔧 Generando próximo número para: ${lubricentroId}, prefijo: ${prefix}`);
+    
     const q = query(
       collection(db, COLLECTION_NAME),
       where('lubricentroId', '==', lubricentroId),
@@ -415,28 +522,40 @@ export const getNextOilChangeNumber = async (lubricentroId: string, prefix: stri
     const querySnapshot = await getDocs(q);
     
     if (querySnapshot.empty) {
-      // Si no hay cambios previos, comenzar con 00001
-      return `${prefix}-00001`;
+      const newNumber = `${prefix}-00001`;
+      console.log(`🔧 Primer número: ${newNumber}`);
+      return newNumber;
     }
     
     const lastOilChange = querySnapshot.docs[0].data() as unknown as OilChange;
     const lastNumber = lastOilChange.nroCambio;
     
-    // Extraer el número y aumentarlo en 1
-    const numericPart = lastNumber.split('-')[1];
-    const nextNumber = (parseInt(numericPart) + 1).toString().padStart(5, '0');
+    console.log(`🔧 Último número: ${lastNumber}`);
     
-    return `${prefix}-${nextNumber}`;
+    const parts = lastNumber.split('-');
+    if (parts.length !== 2) {
+      console.warn(`⚠️ Formato inesperado: ${lastNumber}`);
+      return `${prefix}-00001`;
+    }
+    
+    const numericPart = parts[1];
+    const nextNumber = (parseInt(numericPart) + 1).toString().padStart(5, '0');
+    const newNumber = `${prefix}-${nextNumber}`;
+    
+    console.log(`🔧 Nuevo número: ${newNumber}`);
+    return newNumber;
   } catch (error) {
-    console.error('Error al generar el próximo número de cambio:', error);
-    throw error;
+    console.error('❌ Error al generar número:', error);
+    const timestamp = Date.now().toString().slice(-5);
+    const fallbackNumber = `${prefix}-${timestamp}`;
+    console.log(`🔧 Número de fallback: ${fallbackNumber}`);
+    return fallbackNumber;
   }
 };
 
-// Obtener estadísticas de cambios de aceite
+// Obtener estadísticas
 export const getOilChangesStats = async (lubricentroId: string): Promise<OilChangeStats> => {
   try {
-    // Obtener estadísticas de todos los cambios
     const qTotal = query(
       collection(db, COLLECTION_NAME),
       where('lubricentroId', '==', lubricentroId)
@@ -444,7 +563,6 @@ export const getOilChangesStats = async (lubricentroId: string): Promise<OilChan
     const totalSnapshot = await getDocs(qTotal);
     const total = totalSnapshot.size;
     
-    // Fechas para filtrar
     const now = new Date();
     const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastDayThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -452,7 +570,6 @@ export const getOilChangesStats = async (lubricentroId: string): Promise<OilChan
     const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
     
-    // Obtener cambios de este mes
     const qThisMonth = query(
       collection(db, COLLECTION_NAME),
       where('lubricentroId', '==', lubricentroId),
@@ -462,7 +579,6 @@ export const getOilChangesStats = async (lubricentroId: string): Promise<OilChan
     const thisMonthSnapshot = await getDocs(qThisMonth);
     const thisMonth = thisMonthSnapshot.size;
     
-    // Obtener cambios del mes pasado
     const qLastMonth = query(
       collection(db, COLLECTION_NAME),
       where('lubricentroId', '==', lubricentroId),
@@ -472,7 +588,6 @@ export const getOilChangesStats = async (lubricentroId: string): Promise<OilChan
     const lastMonthSnapshot = await getDocs(qLastMonth);
     const lastMonth = lastMonthSnapshot.size;
     
-    // Obtener próximos cambios (próximos 30 días)
     const in30Days = new Date();
     in30Days.setDate(in30Days.getDate() + 30);
     
@@ -492,19 +607,12 @@ export const getOilChangesStats = async (lubricentroId: string): Promise<OilChan
       upcoming30Days
     };
   } catch (error) {
-    console.error('Error al obtener estadísticas de cambios de aceite:', error);
+    console.error('Error al obtener estadísticas:', error);
     throw error;
   }
 };
 
-/**
- * Obtiene los cambios de aceite realizados por un operador específico
- * @param operatorId - ID del operador
- * @param lubricentroId - ID del lubricentro
- * @param startDate - Fecha de inicio del período
- * @param endDate - Fecha de fin del período
- * @returns Promise con un array de cambios de aceite
- */
+// Obtener cambios por operador
 export const getOilChangesByOperator = async (
   operatorId: string,
   lubricentroId: string,
@@ -512,7 +620,6 @@ export const getOilChangesByOperator = async (
   endDate: Date
 ): Promise<OilChange[]> => {
   try {
-    // Consultar cambios de aceite realizados por el operador en el período especificado
     const q = query(
       collection(db, COLLECTION_NAME),
       where('lubricentroId', '==', lubricentroId),
@@ -526,7 +633,7 @@ export const getOilChangesByOperator = async (
     
     return querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
   } catch (error) {
-    console.error('Error al obtener cambios de aceite por operador:', error);
+    console.error('Error al obtener cambios por operador:', error);
     throw error;
   }
 };

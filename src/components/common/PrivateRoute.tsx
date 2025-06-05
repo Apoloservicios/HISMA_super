@@ -1,4 +1,4 @@
-// src/components/common/PrivateRoute.tsx
+// src/components/common/PrivateRoute.tsx - VERSIÓN CORREGIDA
 import React, { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -140,6 +140,63 @@ const EmailVerificationRequired = () => {
   );
 };
 
+// ✅ NUEVO: Componente para límite de prueba alcanzado
+const TrialLimitReachedScreen = ({ lubricentro, currentServices, limit }: { 
+  lubricentro: Lubricentro; 
+  currentServices: number; 
+  limit: number; 
+}) => (
+  <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
+      <div className="text-center">
+        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
+          <svg className="h-6 w-6 text-orange-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 mb-2">
+          Límite de Prueba Alcanzado
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Has utilizado <strong>{currentServices} de {limit}</strong> servicios disponibles durante el período de prueba.
+        </p>
+        <p className="text-sm text-gray-600 mb-6">
+          Para continuar registrando cambios de aceite, necesitas activar tu suscripción.
+        </p>
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+          <h4 className="text-sm font-medium text-blue-800 mb-2">¿Necesitas más servicios?</h4>
+          <p className="text-sm text-blue-700 mb-3">
+            Contáctanos para activar tu cuenta y elegir el plan que mejor se adapte a tus necesidades.
+          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-blue-600">📧 soporte@hisma.com.ar</p>
+            <p className="text-xs text-blue-600">📱 +54 (11) 1234-5678</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Button
+            color="primary"
+            fullWidth
+            onClick={() => window.location.href = 'mailto:soporte@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
+          >
+            Contactar Soporte
+          </Button>
+          <Button
+            variant="outline"
+            color="secondary"
+            fullWidth
+            onClick={() => window.history.back()}
+          >
+            Volver
+          </Button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 interface PrivateRouteProps {
   children: ReactNode;
   requiredRoles?: UserRole[];
@@ -200,7 +257,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({
     }
   }
   
-  // Verificar estado del lubricentro y período de prueba
+  // ✅ CORRECCIÓN: Verificar estado del lubricentro y período de prueba de manera más precisa
   if (userProfile && userProfile.role !== 'superadmin' && lubricentro) {
     // Si el lubricentro está inactivo
     if (lubricentro.estado === 'inactivo') {
@@ -217,64 +274,21 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({
       }
     }
     
-    // Verificar límites durante el período de prueba para ciertas rutas
+    // ✅ CORRECCIÓN: Verificar límites durante el período de prueba para rutas específicas
     if (requiresActiveSubscription && lubricentro.estado === 'trial') {
-      // Verificar si ha alcanzado límites del período de prueba
-      const trialServiceLimit = 10; // Límite de servicios en período de prueba
+      const trialServiceLimit = 10; // Límite coherente con constants.ts
       const currentServices = lubricentro.servicesUsedThisMonth || 0;
       
-      if (currentServices >= trialServiceLimit) {
-        return (
-          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-            <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
-              <div className="text-center">
-                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-orange-100 mb-4">
-                  <svg className="h-6 w-6 text-orange-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Límite de Prueba Alcanzado
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Has alcanzado el límite de {trialServiceLimit} servicios durante el período de prueba.
-                </p>
-                <p className="text-sm text-gray-600 mb-6">
-                  Para continuar registrando cambios de aceite, necesitas activar tu suscripción.
-                </p>
-                
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
-                  <h4 className="text-sm font-medium text-blue-800 mb-2">¿Necesitas más servicios?</h4>
-                  <p className="text-sm text-blue-700 mb-3">
-                    Contáctanos para activar tu cuenta y elegir el plan que mejor se adapte a tus necesidades.
-                  </p>
-                  <div className="space-y-1">
-                    <p className="text-xs text-blue-600">📧 soporte@hisma.com.ar</p>
-                    <p className="text-xs text-blue-600">📱 +54 (11) 1234-5678</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Button
-                    color="primary"
-                    fullWidth
-                    onClick={() => window.location.href = 'mailto:soporte@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
-                  >
-                    Contactar Soporte
-                  </Button>
-                  <Button
-                    variant="outline"
-                    color="secondary"
-                    fullWidth
-                    onClick={() => window.history.back()}
-                  >
-                    Volver
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
+      // ✅ MEJORA: Solo bloquear si ha alcanzado exactamente el límite, permitir edición
+      const isCreationRoute = location.pathname.includes('/nuevo') || 
+                             (location.pathname.includes('/cambios-aceite') && location.search.includes('clone='));
+      
+      if (isCreationRoute && currentServices >= trialServiceLimit) {
+        return <TrialLimitReachedScreen 
+          lubricentro={lubricentro} 
+          currentServices={currentServices} 
+          limit={trialServiceLimit} 
+        />;
       }
     }
   }

@@ -4,7 +4,9 @@ import { useAuth } from '../../context/AuthContext';
 
 // Importar los dashboards específicos para cada rol
 import SuperAdminDashboard from './SuperAdminDashboard';
-import OwnerDashboard from './OwnerDashboard';
+import OwnerDashboard from './OwnerDashboard'; // Dashboard viejo comentado
+//import SimpleOwnerDashboard from './SimpleOwnerDashboard'; // Dashboard nuevo y rápido
+import HybridOwnerDashboard from './HybridOwnerDashboard';
 import UserDashboard from './UserDashboard';
 
 // Componente de carga
@@ -30,7 +32,7 @@ const DashboardPage: React.FC = () => {
     case 'superadmin':
       return <SuperAdminDashboard />;
     case 'admin':
-      return <OwnerDashboard />;
+      return <HybridOwnerDashboard />; // Cambio aquí: usar el dashboard rápido
     case 'user':
       return <UserDashboard />;
     default:

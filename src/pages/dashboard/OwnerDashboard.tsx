@@ -1,5 +1,5 @@
 // src/pages/dashboard/OwnerDashboard.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { PageContainer, Card, CardHeader, CardBody, Button, Alert, Spinner } from '../../components/ui';
@@ -9,7 +9,7 @@ import { getUsersByLubricentro, getUsersOperatorStats } from '../../services/use
 import { Lubricentro, OilChangeStats, User, OilChange, OperatorStats } from '../../types';
 import { SUBSCRIPTION_PLANS } from '../../types/subscription';
 
-// Recharts
+// Recharts (solo importar lo que se usa)
 import {
   BarChart,
   Bar,
@@ -34,16 +34,16 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
-// Componente de carga
+// Componente de carga optimizado
 const LoadingScreen = () => (
-  <div className="flex justify-center items-center min-h-screen">
-    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+  <div className="flex justify-center items-center h-64">
+    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600"></div>
   </div>
 );
 
-// Componente para mostrar información del período de prueba
-const TrialInfoCard: React.FC<{ lubricentro: Lubricentro; stats: OilChangeStats }> = ({ lubricentro, stats }) => {
-  const getDaysRemaining = (endDate: Date | undefined | null): number => {
+// Componente para mostrar información del período de prueba (optimizado)
+const TrialInfoCard: React.FC<{ lubricentro: Lubricentro; stats: OilChangeStats }> = React.memo(({ lubricentro, stats }) => {
+  const getDaysRemaining = useCallback((endDate: Date | undefined | null): number => {
     if (!endDate) return 0;
     
     try {
@@ -57,49 +57,29 @@ const TrialInfoCard: React.FC<{ lubricentro: Lubricentro; stats: OilChangeStats 
       console.error("Error calculando días restantes:", error);
       return 0;
     }
-  };
+  }, []);
 
   const TRIAL_SERVICE_LIMIT = 10;
 
   // Usar stats.thisMonth en lugar de lubricentro.servicesUsedThisMonth
-  const getServicesUsed = (): number => {
-    // Priorizar stats.thisMonth que viene de la consulta real a la base de datos
+  const getServicesUsed = useCallback((): number => {
     if (stats && typeof stats.thisMonth === 'number') {
       return stats.thisMonth;
     }
-    // Fallback a lubricentro.servicesUsedThisMonth si stats no está disponible
     return lubricentro.servicesUsedThisMonth || 0;
-  };
+  }, [stats, lubricentro.servicesUsedThisMonth]);
 
-  const getServicesRemaining = (): number => {
-    const servicesUsed = getServicesUsed();
-    return Math.max(0, TRIAL_SERVICE_LIMIT - servicesUsed);
-  };
-
-  const getProgressPercentage = (): number => {
-    const servicesUsed = getServicesUsed();
-    return Math.min(100, (servicesUsed / TRIAL_SERVICE_LIMIT) * 100);
-  };
+  const servicesUsed = getServicesUsed();
+  const servicesRemaining = Math.max(0, TRIAL_SERVICE_LIMIT - servicesUsed);
+  const progressPercentage = Math.min(100, (servicesUsed / TRIAL_SERVICE_LIMIT) * 100);
 
   if (lubricentro.estado !== 'trial') {
     return null;
   }
 
   const daysRemaining = getDaysRemaining(lubricentro.trialEndDate);
-  const servicesRemaining = getServicesRemaining();
-  const servicesUsed = getServicesUsed();
-  const progressPercentage = getProgressPercentage();
   const isExpiring = daysRemaining <= 2;
   const isLimitReached = servicesRemaining === 0;
-
-  // Debug info - remover en producción
-  console.log('TrialInfoCard Debug:', {
-    servicesUsed,
-    servicesRemaining,
-    statsThisMonth: stats?.thisMonth,
-    lubricentroServicesUsed: lubricentro.servicesUsedThisMonth,
-    progressPercentage
-  });
 
   return (
     <Card className={`mb-6 ${isExpiring || isLimitReached ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'}`}>
@@ -212,29 +192,12 @@ const TrialInfoCard: React.FC<{ lubricentro: Lubricentro; stats: OilChangeStats 
             </div>
           </div>
         )}
-
-        {!isExpiring && !isLimitReached && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h4 className="text-sm font-medium text-blue-800 mb-2">¡Aprovecha tu Período de Prueba!</h4>
-            <ul className="text-sm text-blue-700 space-y-1">
-              <li>• Explora todas las funcionalidades del sistema</li>
-              <li>• Registra hasta {TRIAL_SERVICE_LIMIT} cambios de aceite sin costo</li>
-              <li>• Genera reportes y estadísticas de tu lubricentro</li>
-              <li>• Contacta a soporte si tienes alguna pregunta</li>
-            </ul>
-            <div className="mt-3 p-3 bg-blue-100 rounded-md">
-              <p className="text-xs text-blue-800">
-                <strong>Resumen:</strong> {servicesUsed} servicios utilizados de {TRIAL_SERVICE_LIMIT} disponibles • {daysRemaining} días restantes
-              </p>
-            </div>
-          </div>
-        )}
       </CardBody>
     </Card>
   );
-};
+});
 
-// Dashboard para el dueño del lubricentro (admin)
+// Dashboard principal optimizado
 const OwnerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
@@ -247,50 +210,101 @@ const OwnerDashboard: React.FC = () => {
   const [upcomingOilChanges, setUpcomingOilChanges] = useState<OilChange[]>([]);
   const [operatorStats, setOperatorStats] = useState<OperatorStats[]>([]);
   
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        if (!userProfile?.lubricentroId) {
-          setError('No se encontró información del lubricentro asociado a su cuenta.');
-          return;
+  // Función para cargar datos con mejor manejo de errores
+  const fetchData = useCallback(async () => {
+    if (!userProfile?.lubricentroId) {
+      setError('No se encontró información del lubricentro asociado a su cuenta.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const lubricentroId = userProfile.lubricentroId;
+      
+      // 1. Cargar datos del lubricentro primero (más crítico)
+      const lubricentroData = await getLubricentroById(lubricentroId);
+      setLubricentro(lubricentroData);
+      
+      // 2. Cargar estadísticas básicas
+      const [oilChangeStats, usersData] = await Promise.allSettled([
+        getOilChangesStats(lubricentroId),
+        getUsersByLubricentro(lubricentroId)
+      ]);
+      
+      // Procesar resultados de estadísticas
+      if (oilChangeStats.status === 'fulfilled') {
+        setStats(oilChangeStats.value);
+      } else {
+        console.warn('Error al cargar estadísticas:', oilChangeStats.reason);
+        // Establecer estadísticas por defecto
+        setStats({
+          total: 0,
+          thisMonth: 0,
+          lastMonth: 0,
+          upcoming30Days: 0
+        });
+      }
+      
+      // Procesar resultados de usuarios
+      if (usersData.status === 'fulfilled') {
+        setUsers(usersData.value);
+      } else {
+        console.warn('Error al cargar usuarios:', usersData.reason);
+        setUsers([]);
+      }
+      
+      // 3. Cargar datos secundarios de forma asíncrona (no bloquean la UI)
+      Promise.allSettled([
+        getUpcomingOilChanges(lubricentroId, 30),
+        getUsersOperatorStats(
+          lubricentroId, 
+          new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)
+        )
+      ]).then(([upcomingResult, operatorResult]) => {
+        if (upcomingResult.status === 'fulfilled') {
+          setUpcomingOilChanges(upcomingResult.value.slice(0, 5));
+        } else {
+          console.warn('Error al cargar próximos cambios:', upcomingResult.reason);
+          setUpcomingOilChanges([]);
         }
         
-        const lubricentroId = userProfile.lubricentroId;
-        
-        const lubricentroData = await getLubricentroById(lubricentroId);
-        setLubricentro(lubricentroData);
-        
-        const oilChangeStats = await getOilChangesStats(lubricentroId);
-        setStats(oilChangeStats);
-        
-        const usersData = await getUsersByLubricentro(lubricentroId);
-        setUsers(usersData);
-        
-        const upcomingChanges = await getUpcomingOilChanges(lubricentroId, 30);
-        setUpcomingOilChanges(upcomingChanges.slice(0, 5));
-        
-        const today = new Date();
-        const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const lastDayThisMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        
-        const operatorData = await getUsersOperatorStats(lubricentroId, firstDayThisMonth, lastDayThisMonth);
-        setOperatorStats(operatorData);
-        
-      } catch (err) {
-        console.error('Error al cargar datos del dashboard:', err);
-        setError('Error al cargar los datos. Por favor, intente nuevamente.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, [userProfile]);
+        if (operatorResult.status === 'fulfilled') {
+          setOperatorStats(operatorResult.value);
+        } else {
+          console.warn('Error al cargar estadísticas de operadores:', operatorResult.reason);
+          setOperatorStats([]);
+        }
+      });
+      
+    } catch (err) {
+      console.error('Error al cargar datos del dashboard:', err);
+      setError('Error al cargar los datos. Por favor, intente nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  }, [userProfile?.lubricentroId]);
   
-  const formatDate = (date: any): string => {
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+  
+  // Memorizar cálculos para mejorar rendimiento
+  const monthlyChange = useMemo(() => {
+    if (!stats) return { value: 0, increase: true };
+    if (stats.lastMonth === 0) return { value: 100, increase: true };
+    
+    const change = ((stats.thisMonth - stats.lastMonth) / stats.lastMonth) * 100;
+    return {
+      value: Math.abs(Math.round(change)),
+      increase: change >= 0
+    };
+  }, [stats]);
+
+  const formatDate = useCallback((date: any): string => {
     if (!date) return 'No disponible';
     
     try {
@@ -308,9 +322,9 @@ const OwnerDashboard: React.FC = () => {
     } catch (error) {
       return 'Fecha inválida';
     }
-  };
+  }, []);
 
-  const getDaysRemaining = (endDate: Date | undefined | null): number => {
+  const getDaysRemaining = useCallback((endDate: Date | undefined | null): number => {
     if (!endDate) return 0;
     
     try {
@@ -323,12 +337,7 @@ const OwnerDashboard: React.FC = () => {
     } catch (error) {
       return 0;
     }
-  };
-  
-  const calculatePercentChange = (current: number, previous: number): number => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return ((current - previous) / previous) * 100;
-  };
+  }, []);
   
   if (loading) {
     return <LoadingScreen />;
@@ -348,8 +357,6 @@ const OwnerDashboard: React.FC = () => {
       </div>
     );
   }
-  
-  const monthlyChange = calculatePercentChange(stats.thisMonth, stats.lastMonth);
   
   return (
     <PageContainer
@@ -374,6 +381,7 @@ const OwnerDashboard: React.FC = () => {
             </div>
           </CardBody>
         </Card>
+        
         <Card>
           <CardBody>
             <div className="flex items-center">
@@ -386,13 +394,13 @@ const OwnerDashboard: React.FC = () => {
                 <p className="text-sm font-medium text-gray-600">Cambios este Mes</p>
                 <p className="text-2xl font-semibold text-gray-800">{stats.thisMonth}</p>
                 <div className="flex items-center mt-1">
-                  {monthlyChange >= 0 ? (
+                  {monthlyChange.increase ? (
                     <ArrowUpIcon className="h-4 w-4 text-green-500" />
                   ) : (
                     <ArrowDownIcon className="h-4 w-4 text-red-500" />
                   )}
-                  <span className={`text-xs font-medium ${monthlyChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                    {monthlyChange.toFixed(1)}% vs mes anterior
+                  <span className={`text-xs font-medium ${monthlyChange.increase ? 'text-green-500' : 'text-red-500'}`}>
+                    {monthlyChange.value}% vs mes anterior
                   </span>
                 </div>
               </div>
@@ -431,6 +439,7 @@ const OwnerDashboard: React.FC = () => {
         </Card>
       </div>
 
+      {/* Gráficos - Solo si hay datos */}
       <div className="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Rendimiento de Operadores (Mes Actual)" />
@@ -481,6 +490,7 @@ const OwnerDashboard: React.FC = () => {
         </Card>
       </div>
       
+      {/* Resto del contenido */}
       <div className="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-2">
         <Card>
           <CardHeader
@@ -524,6 +534,7 @@ const OwnerDashboard: React.FC = () => {
           </CardBody>
         </Card>
         
+        {/* Card de suscripción simplificado */}
         <Card>
           <CardHeader title="Mi Suscripción" subtitle="Información de tu plan actual" />
           <CardBody>
@@ -562,20 +573,6 @@ const OwnerDashboard: React.FC = () => {
                           : '2'}
                   </p>
                 </div>
-                <div className="mt-2 bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-blue-600 h-2 rounded-full" 
-                    style={{ 
-                      width: `${Math.min(100, ((users?.length || 0) / 
-                        (lubricentro?.estado === 'trial' ? 2 : 
-                         lubricentro?.subscriptionPlan && SUBSCRIPTION_PLANS?.[lubricentro.subscriptionPlan] 
-                           ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].maxUsers : 2)) * 100)}%` 
-                    }}
-                  ></div>
-                </div>
-                <p className="text-xs text-blue-600 mt-1">
-                  {lubricentro?.estado === 'trial' ? 'Usuarios permitidos en prueba' : 'Usuarios permitidos según tu plan'}
-                </p>
               </div>
               
               <div className="bg-green-50 p-4 rounded-lg">
@@ -584,9 +581,7 @@ const OwnerDashboard: React.FC = () => {
                 </h3>
                 <div className="flex items-baseline">
                   <p className="text-xl font-bold text-green-800">
-                    {lubricentro?.estado === 'trial' 
-                      ? (stats?.thisMonth || 0)
-                      : (stats?.thisMonth || 0)}
+                    {stats?.thisMonth || 0}
                   </p>
                   <p className="text-sm text-green-600 ml-1">
                     / {lubricentro?.estado === 'trial' ? '10' : 
@@ -595,39 +590,13 @@ const OwnerDashboard: React.FC = () => {
                          SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].maxMonthlyServices : '10'}
                   </p>
                 </div>
-                
-                {lubricentro?.estado === 'trial' || 
-                 (lubricentro?.subscriptionPlan && SUBSCRIPTION_PLANS?.[lubricentro.subscriptionPlan]?.maxMonthlyServices !== null) ? (
-                  <div className="mt-2 bg-gray-200 rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full ${lubricentro?.estado === 'trial' ? 'bg-orange-500' : 'bg-green-600'}`}
-                      style={{ 
-                        width: `${Math.min(100, lubricentro?.estado === 'trial' 
-                          ? ((stats?.thisMonth || 0) / 10) * 100
-                          : ((stats?.thisMonth || 0) / (SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan!].maxMonthlyServices || 1)) * 100)}%` 
-                      }}
-                    ></div>
-                  </div>
-                ) : null}
-                
-                <p className="text-xs text-green-600 mt-1">
-                  {lubricentro?.estado === 'trial' ? `Servicios utilizados en período de prueba` : 'Cambios de aceite registrados este mes'}
-                </p>
-                
-                {lubricentro?.estado === 'trial' && (
-                  <div className="mt-2 p-2 bg-orange-100 rounded text-xs text-orange-700">
-                    <p className="font-medium">
-                      Quedan {Math.max(0, 10 - (stats?.thisMonth || 0))} servicios
-                    </p>
-                    <p>{getDaysRemaining(lubricentro.trialEndDate)} días de prueba restantes</p>
-                  </div>
-                )}
               </div>
             </div>
           </CardBody>
         </Card>
       </div>
       
+      {/* Botones de acción */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Button color="primary" size="lg" fullWidth icon={<PlusIcon className="h-5 w-5" />} onClick={() => navigate('/cambios-aceite/nuevo')}>
           Nuevo Cambio

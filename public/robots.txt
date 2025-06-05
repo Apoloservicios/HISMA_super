@@ -1,3 +1,10 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+
+# Archivos importantes para SEO
+Allow: /og-image.png
+Allow: /favicon.svg
+Allow: /manifest.json
+
+# Sitemap
+Sitemap: https://hisma.com.ar/sitemap.xml

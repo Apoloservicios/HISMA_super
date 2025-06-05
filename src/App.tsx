@@ -24,6 +24,9 @@ import PublicHistoryPage from './pages/public/PublicHistoryPage';
 // Pages - Dashboard
 import DashboardPage from './pages/dashboard/DashboardPage';
 
+
+import PlanManagementPage from './pages/superadmin/PlanManagementPage';
+
 // Pages - Oil Changes
 import OilChangeListPage from './pages/oilchanges/OilChangeListPage';
 import OilChangeFormPage from './pages/oilchanges/OilChangeFormPage';
@@ -94,6 +97,8 @@ const App: React.FC = () => {
                   </PrivateRoute>
                 } 
               />
+
+              <Route path="/superadmin/planes" element={<PlanManagementPage />} />
 
               {/* Ruta para estadísticas globales del superadmin */}
               <Route 

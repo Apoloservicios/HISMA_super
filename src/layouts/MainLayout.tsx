@@ -21,7 +21,8 @@ import {
   BuildingStorefrontIcon,
   BuildingOfficeIcon, 
   QuestionMarkCircleIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  CreditCardIcon  // 👈 AGREGAR ESTE ÍCONO
 } from '@heroicons/react/24/outline';
 
 // Componente de carga
@@ -83,6 +84,12 @@ const MainLayout: React.FC = () => {
           text: 'Gestión de Lubricentros', 
           icon: <BuildingOfficeIcon className="w-5 h-5" />, 
           path: '/superadmin/lubricentros',
+          divider: false
+        },
+        { 
+          text: 'Gestión de Planes', 
+          icon: <CreditCardIcon className="w-5 h-5" />, 
+          path: '/superadmin/planes',
           divider: false
         },
         { 
@@ -155,12 +162,6 @@ const MainLayout: React.FC = () => {
         path: '/soporte',
         divider: false
       },
-      // { 
-      //   text: 'Consulta Historial', 
-      //   icon: <MagnifyingGlassIcon className="w-5 h-5" />, 
-      //   path: '/consulta-historial',
-      //   divider: false
-      // },
     );
     
     return items;
