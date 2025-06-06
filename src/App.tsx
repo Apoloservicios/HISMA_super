@@ -47,10 +47,10 @@ import LubricentroDashboardPage from './pages/admin/LubricentroDashboardPage';
 import LubricentroFormPage from './pages/admin/LubricentroFormPage';
 import LubricentroDetailPage from './pages/admin/LubricentroDetailPage';
 
-// ✅ NUEVAS IMPORTACIONES - Pages de Garantías
+// ✅ IMPORTACIONES COMPLETAS - Pages de Garantías
 import WarrantyDashboardPage from './pages/warranties/WarrantyDashboardPage';
 import WarrantyFormPage from './pages/warranties/WarrantyFormPage';
-// import WarrantyDetailPage from './pages/warranties/WarrantyDetailPage'; // ← Crear después
+import WarrantyDetailPage from './pages/warranties/WarrantyDetailPage';
 
 // Components
 import PrivateRoute from './components/common/PrivateRoute';
@@ -151,7 +151,7 @@ const App: React.FC = () => {
                 } 
               />
 
-              {/* ✅ NUEVAS RUTAS - Garantías */}
+              {/* ✅ RUTAS COMPLETAS DE GARANTÍAS */}
               <Route 
                 path="/garantias" 
                 element={
@@ -170,7 +170,6 @@ const App: React.FC = () => {
                 } 
               />
               
-              {/* 
               <Route 
                 path="/garantias/:id" 
                 element={
@@ -188,7 +187,6 @@ const App: React.FC = () => {
                   </PrivateRoute>
                 } 
               />
-              */}
               
               {/* Rutas de usuarios */}
               <Route 

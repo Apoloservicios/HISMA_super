@@ -7,7 +7,9 @@ import {
   exportWarrantiesToExcel 
 } from '../../services/warrantyService';
 import { Warranty, WarrantyStats } from '../../types/warranty';
+import WarrantyClaimModal from '../../components/warranty/WarrantyClaimModal';
 
+// ✅ CORRECCIÓN: Tipo de componente React correcto
 const WarrantyDashboardPage: React.FC = () => {
   const { userProfile } = useAuth();
   
@@ -18,6 +20,10 @@ const WarrantyDashboardPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('todas');
   const [error, setError] = useState<string | null>(null);
+  
+  // ✅ ESTADOS PARA EL MODAL DE RECLAMO
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [selectedWarranty, setSelectedWarranty] = useState<Warranty | null>(null);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -150,9 +156,23 @@ const WarrantyDashboardPage: React.FC = () => {
     window.location.href = `/garantias/${id}`;
   };
 
-  const handleClaimWarranty = (id: string) => {
-    // Implementar modal de reclamo
-    console.log('Procesar reclamo de garantía:', id);
+  // ✅ FUNCIÓN PARA MANEJAR EL RECLAMO
+  const handleClaimWarranty = (warranty: Warranty) => {
+    setSelectedWarranty(warranty);
+    setShowClaimModal(true);
+  };
+
+  // ✅ FUNCIÓN PARA CUANDO SE PROCESA UN RECLAMO
+  const handleClaimProcessed = () => {
+    setShowClaimModal(false);
+    setSelectedWarranty(null);
+    loadData(); // Recargar los datos para reflejar los cambios
+  };
+
+  // ✅ FUNCIÓN PARA CERRAR EL MODAL
+  const handleCloseClaimModal = () => {
+    setShowClaimModal(false);
+    setSelectedWarranty(null);
   };
 
   const handleExport = async () => {
@@ -230,7 +250,7 @@ const WarrantyDashboardPage: React.FC = () => {
       </div>
 
       <div className="space-y-6">
-        {/* Alertas importantes */}
+        {/* ✅ CORRECCIÓN: Verificación de null para stats */}
         {stats && stats.vencenEn7Dias > 0 && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
             <div className="flex">
@@ -252,7 +272,7 @@ const WarrantyDashboardPage: React.FC = () => {
           </div>
         )}
 
-        {/* Tarjetas de estadísticas */}
+        {/* ✅ CORRECCIÓN: Verificación de null para stats */}
         {stats && (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             {[
@@ -307,7 +327,7 @@ const WarrantyDashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Pestañas de filtrado */}
+        {/* ✅ CORRECCIÓN: Verificación de null para stats en pestañas */}
         {stats && (
           <div className="bg-white shadow rounded-lg">
             <div className="border-b border-gray-200">
@@ -382,12 +402,20 @@ const WarrantyDashboardPage: React.FC = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {filteredWarranties().map((warranty) => {
                       const diasParaVencer = getDaysToExpire(warranty.fechaVencimiento);
+                      const tieneReclamos = warranty.reclamosHistorial && warranty.reclamosHistorial.length > 0;
+                      
                       return (
                         <tr key={warranty.id}>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div>
-                              <div className="text-sm font-medium text-gray-900">
+                              <div className="text-sm font-medium text-gray-900 flex items-center">
                                 {warranty.marca} {warranty.modelo}
+                                {/* ✅ INDICADOR DE RECLAMOS MÚLTIPLES */}
+                                {tieneReclamos && (
+                                  <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    {warranty.reclamosHistorial!.length} reclamo{warranty.reclamosHistorial!.length > 1 ? 's' : ''}
+                                  </span>
+                                )}
                               </div>
                               <div className="text-sm text-gray-500">{warranty.categoria}</div>
                             </div>
@@ -430,16 +458,22 @@ const WarrantyDashboardPage: React.FC = () => {
                             <div className="flex space-x-2">
                               <button 
                                 onClick={() => handleViewWarranty(warranty.id)}
-                                className="text-blue-600 hover:text-blue-900"
+                                className="text-blue-600 hover:text-blue-900 transition-colors"
                               >
                                 Ver
                               </button>
-                              {warranty.estado === 'vigente' && (
+                              {/* ✅ BOTÓN RECLAMAR FUNCIONAL - Ahora permite múltiples reclamos */}
+                              {(warranty.estado === 'vigente' || warranty.estado === 'reclamada') && (
                                 <button 
-                                  onClick={() => handleClaimWarranty(warranty.id)}
-                                  className="text-yellow-600 hover:text-yellow-900"
+                                  onClick={() => handleClaimWarranty(warranty)}
+                                  className={`transition-colors ${
+                                    tieneReclamos 
+                                      ? 'text-orange-600 hover:text-orange-900' 
+                                      : 'text-yellow-600 hover:text-yellow-900'
+                                  }`}
+                                  title={tieneReclamos ? 'Nuevo reclamo' : 'Procesar reclamo'}
                                 >
-                                  Reclamar
+                                  {tieneReclamos ? 'Nuevo Reclamo' : 'Reclamar'}
                                 </button>
                               )}
                             </div>
@@ -474,8 +508,19 @@ const WarrantyDashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* ✅ CORRECCIÓN: Verificación de null para selectedWarranty */}
+      {showClaimModal && selectedWarranty && (
+        <WarrantyClaimModal
+          warranty={selectedWarranty}
+          isOpen={showClaimModal}
+          onClose={handleCloseClaimModal}
+          onClaimProcessed={handleClaimProcessed}
+        />
+      )}
     </div>
   );
 };
 
+// ✅ CORRECCIÓN: Export default explícito
 export default WarrantyDashboardPage;

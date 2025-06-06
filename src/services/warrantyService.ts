@@ -69,37 +69,42 @@ export const createWarranty = async (
       }
     }
     
-    const warrantyData: Omit<Warranty, 'id'> = {
+    // ✅ CORRECCIÓN: Filtrar campos undefined y manejar campos opcionales
+    const warrantyData: any = {
       lubricentroId,
       categoria: data.categoria,
       marca: data.marca,
       modelo: data.modelo,
-      numeroSerie: data.numeroSerie,
       descripcion: data.descripcion,
       fechaVenta: Timestamp.fromDate(fechaVenta),
       precio: data.precio,
-      facturaNumero: data.facturaNumero,
       vendedorId,
       vendedorNombre,
       clienteNombre: data.clienteNombre,
-      clienteTelefono: data.clienteTelefono,
-      clienteEmail: data.clienteEmail,
-      vehiculoDominio: data.vehiculoDominio,
-      vehiculoMarca: data.vehiculoMarca,
-      vehiculoModelo: data.vehiculoModelo,
-      kilometrajeVenta: data.kilometrajeVenta,
       tipoGarantia: data.tipoGarantia,
-      garantiaMeses: data.garantiaMeses,
-      garantiaKilometros: data.garantiaKilometros,
       fechaVencimiento: Timestamp.fromDate(fechaVencimiento),
       estado: 'vigente',
-      observaciones: data.observaciones,
-      condicionesEspeciales: data.condicionesEspeciales,
       reclamosHistorial: [],
       createdAt: Timestamp.fromDate(new Date()),
       updatedAt: Timestamp.fromDate(new Date()),
       createdBy: vendedorId
     };
+
+    // Agregar campos opcionales solo si tienen valor
+    if (data.numeroSerie) warrantyData.numeroSerie = data.numeroSerie;
+    if (data.facturaNumero) warrantyData.facturaNumero = data.facturaNumero;
+    if (data.clienteTelefono) warrantyData.clienteTelefono = data.clienteTelefono;
+    if (data.clienteEmail) warrantyData.clienteEmail = data.clienteEmail;
+    if (data.vehiculoDominio) warrantyData.vehiculoDominio = data.vehiculoDominio;
+    if (data.vehiculoMarca) warrantyData.vehiculoMarca = data.vehiculoMarca;
+    if (data.vehiculoModelo) warrantyData.vehiculoModelo = data.vehiculoModelo;
+    if (data.kilometrajeVenta) warrantyData.kilometrajeVenta = data.kilometrajeVenta;
+    if (data.garantiaMeses) warrantyData.garantiaMeses = data.garantiaMeses;
+    if (data.garantiaKilometros) warrantyData.garantiaKilometros = data.garantiaKilometros;
+    if (data.observaciones) warrantyData.observaciones = data.observaciones;
+    if (data.condicionesEspeciales) warrantyData.condicionesEspeciales = data.condicionesEspeciales;
+    
+    console.log('Datos de garantía a crear:', warrantyData);
     
     const docRef = await addDoc(collection(db, COLLECTION_NAME), warrantyData);
     
@@ -109,7 +114,7 @@ export const createWarranty = async (
     return docRef.id;
   } catch (error) {
     console.error('Error al crear garantía:', error);
-    throw new Error('No se pudo crear la garantía');
+    throw error; // Re-lanzar el error original para mejor debugging
   }
 };
 
@@ -208,8 +213,9 @@ export const getExpiringWarranties = async (
   }
 };
 
+
 /**
- * Procesar reclamo de garantía
+ * Procesar reclamo de garantía - VERSIÓN CORREGIDA
  */
 export const processWarrantyClaim = async (
   warrantyId: string,
@@ -229,27 +235,52 @@ export const processWarrantyClaim = async (
     
     const warranty = warrantyDoc.data() as Warranty;
     
+    // ✅ CREAR EL NUEVO RECLAMO - SIN CAMPOS UNDEFINED
     const newClaim: WarrantyClaimHistoryItem = {
-      id: `claim_${Date.now()}`,
+      id: `claim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       fecha: Timestamp.fromDate(new Date()),
-      motivo,
-      solucion,
+      motivo: motivo.trim(),
+      solucion: solucion.trim(),
       empleadoId,
       empleadoNombre,
-      observaciones,
       estado: 'resuelto'
     };
     
+    // ✅ SOLO AGREGAR OBSERVACIONES SI TIENEN CONTENIDO
+    if (observaciones && observaciones.trim()) {
+      newClaim.observaciones = observaciones.trim();
+    }
+    
     const updatedHistory = [...(warranty.reclamosHistorial || []), newClaim];
     
-    await updateDoc(warrantyRef, {
-      estado: 'reclamada',
+    // ✅ LÓGICA MEJORADA PARA EL ESTADO DE LA GARANTÍA
+    let newStatus = warranty.estado;
+    
+    // Solo cambiar a "reclamada" en el primer reclamo
+    if (!warranty.reclamosHistorial || warranty.reclamosHistorial.length === 0) {
+      newStatus = 'reclamada';
+    }
+    
+    // ✅ CREAR OBJETO DE ACTUALIZACIÓN SIN CAMPOS UNDEFINED
+    const updateData: Record<string, any> = {
       reclamosHistorial: updatedHistory,
       updatedAt: Timestamp.fromDate(new Date())
-    });
+    };
+    
+    // Solo actualizar el estado si es necesario
+    if (newStatus !== warranty.estado) {
+      updateData.estado = newStatus;
+    }
+    
+    console.log('Datos a actualizar:', updateData);
+    
+    await updateDoc(warrantyRef, updateData);
+    
+    console.log(`Reclamo procesado para garantía ${warrantyId}. Reclamos totales: ${updatedHistory.length}`);
+    
   } catch (error) {
     console.error('Error al procesar reclamo:', error);
-    throw new Error('No se pudo procesar el reclamo');
+    throw error;
   }
 };
 
@@ -405,10 +436,125 @@ export const getProductTemplates = async (lubricentroId: string): Promise<Produc
 };
 
 /**
+ * Actualizar garantía
+ */
+export const updateWarranty = async (
+  warrantyId: string,
+  updates: Partial<CreateWarrantyData>
+): Promise<void> => {
+  try {
+    const warrantyRef = doc(db, COLLECTION_NAME, warrantyId);
+    
+    // Filtrar campos undefined
+    const updateData: any = {
+      updatedAt: Timestamp.fromDate(new Date())
+    };
+
+    // Solo agregar campos que tienen valor
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        updateData[key] = value;
+      }
+    });
+    
+    await updateDoc(warrantyRef, updateData);
+  } catch (error) {
+    console.error('Error al actualizar garantía:', error);
+    throw new Error('No se pudo actualizar la garantía');
+  }
+};
+
+/**
+ * Eliminar garantía
+ */
+export const deleteWarranty = async (warrantyId: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(db, COLLECTION_NAME, warrantyId));
+  } catch (error) {
+    console.error('Error al eliminar garantía:', error);
+    throw new Error('No se pudo eliminar la garantía');
+  }
+};
+
+/**
+ * Obtener garantía por ID
+ */
+export const getWarrantyById = async (warrantyId: string): Promise<Warranty | null> => {
+  try {
+    const warrantyDoc = await getDoc(doc(db, COLLECTION_NAME, warrantyId));
+    
+    if (!warrantyDoc.exists()) {
+      return null;
+    }
+    
+    return {
+      id: warrantyDoc.id,
+      ...warrantyDoc.data()
+    } as Warranty;
+  } catch (error) {
+    console.error('Error al obtener garantía:', error);
+    throw new Error('No se pudo obtener la garantía');
+  }
+};
+
+/**
+ * Obtener alertas de vencimiento
+ */
+export const getWarrantyAlerts = async (lubricentroId: string): Promise<WarrantyAlert[]> => {
+  try {
+    // Obtener todas las garantías vigentes
+    const warranties = await getWarrantiesByLubricentro(lubricentroId, { estado: 'vigente' });
+    
+    const now = new Date();
+    const alerts: WarrantyAlert[] = [];
+    
+    warranties.forEach(warranty => {
+      const vencimiento = toDate(warranty.fechaVencimiento);
+      const diffTime = vencimiento.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 0) {
+        // Vencida
+        alerts.push({
+          id: `alert_${warranty.id}`,
+          warrantyId: warranty.id,
+          tipo: 'vencida',
+          diasParaVencimiento: diffDays,
+          clienteNombre: warranty.clienteNombre,
+          producto: `${warranty.marca} ${warranty.modelo}`,
+          telefono: warranty.clienteTelefono,
+          fechaCreacion: Timestamp.fromDate(now),
+          notificado: false
+        });
+      } else if (diffDays <= 7) {
+        // Vence en 7 días o menos
+        alerts.push({
+          id: `alert_${warranty.id}`,
+          warrantyId: warranty.id,
+          tipo: 'vencimiento_proximo',
+          diasParaVencimiento: diffDays,
+          clienteNombre: warranty.clienteNombre,
+          producto: `${warranty.marca} ${warranty.modelo}`,
+          telefono: warranty.clienteTelefono,
+          fechaCreacion: Timestamp.fromDate(now),
+          notificado: false
+        });
+      }
+    });
+    
+    return alerts;
+  } catch (error) {
+    console.error('Error al obtener alertas:', error);
+    throw new Error('No se pudieron obtener las alertas');
+  }
+};
+
+/**
  * Exportar garantías a Excel
  */
 export const exportWarrantiesToExcel = async (warranties: Warranty[]): Promise<void> => {
   try {
+    // Importación dinámica para evitar problemas de SSR
     const XLSX = await import('xlsx');
     
     const excelData = warranties.map(warranty => ({
@@ -502,6 +648,7 @@ export const generateWarrantyReport = async (
   reportType: 'vigentes' | 'vencidas' | 'por_vencer' | 'todas' = 'todas'
 ): Promise<void> => {
   try {
+    // Importación dinámica para evitar problemas de SSR
     const jsPDF = await import('jspdf');
     const pdf = new jsPDF.default();
     
@@ -633,111 +780,6 @@ export const generateWarrantyReport = async (
   }
 };
 
-/**
- * Actualizar garantía
- */
-export const updateWarranty = async (
-  warrantyId: string,
-  updates: Partial<Warranty>
-): Promise<void> => {
-  try {
-    const warrantyRef = doc(db, COLLECTION_NAME, warrantyId);
-    
-    await updateDoc(warrantyRef, {
-      ...updates,
-      updatedAt: Timestamp.fromDate(new Date())
-    });
-  } catch (error) {
-    console.error('Error al actualizar garantía:', error);
-    throw new Error('No se pudo actualizar la garantía');
-  }
-};
-
-/**
- * Eliminar garantía
- */
-export const deleteWarranty = async (warrantyId: string): Promise<void> => {
-  try {
-    await deleteDoc(doc(db, COLLECTION_NAME, warrantyId));
-  } catch (error) {
-    console.error('Error al eliminar garantía:', error);
-    throw new Error('No se pudo eliminar la garantía');
-  }
-};
-
-/**
- * Obtener garantía por ID
- */
-export const getWarrantyById = async (warrantyId: string): Promise<Warranty | null> => {
-  try {
-    const warrantyDoc = await getDoc(doc(db, COLLECTION_NAME, warrantyId));
-    
-    if (!warrantyDoc.exists()) {
-      return null;
-    }
-    
-    return {
-      id: warrantyDoc.id,
-      ...warrantyDoc.data()
-    } as Warranty;
-  } catch (error) {
-    console.error('Error al obtener garantía:', error);
-    throw new Error('No se pudo obtener la garantía');
-  }
-};
-
-/**
- * Obtener alertas de vencimiento
- */
-export const getWarrantyAlerts = async (lubricentroId: string): Promise<WarrantyAlert[]> => {
-  try {
-    // Obtener todas las garantías vigentes
-    const warranties = await getWarrantiesByLubricentro(lubricentroId, { estado: 'vigente' });
-    
-    const now = new Date();
-    const alerts: WarrantyAlert[] = [];
-    
-    warranties.forEach(warranty => {
-      const vencimiento = toDate(warranty.fechaVencimiento);
-      const diffTime = vencimiento.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays <= 0) {
-        // Vencida
-        alerts.push({
-          id: `alert_${warranty.id}`,
-          warrantyId: warranty.id,
-          tipo: 'vencida',
-          diasParaVencimiento: diffDays,
-          clienteNombre: warranty.clienteNombre,
-          producto: `${warranty.marca} ${warranty.modelo}`,
-          telefono: warranty.clienteTelefono,
-          fechaCreacion: Timestamp.fromDate(now),
-          notificado: false
-        });
-      } else if (diffDays <= 7) {
-        // Vence en 7 días o menos
-        alerts.push({
-          id: `alert_${warranty.id}`,
-          warrantyId: warranty.id,
-          tipo: 'vencimiento_proximo',
-          diasParaVencimiento: diffDays,
-          clienteNombre: warranty.clienteNombre,
-          producto: `${warranty.marca} ${warranty.modelo}`,
-          telefono: warranty.clienteTelefono,
-          fechaCreacion: Timestamp.fromDate(now),
-          notificado: false
-        });
-      }
-    });
-    
-    return alerts;
-  } catch (error) {
-    console.error('Error al obtener alertas:', error);
-    throw new Error('No se pudieron obtener las alertas');
-  }
-};
-
 export default {
   createWarranty,
   getWarrantiesByLubricentro,
@@ -753,4 +795,3 @@ export default {
   getWarrantyById,
   getWarrantyAlerts
 };
-

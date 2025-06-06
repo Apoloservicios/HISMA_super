@@ -1,6 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
-import { ProductCategory, WarrantyType, CreateWarrantyData } from '../../types/warranty';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import { createWarranty, getWarrantyById, updateWarranty } from '../../services/warrantyService';
+import { ProductCategory, WarrantyType, CreateWarrantyData, Warranty } from '../../types/warranty';
+import { handleWarrantyError, logWarrantyError } from '../../utils/warrantyErrorHandler';
 
 interface WarrantyFormData {
   categoria: ProductCategory;
@@ -25,14 +28,11 @@ interface WarrantyFormData {
 }
 
 const WarrantyFormPage: React.FC = () => {
-  // Simulamos navigate y userProfile para el ejemplo
-  const navigate = (path: string) => console.log('Navegando a:', path);
-  const userProfile = {
-    id: '1',
-    lubricentroId: 'lubri1',
-    nombre: 'Juan',
-    apellido: 'Pérez'
-  };
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const { userProfile } = useAuth();
+  
+  const isEditing = Boolean(id);
   
   const [formData, setFormData] = useState<WarrantyFormData>({
     categoria: 'bateria',
@@ -58,6 +58,7 @@ const WarrantyFormPage: React.FC = () => {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(isEditing);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fechaVencimiento, setFechaVencimiento] = useState<Date | null>(null);
@@ -72,13 +73,13 @@ const WarrantyFormPage: React.FC = () => {
     { value: 'neumatico', label: 'Neumático' },
     { value: 'amortiguador', label: 'Amortiguador' },
     { value: 'otro', label: 'Otro' }
-  ];
+  ] as const;
 
   const tiposGarantia = [
     { value: 'meses', label: 'Por tiempo (meses)' },
     { value: 'kilometros', label: 'Por kilometraje' },
     { value: 'mixta', label: 'Mixta (lo que se cumpla primero)' }
-  ];
+  ] as const;
 
   // Marcas sugeridas por categoría
   const marcasSugeridas: Record<ProductCategory, string[]> = {
@@ -92,6 +93,62 @@ const WarrantyFormPage: React.FC = () => {
     otro: []
   };
 
+  // Cargar datos si estamos editando
+  useEffect(() => {
+    const loadWarrantyData = async () => {
+      if (!isEditing || !id) return;
+
+      try {
+        setLoadingData(true);
+        const warranty = await getWarrantyById(id);
+        
+        if (!warranty) {
+          setError('Garantía no encontrada');
+          return;
+        }
+
+        // Verificar permisos
+        if (userProfile?.role !== 'superadmin' && warranty.lubricentroId !== userProfile?.lubricentroId) {
+          setError('No tiene permisos para editar esta garantía');
+          return;
+        }
+
+        // Convertir los datos de la garantía al formato del formulario
+        setFormData({
+          categoria: warranty.categoria,
+          marca: warranty.marca,
+          modelo: warranty.modelo,
+          numeroSerie: warranty.numeroSerie || '',
+          descripcion: warranty.descripcion,
+          precio: warranty.precio.toString(),
+          facturaNumero: warranty.facturaNumero || '',
+          clienteNombre: warranty.clienteNombre,
+          clienteTelefono: warranty.clienteTelefono || '',
+          clienteEmail: warranty.clienteEmail || '',
+          vehiculoDominio: warranty.vehiculoDominio || '',
+          vehiculoMarca: warranty.vehiculoMarca || '',
+          vehiculoModelo: warranty.vehiculoModelo || '',
+          kilometrajeVenta: warranty.kilometrajeVenta?.toString() || '',
+          tipoGarantia: warranty.tipoGarantia,
+          garantiaMeses: warranty.garantiaMeses?.toString() || '',
+          garantiaKilometros: warranty.garantiaKilometros?.toString() || '',
+          observaciones: warranty.observaciones || '',
+          condicionesEspeciales: warranty.condicionesEspeciales || ''
+        });
+
+      } catch (err: any) {
+        console.error('Error al cargar garantía:', err);
+        const errorInfo = handleWarrantyError(err);
+        setError(errorInfo.message);
+        logWarrantyError(err, 'load-warranty-for-edit');
+      } finally {
+        setLoadingData(false);
+      }
+    };
+
+    loadWarrantyData();
+  }, [id, isEditing, userProfile]);
+
   // Calcular fecha de vencimiento
   useEffect(() => {
     const calcularVencimiento = () => {
@@ -100,7 +157,9 @@ const WarrantyFormPage: React.FC = () => {
 
       if (formData.tipoGarantia === 'meses' && formData.garantiaMeses) {
         const meses = parseInt(formData.garantiaMeses);
-        nuevaFecha.setMonth(nuevaFecha.getMonth() + meses);
+        if (!isNaN(meses)) {
+          nuevaFecha.setMonth(nuevaFecha.getMonth() + meses);
+        }
       }
 
       setFechaVencimiento(nuevaFecha);
@@ -132,6 +191,10 @@ const WarrantyFormPage: React.FC = () => {
     if (!formData.precio.trim()) newErrors.precio = 'El precio es obligatorio';
     if (!formData.clienteNombre.trim()) newErrors.clienteNombre = 'El nombre del cliente es obligatorio';
     
+    if (formData.precio && (isNaN(parseFloat(formData.precio)) || parseFloat(formData.precio) <= 0)) {
+      newErrors.precio = 'El precio debe ser un número mayor a 0';
+    }
+
     if (formData.tipoGarantia === 'meses' && !formData.garantiaMeses) {
       newErrors.garantiaMeses = 'Debe especificar los meses de garantía';
     }
@@ -142,6 +205,18 @@ const WarrantyFormPage: React.FC = () => {
     
     if (formData.tipoGarantia === 'mixta' && (!formData.garantiaMeses || !formData.garantiaKilometros)) {
       newErrors.tipoGarantia = 'Para garantía mixta debe especificar tanto meses como kilómetros';
+    }
+
+    if (formData.garantiaMeses && (isNaN(parseInt(formData.garantiaMeses)) || parseInt(formData.garantiaMeses) <= 0)) {
+      newErrors.garantiaMeses = 'Los meses deben ser un número mayor a 0';
+    }
+
+    if (formData.garantiaKilometros && (isNaN(parseInt(formData.garantiaKilometros)) || parseInt(formData.garantiaKilometros) <= 0)) {
+      newErrors.garantiaKilometros = 'Los kilómetros deben ser un número mayor a 0';
+    }
+
+    if (formData.kilometrajeVenta && (isNaN(parseInt(formData.kilometrajeVenta)) || parseInt(formData.kilometrajeVenta) < 0)) {
+      newErrors.kilometrajeVenta = 'El kilometraje debe ser un número válido';
     }
 
     setErrors(newErrors);
@@ -165,37 +240,40 @@ const WarrantyFormPage: React.FC = () => {
 
       const warrantyData: CreateWarrantyData = {
         categoria: formData.categoria,
-        marca: formData.marca,
-        modelo: formData.modelo,
-        numeroSerie: formData.numeroSerie || undefined,
-        descripcion: formData.descripcion,
+        marca: formData.marca.trim(),
+        modelo: formData.modelo.trim(),
+        numeroSerie: formData.numeroSerie.trim() || undefined,
+        descripcion: formData.descripcion.trim(),
         precio: parseFloat(formData.precio),
-        facturaNumero: formData.facturaNumero || undefined,
-        clienteNombre: formData.clienteNombre,
-        clienteTelefono: formData.clienteTelefono || undefined,
-        clienteEmail: formData.clienteEmail || undefined,
-        vehiculoDominio: formData.vehiculoDominio || undefined,
-        vehiculoMarca: formData.vehiculoMarca || undefined,
-        vehiculoModelo: formData.vehiculoModelo || undefined,
+        facturaNumero: formData.facturaNumero.trim() || undefined,
+        clienteNombre: formData.clienteNombre.trim(),
+        clienteTelefono: formData.clienteTelefono.trim() || undefined,
+        clienteEmail: formData.clienteEmail.trim() || undefined,
+        vehiculoDominio: formData.vehiculoDominio.trim() || undefined,
+        vehiculoMarca: formData.vehiculoMarca.trim() || undefined,
+        vehiculoModelo: formData.vehiculoModelo.trim() || undefined,
         kilometrajeVenta: formData.kilometrajeVenta ? parseInt(formData.kilometrajeVenta) : undefined,
         tipoGarantia: formData.tipoGarantia,
         garantiaMeses: formData.garantiaMeses ? parseInt(formData.garantiaMeses) : undefined,
         garantiaKilometros: formData.garantiaKilometros ? parseInt(formData.garantiaKilometros) : undefined,
-        observaciones: formData.observaciones || undefined,
-        condicionesEspeciales: formData.condicionesEspeciales || undefined
+        observaciones: formData.observaciones.trim() || undefined,
+        condicionesEspeciales: formData.condicionesEspeciales.trim() || undefined
       };
 
-      // Simulamos la función createWarranty para el ejemplo
-      console.log('Datos de garantía:', warrantyData);
-      
-      // const warrantyId = await createWarranty(
-      //   warrantyData,
-      //   userProfile.lubricentroId,
-      //   userProfile.id || '',
-      //   `${userProfile.nombre} ${userProfile.apellido}`
-      // );
-
-      setSuccess('Garantía registrada correctamente');
+      if (isEditing && id) {
+        // Actualizar garantía existente
+        await updateWarranty(id, warrantyData);
+        setSuccess('Garantía actualizada correctamente');
+      } else {
+        // Crear nueva garantía
+        await createWarranty(
+          warrantyData,
+          userProfile.lubricentroId,
+          userProfile.id || '',
+          `${userProfile.nombre} ${userProfile.apellido}`
+        );
+        setSuccess('Garantía registrada correctamente');
+      }
       
       // Redirigir después de 2 segundos
       setTimeout(() => {
@@ -203,19 +281,51 @@ const WarrantyFormPage: React.FC = () => {
       }, 2000);
 
     } catch (err: any) {
-      console.error('Error al crear garantía:', err);
-      setError(err.message || 'Error al registrar la garantía');
+      console.error('Error al guardar garantía:', err);
+      const errorInfo = handleWarrantyError(err);
+      setError(errorInfo.message);
+      logWarrantyError(err, isEditing ? 'update-warranty' : 'create-warranty');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleCancel = () => {
+    navigate('/garantias');
+  };
+
+  const getMarcasDatalist = () => {
+    const marcas = marcasSugeridas[formData.categoria] || [];
+    return (
+      <datalist id="marcas-list">
+        {marcas.map(marca => (
+          <option key={marca} value={marca} />
+        ))}
+      </datalist>
+    );
+  };
+
+  if (loadingData) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Registrar Nueva Garantía</h1>
-        <p className="text-gray-600">Complete la información del producto vendido y la garantía asociada</p>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {isEditing ? 'Editar Garantía' : 'Registrar Nueva Garantía'}
+        </h1>
+        <p className="text-gray-600">
+          {isEditing 
+            ? 'Modifique la información de la garantía' 
+            : 'Complete la información del producto vendido y la garantía asociada'
+          }
+        </p>
       </div>
 
       {error && (
@@ -296,13 +406,20 @@ const WarrantyFormPage: React.FC = () => {
                       name="marca"
                       value={formData.marca}
                       onChange={handleInputChange}
+                      list="marcas-list"
                       placeholder="Ingrese la marca del producto"
                       className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
                         errors.marca ? 'border-red-300' : 'border-gray-300'
                       }`}
                       required
                     />
+                    {getMarcasDatalist()}
                     {errors.marca && <p className="mt-1 text-sm text-red-600">{errors.marca}</p>}
+                    {marcasSugeridas[formData.categoria].length > 0 && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Marcas sugeridas: {marcasSugeridas[formData.categoria].join(', ')}
+                      </p>
+                    )}
                   </div>
 
                   {/* Modelo */}
@@ -344,17 +461,24 @@ const WarrantyFormPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">
                       Precio de Venta *
                     </label>
-                    <input
-                      type="number"
-                      name="precio"
-                      value={formData.precio}
-                      onChange={handleInputChange}
-                      placeholder="0.00"
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                        errors.precio ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      required
-                    />
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500 sm:text-sm">$</span>
+                      </div>
+                      <input
+                        type="number"
+                        name="precio"
+                        value={formData.precio}
+                        onChange={handleInputChange}
+                        placeholder="0.00"
+                        step="0.01"
+                        min="0"
+                        className={`pl-7 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                          errors.precio ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        required
+                      />
+                    </div>
                     {errors.precio && <p className="mt-1 text-sm text-red-600">{errors.precio}</p>}
                   </div>
 
@@ -423,7 +547,7 @@ const WarrantyFormPage: React.FC = () => {
                       Teléfono
                     </label>
                     <input
-                      type="text"
+                      type="tel"
                       name="clienteTelefono"
                       value={formData.clienteTelefono}
                       onChange={handleInputChange}
@@ -433,7 +557,7 @@ const WarrantyFormPage: React.FC = () => {
                   </div>
 
                   {/* Email */}
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700">
                       Email (opcional)
                     </label>
@@ -464,7 +588,8 @@ const WarrantyFormPage: React.FC = () => {
                       value={formData.vehiculoDominio}
                       onChange={handleInputChange}
                       placeholder="ABC123"
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 uppercase"
+                      style={{ textTransform: 'uppercase' }}
                     />
                   </div>
 
@@ -503,14 +628,23 @@ const WarrantyFormPage: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700">
                       Kilometraje al momento de la venta
                     </label>
-                    <input
-                      type="number"
-                      name="kilometrajeVenta"
-                      value={formData.kilometrajeVenta}
-                      onChange={handleInputChange}
-                      placeholder="50000"
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
+                    <div className="mt-1 relative rounded-md shadow-sm">
+                      <input
+                        type="number"
+                        name="kilometrajeVenta"
+                        value={formData.kilometrajeVenta}
+                        onChange={handleInputChange}
+                        placeholder="50000"
+                        min="0"
+                        className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                          errors.kilometrajeVenta ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                      />
+                      <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <span className="text-gray-500 sm:text-sm">km</span>
+                      </div>
+                    </div>
+                    {errors.kilometrajeVenta && <p className="mt-1 text-sm text-red-600">{errors.kilometrajeVenta}</p>}
                   </div>
                 </div>
               </div>
@@ -552,6 +686,8 @@ const WarrantyFormPage: React.FC = () => {
                         value={formData.garantiaMeses}
                         onChange={handleInputChange}
                         placeholder="12"
+                        min="1"
+                        max="120"
                         className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
                           errors.garantiaMeses ? 'border-red-300' : 'border-gray-300'
                         }`}
@@ -567,17 +703,23 @@ const WarrantyFormPage: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700">
                         Kilómetros de Garantía *
                       </label>
-                      <input
-                        type="number"
-                        name="garantiaKilometros"
-                        value={formData.garantiaKilometros}
-                        onChange={handleInputChange}
-                        placeholder="10000"
-                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                          errors.garantiaKilometros ? 'border-red-300' : 'border-gray-300'
-                        }`}
-                        required={formData.tipoGarantia === 'kilometros' || formData.tipoGarantia === 'mixta'}
-                      />
+                      <div className="mt-1 relative rounded-md shadow-sm">
+                        <input
+                          type="number"
+                          name="garantiaKilometros"
+                          value={formData.garantiaKilometros}
+                          onChange={handleInputChange}
+                          placeholder="10000"
+                          min="1"
+                          className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                            errors.garantiaKilometros ? 'border-red-300' : 'border-gray-300'
+                          }`}
+                          required={formData.tipoGarantia === 'kilometros' || formData.tipoGarantia === 'mixta'}
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                          <span className="text-gray-500 sm:text-sm">km</span>
+                        </div>
+                      </div>
                       {errors.garantiaKilometros && <p className="mt-1 text-sm text-red-600">{errors.garantiaKilometros}</p>}
                     </div>
                   )}
@@ -637,16 +779,45 @@ const WarrantyFormPage: React.FC = () => {
                       rows={3}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Ejemplo: "Garantía válida solo para uso particular", "Excluye daños por mal uso", etc.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Información importante para el usuario */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h4 className="text-sm font-medium text-yellow-800">
+                      💡 Consejos importantes
+                    </h4>
+                    <div className="mt-2 text-sm text-yellow-700">
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Complete todos los campos obligatorios (*) para registrar la garantía</li>
+                        <li>La información del vehículo ayuda a identificar el producto en el futuro</li>
+                        <li>El número de serie es importante para productos con garantía del fabricante</li>
+                        <li>Las condiciones especiales quedarán registradas en el documento de garantía</li>
+                        <li>Verifique que la fecha de vencimiento calculada sea correcta</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Botones */}
-              <div className="flex justify-end space-x-4 pt-6">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
                 <button
                   type="button"
-                  onClick={() => navigate('/garantias')}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  onClick={handleCancel}
+                  disabled={loading}
+                  className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Cancelar
                 </button>
@@ -654,7 +825,7 @@ const WarrantyFormPage: React.FC = () => {
                   type="button"
                   onClick={handleSubmit}
                   disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center transition-colors"
                 >
                   {loading ? (
                     <>
@@ -662,10 +833,15 @@ const WarrantyFormPage: React.FC = () => {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Registrando...
+                      {isEditing ? 'Actualizando...' : 'Registrando...'}
                     </>
                   ) : (
-                    'Registrar Garantía'
+                    <>
+                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      {isEditing ? 'Actualizar Garantía' : 'Registrar Garantía'}
+                    </>
                   )}
                 </button>
               </div>
