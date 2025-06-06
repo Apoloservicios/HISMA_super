@@ -24,7 +24,6 @@ import PublicHistoryPage from './pages/public/PublicHistoryPage';
 // Pages - Dashboard
 import DashboardPage from './pages/dashboard/DashboardPage';
 
-
 import PlanManagementPage from './pages/superadmin/PlanManagementPage';
 
 // Pages - Oil Changes
@@ -47,6 +46,11 @@ import SupportPage from './pages/support/SupportPage';
 import LubricentroDashboardPage from './pages/admin/LubricentroDashboardPage';
 import LubricentroFormPage from './pages/admin/LubricentroFormPage';
 import LubricentroDetailPage from './pages/admin/LubricentroDetailPage';
+
+// ✅ NUEVAS IMPORTACIONES - Pages de Garantías
+import WarrantyDashboardPage from './pages/warranties/WarrantyDashboardPage';
+import WarrantyFormPage from './pages/warranties/WarrantyFormPage';
+// import WarrantyDetailPage from './pages/warranties/WarrantyDetailPage'; // ← Crear después
 
 // Components
 import PrivateRoute from './components/common/PrivateRoute';
@@ -146,6 +150,45 @@ const App: React.FC = () => {
                   </PrivateRoute>
                 } 
               />
+
+              {/* ✅ NUEVAS RUTAS - Garantías */}
+              <Route 
+                path="/garantias" 
+                element={
+                  <PrivateRoute>
+                    <WarrantyDashboardPage />
+                  </PrivateRoute>
+                } 
+              />
+              
+              <Route 
+                path="/garantias/nueva" 
+                element={
+                  <PrivateRoute requiresActiveSubscription={true}>
+                    <WarrantyFormPage />
+                  </PrivateRoute>
+                } 
+              />
+              
+              {/* 
+              <Route 
+                path="/garantias/:id" 
+                element={
+                  <PrivateRoute>
+                    <WarrantyDetailPage />
+                  </PrivateRoute>
+                } 
+              />
+              
+              <Route 
+                path="/garantias/editar/:id" 
+                element={
+                  <PrivateRoute requiresActiveSubscription={true}>
+                    <WarrantyFormPage />
+                  </PrivateRoute>
+                } 
+              />
+              */}
               
               {/* Rutas de usuarios */}
               <Route 

@@ -1,4 +1,5 @@
 // src/types/warranty.ts
+import { Timestamp } from 'firebase/firestore';
 
 // Categorías de productos con garantía
 export type ProductCategory = 
@@ -42,7 +43,7 @@ export interface Warranty {
   descripcion: string;         // Descripción detallada del producto
   
   // Información de la venta
-  fechaVenta: Date;
+  fechaVenta: Timestamp | Date;
   precio: number;
   facturaNumero?: string;      // Número de factura si aplica
   vendedorId: string;          // ID del empleado que vendió
@@ -63,7 +64,7 @@ export interface Warranty {
   tipoGarantia: WarrantyType;
   garantiaMeses?: number;      // Cantidad de meses de garantía
   garantiaKilometros?: number; // Cantidad de kilómetros de garantía
-  fechaVencimiento: Date;      // Fecha calculada de vencimiento
+  fechaVencimiento: Timestamp | Date;  // Fecha calculada de vencimiento
   
   // Estado actual
   estado: WarrantyStatus;
@@ -76,15 +77,15 @@ export interface Warranty {
   reclamosHistorial?: WarrantyClaimHistoryItem[];
   
   // Metadatos
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Timestamp | Date;
+  updatedAt: Timestamp | Date;
   createdBy: string;           // ID del usuario que creó el registro
 }
 
 // Historial de reclamos
 export interface WarrantyClaimHistoryItem {
   id: string;
-  fecha: Date;
+  fecha: Timestamp | Date;
   motivo: string;              // Razón del reclamo
   solucion: string;            // Qué se hizo para resolver
   empleadoId: string;          // Quién atendió el reclamo
@@ -165,6 +166,6 @@ export interface WarrantyAlert {
   clienteNombre: string;
   producto: string;
   telefono?: string;
-  fechaCreacion: Date;
+  fechaCreacion: Timestamp | Date;
   notificado: boolean;
 }

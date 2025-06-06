@@ -6,8 +6,6 @@ import { SubscriptionPlanType } from './subscription';
 export type UserRole = 'superadmin' | 'admin' | 'user';
 export type UserStatus = 'activo' | 'inactivo' | 'pendiente';
 
-
-
 export interface User {
   id: string;
   nombre: string;
@@ -24,12 +22,8 @@ export interface User {
   permissions?: string[];
 }
 
-
-
 // Tipos de Lubricentro
 export type LubricentroStatus = 'activo' | 'inactivo' | 'trial';
-
-
 
 export interface Lubricentro {
   id: string;
@@ -168,6 +162,9 @@ export interface OperatorStats {
   operatorName: string;
   count: number;
 }
+
+// ✅ NUEVAS EXPORTACIONES - Tipos de Garantías
+export * from './warranty';
 
 // Re-exportar tipos de suscripción
 export type { SubscriptionPlanType } from './subscription';

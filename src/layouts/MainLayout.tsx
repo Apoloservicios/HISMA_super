@@ -22,7 +22,8 @@ import {
   BuildingOfficeIcon, 
   QuestionMarkCircleIcon,
   MagnifyingGlassIcon,
-  CreditCardIcon  // 👈 AGREGAR ESTE ÍCONO
+  CreditCardIcon,
+  ShieldCheckIcon  // 👈 AGREGAR ESTE ÍCONO
 } from '@heroicons/react/24/outline';
 
 // Componente de carga
@@ -120,6 +121,12 @@ const MainLayout: React.FC = () => {
         text: 'Cambios de Aceite', 
         icon: <WrenchIcon className="w-5 h-5" />, 
         path: '/cambios-aceite',
+        divider: false
+      },
+      { 
+        text: 'Garantías', 
+        icon: <ShieldCheckIcon className="w-5 h-5" />, 
+        path: '/garantias',
         divider: false
       },
     );
