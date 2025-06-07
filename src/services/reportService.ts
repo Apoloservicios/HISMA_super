@@ -4,11 +4,81 @@ import html2canvas from 'html2canvas';
 import { OilChangeStats, OperatorStats, OilChange, User } from '../types';
 
 /**
- * Servicio para generar reportes en diferentes formatos
+ * ✅ FUNCIÓN HELPER PARA CONVERSIÓN SEGURA DE FECHAS
+ * Maneja todos los tipos de fecha posibles (Date, Timestamp de Firebase, string, number)
+ */
+const toDate = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  if (dateValue instanceof Date) return dateValue;
+  if (typeof dateValue === 'object' && typeof dateValue.toDate === 'function') {
+    // Timestamp de Firebase
+    return dateValue.toDate();
+  }
+  if (typeof dateValue === 'string' || typeof dateValue === 'number') {
+    const parsed = new Date(dateValue);
+    return isNaN(parsed.getTime()) ? new Date() : parsed;
+  }
+  return new Date();
+};
+
+/**
+ * ✅ FUNCIÓN HELPER PARA PARSEAR RANGOS DE FECHAS DE MANERA SEGURA
+ */
+const parseDateRange = (dateRangeStr: string, fallbackData: OilChange[] = []) => {
+  const dates = dateRangeStr.split(' - ');
+  if (dates.length === 2) {
+    try {
+      const parseDate = (dateStr: string): Date => {
+        // Formato DD/MM/YYYY
+        if (dateStr.includes('/')) {
+          const parts = dateStr.trim().split('/');
+          if (parts.length === 3) {
+            return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+          }
+        }
+        // Formato YYYY-MM-DD o otros formatos estándar
+        const parsed = new Date(dateStr);
+        return isNaN(parsed.getTime()) ? new Date() : parsed;
+      };
+      
+      const startDate = parseDate(dates[0]);
+      const endDate = parseDate(dates[1]);
+      
+      if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime())) {
+        return { startDate, endDate };
+      }
+    } catch (error) {
+      console.warn('Error parseando fechas del rango:', error);
+    }
+  }
+  
+  // Si no se puede parsear, usar las fechas de los datos
+  if (fallbackData && fallbackData.length > 0) {
+    const serviceDates = fallbackData.map(change => toDate(change.fecha))
+      .filter(date => !isNaN(date.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime());
+    
+    if (serviceDates.length > 0) {
+      return {
+        startDate: serviceDates[0],
+        endDate: serviceDates[serviceDates.length - 1]
+      };
+    }
+  }
+  
+  // Fallback final: último mes
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setMonth(startDate.getMonth() - 1);
+  return { startDate, endDate };
+};
+
+/**
+ * ✅ SERVICIO DE REPORTES COMPLETO Y CORREGIDO
  */
 export const reportService = {
   /**
-   * Genera un informe en PDF con las estadísticas y gráficos de cambios de aceite
+   * ✅ Genera un informe en PDF con las estadísticas y gráficos de cambios de aceite
    */
   generatePdfReport: async (
     stats: OilChangeStats,
@@ -207,7 +277,7 @@ export const reportService = {
   },
 
   /**
-   * Genera un archivo Excel con los datos de cambios de aceite
+   * ✅ Genera un archivo Excel con los datos de cambios de aceite
    */
   exportToExcel: async (data: any[], sheetName: string = 'Reporte'): Promise<void> => {
     try {
@@ -282,7 +352,7 @@ export const reportService = {
   },
 
   /**
-   * Exporta estadísticas de operadores a Excel
+   * ✅ Exporta estadísticas de operadores a Excel
    */
   exportOperatorStatsToExcel: async (
     operatorStats: OperatorStats[],
@@ -318,7 +388,7 @@ export const reportService = {
         { wch: 15 }, { wch: 15 }, { wch: 25 }
       ];
       
-      XLSX.utils.book_append_sheet(wb, ws, 'Estadisticas_Operadores'); // Máximo 31 caracteres
+      XLSX.utils.book_append_sheet(wb, ws, 'Estadisticas_Operadores');
       
       // Hoja de resumen
       const summaryData = [
@@ -336,7 +406,7 @@ export const reportService = {
       summaryWs['!cols'] = [{ wch: 20 }, { wch: 30 }];
       XLSX.utils.book_append_sheet(wb, summaryWs, 'Resumen');
       
-      // Guardar archivo (limitar nombre de archivo)
+      // Guardar archivo
       const safeFileName = `Reporte_Operadores_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, safeFileName);
       
@@ -348,7 +418,7 @@ export const reportService = {
   },
 
   /**
-   * Captura una imagen de un elemento HTML
+   * ✅ Captura una imagen de un elemento HTML
    */
   captureElement: async (element: HTMLElement): Promise<string> => {
     try {
@@ -369,7 +439,7 @@ export const reportService = {
   },
 
   /**
-   * Genera un reporte detallado de un vehículo específico
+   * ✅ Genera un reporte detallado de un vehículo específico
    */
   generateVehicleReport: async (
     vehicleChanges: OilChange[],
@@ -451,8 +521,8 @@ export const reportService = {
         ['Kilometraje actual:', `${kmActual.toLocaleString()} km`],
         ['Kilómetros recorridos:', `${kmRecorridos.toLocaleString()} km`],
         ['Promedio km entre cambios:', `${promedioKmEntreCambios.toLocaleString()} km`],
-        ['Primer servicio:', new Date(vehicleChanges[vehicleChanges.length - 1].fecha).toLocaleDateString('es-ES')],
-        ['Último servicio:', new Date(latestChange.fecha).toLocaleDateString('es-ES')]
+        ['Primer servicio:', toDate(vehicleChanges[vehicleChanges.length - 1].fecha).toLocaleDateString('es-ES')],
+        ['Último servicio:', toDate(latestChange.fecha).toLocaleDateString('es-ES')]
       ];
       
       stats.forEach(([label, value]) => {
@@ -494,7 +564,7 @@ export const reportService = {
         pdf.setFont('helvetica', 'normal');
         
         const serviceDetails = [
-          `Fecha: ${new Date(change.fecha).toLocaleDateString('es-ES')}`,
+          `Fecha: ${toDate(change.fecha).toLocaleDateString('es-ES')}`,
           `Kilometraje: ${change.kmActuales.toLocaleString()} km`,
           `Aceite: ${change.marcaAceite} ${change.tipoAceite} ${change.sae} (${change.cantidadAceite}L)`,
           `Operario: ${change.nombreOperario}`
@@ -533,7 +603,7 @@ export const reportService = {
         pdf.setTextColor(120, 120, 120);
         pdf.text(`Historial del vehículo ${vehicleDomain} - ${lubricentroName}`, 20, 285);
         pdf.text(`Página ${i} de ${pageCount}`, 190, 285, { align: 'right' });
-        pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
+        pdf.text(`Generado el ${toDate(new Date()).toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
       }
       
       // Guardar
@@ -548,7 +618,7 @@ export const reportService = {
   },
 
   /**
-   * Genera un reporte detallado de un operador específico
+   * ✅ Genera un reporte detallado de un operador específico
    */
   generateOperatorReport: async (
     operator: User,
@@ -630,8 +700,8 @@ export const reportService = {
         ['Servicios realizados:', totalServices.toString()],
         ['Vehículos únicos atendidos:', uniqueVehicles.length.toString()],
         ['Tipos de vehículos:', vehicleTypes.join(', ')],
-        ['Primer servicio del período:', new Date(operatorChanges[operatorChanges.length - 1].fecha).toLocaleDateString('es-ES')],
-        ['Último servicio del período:', new Date(operatorChanges[0].fecha).toLocaleDateString('es-ES')]
+        ['Primer servicio del período:', toDate(operatorChanges[operatorChanges.length - 1].fecha).toLocaleDateString('es-ES')],
+        ['Último servicio del período:', toDate(operatorChanges[0].fecha).toLocaleDateString('es-ES')]
       ];
       
       performanceStats.forEach(([label, value]) => {
@@ -667,7 +737,7 @@ export const reportService = {
         pdf.setFontSize(9);
         pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         pdf.setFont('helvetica', 'bold');
-        pdf.text(`${change.nroCambio} - ${new Date(change.fecha).toLocaleDateString('es-ES')}`, 25, yPos);
+        pdf.text(`${change.nroCambio} - ${toDate(change.fecha).toLocaleDateString('es-ES')}`, 25, yPos);
         yPos += 8;
         
         pdf.setFontSize(8);
@@ -697,7 +767,7 @@ export const reportService = {
         pdf.setTextColor(120, 120, 120);
         pdf.text(`Reporte de ${operator.nombre} ${operator.apellido} - ${lubricentroName}`, 20, 285);
         pdf.text(`Página ${i} de ${pageCount}`, 190, 285, { align: 'right' });
-        pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
+        pdf.text(`Generado el ${toDate(new Date()).toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
       }
       
       // Guardar
@@ -712,7 +782,7 @@ export const reportService = {
   },
 
   /**
-   * Genera un reporte de evolución temporal
+   * ✅ Genera un reporte de evolución temporal - VERSIÓN COMPLETA CORREGIDA
    */
   generateEvolutionReport: async (
     oilChanges: OilChange[],
@@ -728,31 +798,61 @@ export const reportService = {
       let yPos = 20;
       const primaryColor = [46, 125, 50];
       
-      // Título
+      // Header con diseño mejorado
+      pdf.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      pdf.rect(0, 0, 210, 30, 'F');
+      
       pdf.setFontSize(18);
-      pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('REPORTE DE EVOLUCIÓN TEMPORAL', 105, yPos, { align: 'center' });
-      yPos += 10;
+      pdf.text('REPORTE DE EVOLUCIÓN TEMPORAL', 105, 15, { align: 'center' });
       
       pdf.setFontSize(14);
+      pdf.text(lubricentroName, 105, 22, { align: 'center' });
+      
+      yPos = 45;
       pdf.setTextColor(100, 100, 100);
-      pdf.text(lubricentroName, 105, yPos, { align: 'center' });
-      yPos += 5;
+      pdf.setFontSize(12);
       pdf.text(`Período: ${dateRange}`, 105, yPos, { align: 'center' });
       yPos += 15;
       
-      // Análisis temporal
+      // Cálculo correcto de fechas con función helper
+      const { startDate, endDate } = parseDateRange(dateRange, oilChanges);
+      const daysInPeriod = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const safeDaysInPeriod = Math.max(1, daysInPeriod);
+      const totalServices = oilChanges.length;
+      
+      const averagePerDay = (totalServices / safeDaysInPeriod).toFixed(1);
+      const averagePerWeek = (totalServices / Math.max(1, safeDaysInPeriod / 7)).toFixed(1);
+      
+      // Análisis temporal mejorado
       const weeklyData: { [key: string]: number } = {};
       const monthlyData: { [key: string]: number } = {};
+      const dailyData: { [key: string]: number } = {};
+      const dayOfWeekData: { [key: string]: number } = {};
+      
+      // Inicializar días de la semana
+      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+      dayNames.forEach(day => dayOfWeekData[day] = 0);
       
       oilChanges.forEach(change => {
-        const date = new Date(change.fecha);
+        const date = toDate(change.fecha);
+        
+        if (isNaN(date.getTime())) return;
+        
+        // Por día
+        const dayKey = date.toLocaleDateString('es-ES');
+        dailyData[dayKey] = (dailyData[dayKey] || 0) + 1;
+        
+        // Por día de la semana
+        const dayOfWeek = date.getDay();
+        const dayName = dayNames[dayOfWeek];
+        dayOfWeekData[dayName]++;
         
         // Por semana
         const weekStart = new Date(date);
         weekStart.setDate(date.getDate() - date.getDay());
-        const weekKey = `${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
+        const weekKey = `Semana del ${weekStart.getDate()}/${weekStart.getMonth() + 1}`;
         weeklyData[weekKey] = (weeklyData[weekKey] || 0) + 1;
         
         // Por mes
@@ -760,17 +860,18 @@ export const reportService = {
         monthlyData[monthKey] = (monthlyData[monthKey] || 0) + 1;
       });
       
-      // Estadísticas generales
-      pdf.setFontSize(12);
+      // Resumen ejecutivo
+      pdf.setFillColor(248, 250, 252);
+      pdf.rect(15, yPos - 5, 180, 45, 'F');
+      pdf.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      pdf.setLineWidth(1);
+      pdf.rect(15, yPos - 5, 180, 45);
+      
+      pdf.setFontSize(14);
       pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('RESUMEN DE ACTIVIDAD', 20, yPos);
-      yPos += 10;
-      
-      const totalServices = oilChanges.length;
-      const daysInPeriod = Math.ceil((new Date(dateRange.split(' - ')[1]).getTime() - new Date(dateRange.split(' - ')[0]).getTime()) / (1000 * 60 * 60 * 24));
-      const averagePerDay = (totalServices / daysInPeriod).toFixed(1);
-      const averagePerWeek = (totalServices / (daysInPeriod / 7)).toFixed(1);
+      pdf.text('RESUMEN EJECUTIVO', 20, yPos + 3);
+      yPos += 12;
       
       pdf.setFontSize(10);
       pdf.setTextColor(60, 60, 60);
@@ -778,90 +879,169 @@ export const reportService = {
       
       const summaryStats = [
         ['Total de servicios:', totalServices.toString()],
-        ['Días analizados:', daysInPeriod.toString()],
+        ['Días analizados:', safeDaysInPeriod.toString()],
         ['Promedio diario:', `${averagePerDay} servicios/día`],
         ['Promedio semanal:', `${averagePerWeek} servicios/semana`],
-        ['Pico máximo semanal:', Math.max(...Object.values(weeklyData)).toString()]
+        ['Días con actividad:', Object.keys(dailyData).length.toString()],
+        ['Pico máximo diario:', Math.max(...Object.values(dailyData), 0).toString()]
       ];
       
-      summaryStats.forEach(([label, value]) => {
+      // Mostrar en dos columnas
+      summaryStats.forEach(([label, value], index) => {
+        const x = index < 3 ? 20 : 110;
+        const y = yPos + ((index % 3) * 6);
+        
         pdf.setFont('helvetica', 'bold');
-        pdf.text(label, 25, yPos);
+        pdf.text(label, x, y);
         pdf.setFont('helvetica', 'normal');
-        pdf.text(value, 90, yPos);
-        yPos += 6;
+        pdf.text(value, x + 60, y);
       });
       
-      yPos += 15;
+      yPos += 25;
       
       // Análisis por días de la semana
-      const dayOfWeekData: { [key: string]: number } = {};
-      const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      
-      oilChanges.forEach(change => {
-        const dayOfWeek = new Date(change.fecha).getDay();
-        const dayName = dayNames[dayOfWeek];
-        dayOfWeekData[dayName] = (dayOfWeekData[dayName] || 0) + 1;
-      });
-      
-      pdf.setFontSize(12);
+      pdf.setFontSize(14);
       pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       pdf.setFont('helvetica', 'bold');
       pdf.text('ANÁLISIS POR DÍA DE LA SEMANA', 20, yPos);
-      yPos += 10;
+      yPos += 12;
       
-      pdf.setFontSize(10);
-      pdf.setTextColor(60, 60, 60);
-      pdf.setFont('helvetica', 'normal');
+      const maxDayCount = Math.max(...Object.values(dayOfWeekData));
       
-      dayNames.forEach(day => {
-        const count = dayOfWeekData[day] || 0;
-        const percentage = ((count / totalServices) * 100).toFixed(1);
-        pdf.text(`${day}: ${count} servicios (${percentage}%)`, 25, yPos);
-        yPos += 5;
+      dayNames.forEach((day) => {
+        const count = dayOfWeekData[day];
+        const percentage = totalServices > 0 ? ((count / totalServices) * 100).toFixed(1) : '0.0';
+        const isMaxDay = count === maxDayCount && count > 0;
+        
+        // Barra visual proporcional
+        const barWidth = Math.max(2, (count / Math.max(maxDayCount, 1)) * 50);
+        const barColor = isMaxDay ? [76, 175, 80] : [200, 200, 200];
+        
+        pdf.setFillColor(barColor[0], barColor[1], barColor[2]);
+        pdf.rect(25, yPos - 2, barWidth, 4, 'F');
+        
+        pdf.setFontSize(9);
+        pdf.setTextColor(60, 60, 60);
+        pdf.setFont(isMaxDay ? 'helvetica' : 'helvetica', isMaxDay ? 'bold' : 'normal');
+        
+        const dayText = isMaxDay ? `${day} (MEJOR)` : day;
+        pdf.text(`${dayText}: ${count} servicios (${percentage}%)`, 80, yPos);
+        yPos += 7;
       });
       
-      yPos += 15;
+      yPos += 8;
+      
+      // Análisis mensual si hay múltiples meses
+      if (Object.keys(monthlyData).length > 1) {
+        pdf.setFontSize(14);
+        pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('EVOLUCIÓN MENSUAL', 20, yPos);
+        yPos += 10;
+        
+        pdf.setFontSize(10);
+        pdf.setTextColor(60, 60, 60);
+        pdf.setFont('helvetica', 'normal');
+        
+        Object.entries(monthlyData).forEach(([month, count]) => {
+          const percentage = ((count / totalServices) * 100).toFixed(1);
+          pdf.text(`${month}: ${count} servicios (${percentage}%)`, 25, yPos);
+          yPos += 5;
+        });
+        
+        yPos += 10;
+      }
+      
+      // Nueva página para recomendaciones
+      if (yPos > 200) {
+        pdf.addPage();
+        yPos = 20;
+      }
       
       // Recomendaciones
-      pdf.setFontSize(12);
-      pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('TENDENCIAS Y RECOMENDACIONES', 20, yPos);
-      yPos += 10;
+      pdf.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      pdf.rect(0, yPos - 10, 210, 20, 'F');
       
-      pdf.setFontSize(10);
+      pdf.setFontSize(16);
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('INSIGHTS Y RECOMENDACIONES', 105, yPos, { align: 'center' });
+      
+      yPos += 20;
+      
+      pdf.setFontSize(11);
       pdf.setTextColor(60, 60, 60);
       pdf.setFont('helvetica', 'normal');
       
       const recommendations = [];
-      const bestDay = Object.entries(dayOfWeekData).reduce((a, b) => a[1] > b[1] ? a : b)[0];
-      const worstDay = Object.entries(dayOfWeekData).reduce((a, b) => a[1] < b[1] ? a : b)[0];
       
-      recommendations.push(`• ${bestDay} es el día más activo con ${dayOfWeekData[bestDay]} servicios`);
-      recommendations.push(`• ${worstDay} es el día menos activo con ${dayOfWeekData[worstDay]} servicios`);
+      // Recomendaciones basadas en datos
+      const sortedDays = Object.entries(dayOfWeekData)
+        .filter(([_, count]) => count > 0)
+        .sort(([, a], [, b]) => b - a);
       
-      if (parseFloat(averagePerDay) < 5) {
-        recommendations.push('• Considere promociones para incrementar la actividad diaria');
+      if (sortedDays.length > 0) {
+        const [bestDay, bestCount] = sortedDays[0];
+        recommendations.push(`${bestDay} es su día más productivo con ${bestCount} servicios (${((bestCount / totalServices) * 100).toFixed(1)}%)`);
+        
+        if (sortedDays.length > 1) {
+          const [worstDay, worstCount] = sortedDays[sortedDays.length - 1];
+          recommendations.push(`${worstDay} tiene menor actividad con ${worstCount} servicios - oportunidad de mejora`);
+        }
       }
       
-      recommendations.push('• Programe mantenimiento de equipos en días de menor actividad');
-      recommendations.push('• Use estos datos para optimizar horarios de personal');
+      const avgDaily = parseFloat(averagePerDay);
+      if (avgDaily < 3) {
+        recommendations.push('Considere promociones especiales para incrementar la actividad diaria');
+        recommendations.push('Implemente recordatorios por WhatsApp para atraer más clientes');
+      } else if (avgDaily > 10) {
+        recommendations.push('Excelente volumen! Considere optimizar procesos para mantener la calidad');
+        recommendations.push('Evalúe si necesita personal adicional para manejar la demanda');
+      }
       
-      recommendations.forEach(rec => {
-        const lines = pdf.splitTextToSize(rec, 160);
+      if (safeDaysInPeriod >= 30) {
+        recommendations.push('Analice patrones estacionales para una mejor planificación de recursos');
+      }
+      
+      recommendations.push('Use días de menor actividad para mantenimiento preventivo de equipos');
+      recommendations.push('Aproveche tiempos libres para capacitación del personal');
+      recommendations.push('Implemente un sistema de recordatorios automáticos para aumentar retención');
+      recommendations.push('Considere ofertas especiales en días de baja actividad');
+      
+      recommendations.forEach((rec, index) => {
+        if (yPos > 270) {
+          pdf.addPage();
+          yPos = 20;
+        }
+        
+        if (index % 2 === 0) {
+          pdf.setFillColor(248, 250, 252);
+          pdf.rect(15, yPos - 3, 180, 8, 'F');
+        }
+        
+        const lines = pdf.splitTextToSize(`• ${rec}`, 170);
         lines.forEach((line: string) => {
-          pdf.text(line, 25, yPos);
+          pdf.text(line, 20, yPos);
           yPos += 5;
         });
-        yPos += 2;
+        yPos += 3;
       });
       
       // Pie de página
-      pdf.setFontSize(8);
-      pdf.setTextColor(120, 120, 120);
-      pdf.text(`Reporte de Evolución - ${lubricentroName}`, 20, 285);
-      pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
+      const pageCount = pdf.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        pdf.setPage(i);
+        
+        pdf.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        pdf.setLineWidth(0.5);
+        pdf.line(20, 280, 190, 280);
+        
+        pdf.setFontSize(8);
+        pdf.setTextColor(120, 120, 120);
+        pdf.text(`Reporte de Evolución - ${lubricentroName}`, 20, 285);
+        pdf.text(`Página ${i} de ${pageCount}`, 190, 285, { align: 'right' });
+        pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')} por Sistema HISMA`, 105, 290, { align: 'center' });
+      }
       
       // Guardar
       const fileName = `Reporte_Evolucion_${lubricentroName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
@@ -875,7 +1055,7 @@ export const reportService = {
   },
 
   /**
-   * Genera un reporte de próximos cambios de aceite
+   * ✅ Genera un reporte de próximos cambios de aceite - VERSIÓN COMPLETA MEJORADA
    */
   generateUpcomingChangesReport: async (
     upcomingChanges: OilChange[],
@@ -891,186 +1071,460 @@ export const reportService = {
       const primaryColor = [46, 125, 50];
       const urgentColor = [255, 152, 0];
       const overdueColor = [244, 67, 54];
+      const normalColor = [76, 175, 80];
       
-      // Título
-      pdf.setFontSize(18);
-      pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      // Header profesional
+      pdf.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      pdf.rect(0, 0, 210, 35, 'F');
+      
+      pdf.setFontSize(22);
+      pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('REPORTE DE PRÓXIMOS CAMBIOS', 105, yPos, { align: 'center' });
-      yPos += 10;
+      pdf.text('REPORTE DE PRÓXIMOS CAMBIOS', 105, 18, { align: 'center' });
       
       pdf.setFontSize(14);
-      pdf.setTextColor(100, 100, 100);
-      pdf.text(lubricentroName, 105, yPos, { align: 'center' });
-      yPos += 5;
-      pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, 105, yPos, { align: 'center' });
-      yPos += 15;
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(lubricentroName, 105, 26, { align: 'center' });
+      
+      pdf.setFontSize(10);
+      pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES')}`, 105, 31, { align: 'center' });
+      
+      yPos = 50;
       
       // Análisis de urgencia
       const today = new Date();
-      const overdue = upcomingChanges.filter(change => new Date(change.fechaProximoCambio) < today);
+      const overdue = upcomingChanges.filter(change => {
+        const nextDate = toDate(change.fechaProximoCambio);
+        return nextDate < today;
+      });
+      
       const urgent = upcomingChanges.filter(change => {
-        const days = Math.ceil((new Date(change.fechaProximoCambio).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const nextDate = toDate(change.fechaProximoCambio);
+        const days = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         return days >= 0 && days <= 7;
       });
+      
       const normal = upcomingChanges.filter(change => {
-        const days = Math.ceil((new Date(change.fechaProximoCambio).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        return days > 7;
+        const nextDate = toDate(change.fechaProximoCambio);
+        const days = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return days > 7 && days <= 30;
       });
       
-      // Resumen ejecutivo
-      pdf.setFontSize(12);
+      const distant = upcomingChanges.filter(change => {
+        const nextDate = toDate(change.fechaProximoCambio);
+        const days = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return days > 30;
+      });
+      
+      // Dashboard ejecutivo
+      pdf.setFontSize(16);
       pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('RESUMEN EJECUTIVO', 20, yPos);
-      yPos += 10;
-      
-      pdf.setFontSize(10);
-      pdf.setTextColor(60, 60, 60);
-      pdf.setFont('helvetica', 'normal');
-      
-      const summary = [
-        ['Total de próximos cambios:', upcomingChanges.length.toString()],
-        ['Cambios vencidos (URGENTE):', overdue.length.toString()],
-        ['Cambios próximos (≤7 días):', urgent.length.toString()],
-        ['Cambios normales (>7 días):', normal.length.toString()]
-      ];
-      
-      summary.forEach(([label, value]) => {
-        pdf.setFont('helvetica', 'bold');
-        pdf.text(label, 25, yPos);
-        pdf.setFont('helvetica', 'normal');
-        if (label.includes('vencidos')) {
-          pdf.setTextColor(overdueColor[0], overdueColor[1], overdueColor[2]);
-        } else if (label.includes('próximos')) {
-          pdf.setTextColor(urgentColor[0], urgentColor[1], urgentColor[2]);
-        } else {
-          pdf.setTextColor(60, 60, 60);
-        }
-        pdf.text(value, 100, yPos);
-        pdf.setTextColor(60, 60, 60);
-        yPos += 6;
-      });
-      
+      pdf.text('DASHBOARD EJECUTIVO', 20, yPos);
       yPos += 15;
       
-      // Cambios vencidos
+      // Crear cajas de estadísticas visuales
+      const stats = [
+        { label: 'VENCIDOS', value: overdue.length, color: overdueColor },
+        { label: 'URGENTES (≤7 días)', value: urgent.length, color: urgentColor },
+        { label: 'PRÓXIMOS (8-30 días)', value: normal.length, color: normalColor },
+        { label: 'PROGRAMADOS (>30 días)', value: distant.length, color: [33, 150, 243] }
+      ];
+      
+      const boxWidth = 42;
+      const boxHeight = 25;
+      let xStart = 20;
+      
+      stats.forEach((stat) => {
+        // Fondo de la caja
+        pdf.setFillColor(stat.color[0], stat.color[1], stat.color[2]);
+        pdf.roundedRect(xStart, yPos - 3, boxWidth, boxHeight, 3, 3, 'F');
+        
+        // Texto en blanco
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(stat.label, xStart + boxWidth/2, yPos + 3, { align: 'center' });
+        
+        pdf.setFontSize(16);
+        pdf.text(stat.value.toString(), xStart + boxWidth/2, yPos + 12, { align: 'center' });
+        
+        pdf.setFontSize(6);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('servicios', xStart + boxWidth/2, yPos + 17, { align: 'center' });
+        
+        xStart += boxWidth + 3;
+      });
+      
+      yPos += 35;
+      
+      // Alertas visuales
       if (overdue.length > 0) {
+        pdf.setFillColor(254, 242, 242);
+        pdf.rect(15, yPos - 5, 180, 10, 'F');
+        pdf.setDrawColor(overdueColor[0], overdueColor[1], overdueColor[2]);
+        pdf.setLineWidth(2);
+        pdf.rect(15, yPos - 5, 180, 10);
+        
         pdf.setFontSize(12);
         pdf.setTextColor(overdueColor[0], overdueColor[1], overdueColor[2]);
         pdf.setFont('helvetica', 'bold');
-        pdf.text('🚨 CAMBIOS VENCIDOS - ACCIÓN INMEDIATA', 20, yPos);
-        yPos += 10;
+        pdf.text(`CRÍTICO: ${overdue.length} cambios VENCIDOS requieren contacto inmediato`, 20, yPos + 2);
+        yPos += 18;
+      }
+      
+      if (urgent.length > 0) {
+        pdf.setFillColor(255, 251, 235);
+        pdf.rect(15, yPos - 5, 180, 10, 'F');
+        pdf.setDrawColor(urgentColor[0], urgentColor[1], urgentColor[2]);
+        pdf.setLineWidth(2);
+        pdf.rect(15, yPos - 5, 180, 10);
         
-        overdue.forEach((change, index) => {
+        pdf.setFontSize(12);
+        pdf.setTextColor(urgentColor[0], urgentColor[1], urgentColor[2]);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(`URGENTE: ${urgent.length} cambios en los próximos 7 días`, 20, yPos + 2);
+        yPos += 18;
+      }
+      
+      // Sección de cambios vencidos
+      if (overdue.length > 0) {
+        pdf.setFontSize(14);
+        pdf.setTextColor(overdueColor[0], overdueColor[1], overdueColor[2]);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('CAMBIOS VENCIDOS - ACCIÓN INMEDIATA REQUERIDA', 20, yPos);
+        yPos += 12;
+        
+        overdue.slice(0, 12).forEach((change, index) => {
           if (yPos > 250) {
             pdf.addPage();
             yPos = 20;
           }
           
-          const daysOverdue = Math.abs(Math.ceil((new Date(change.fechaProximoCambio).getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+          const nextDate = toDate(change.fechaProximoCambio);
+          const daysOverdue = Math.abs(Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
           
-          pdf.setFontSize(9);
+          // Fondo alternado
+          if (index % 2 === 0) {
+            pdf.setFillColor(254, 242, 242);
+            pdf.rect(18, yPos - 3, 174, 14, 'F');
+          }
+          
+          pdf.setDrawColor(overdueColor[0], overdueColor[1], overdueColor[2]);
+          pdf.setLineWidth(0.5);
+          pdf.rect(18, yPos - 3, 174, 14);
+          
+          pdf.setFontSize(10);
           pdf.setTextColor(overdueColor[0], overdueColor[1], overdueColor[2]);
           pdf.setFont('helvetica', 'bold');
-          pdf.text(`${index + 1}. ${change.nombreCliente} - ${change.dominioVehiculo}`, 25, yPos);
-          yPos += 5;
+          pdf.text(`${index + 1}. ${change.nombreCliente}`, 22, yPos + 2);
           
           pdf.setTextColor(60, 60, 60);
           pdf.setFont('helvetica', 'normal');
-          pdf.text(`   ${change.marcaVehiculo} ${change.modeloVehiculo} | Vencido hace ${daysOverdue} días`, 25, yPos);
-          yPos += 4;
-          pdf.text(`   Tel: ${change.celular || 'No registrado'}`, 25, yPos);
-          yPos += 8;
+          pdf.text(`${change.dominioVehiculo} • ${change.marcaVehiculo} ${change.modeloVehiculo}`, 22, yPos + 6);
+          
+          pdf.setTextColor(overdueColor[0], overdueColor[1], overdueColor[2]);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`VENCIDO HACE ${daysOverdue} DÍAS`, 130, yPos + 2);
+          
+          if (change.celular) {
+            pdf.setTextColor(60, 60, 60);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(`Tel: ${change.celular}`, 130, yPos + 6);
+          }
+          
+          pdf.setTextColor(120, 120, 120);
+          pdf.setFontSize(8);
+          pdf.text(`Vencía: ${nextDate.toLocaleDateString('es-ES')}`, 130, yPos + 9);
+          
+          yPos += 17;
         });
+        
+        if (overdue.length > 12) {
+          pdf.setFontSize(10);
+          pdf.setTextColor(overdueColor[0], overdueColor[1], overdueColor[2]);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`... y ${overdue.length - 12} cambios vencidos más`, 22, yPos);
+          yPos += 10;
+        }
         
         yPos += 10;
       }
       
       // Cambios urgentes
       if (urgent.length > 0) {
-        pdf.setFontSize(12);
+        pdf.setFontSize(14);
         pdf.setTextColor(urgentColor[0], urgentColor[1], urgentColor[2]);
         pdf.setFont('helvetica', 'bold');
-        pdf.text('⚠️ CAMBIOS PRÓXIMOS (7 DÍAS)', 20, yPos);
-        yPos += 10;
+        pdf.text('CAMBIOS URGENTES (PRÓXIMOS 7 DÍAS)', 20, yPos);
+        yPos += 12;
         
-        urgent.forEach((change, index) => {
+        urgent.slice(0, 15).forEach((change, index) => {
           if (yPos > 250) {
             pdf.addPage();
             yPos = 20;
           }
           
-          const daysRemaining = Math.ceil((new Date(change.fechaProximoCambio).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          const nextDate = toDate(change.fechaProximoCambio);
+          const daysRemaining = Math.ceil((nextDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
           
-          pdf.setFontSize(9);
+          if (index % 2 === 0) {
+            pdf.setFillColor(255, 251, 235);
+            pdf.rect(18, yPos - 3, 174, 14, 'F');
+          }
+          
+          pdf.setDrawColor(urgentColor[0], urgentColor[1], urgentColor[2]);
+          pdf.setLineWidth(0.5);
+          pdf.rect(18, yPos - 3, 174, 14);
+          
+          pdf.setFontSize(10);
           pdf.setTextColor(urgentColor[0], urgentColor[1], urgentColor[2]);
           pdf.setFont('helvetica', 'bold');
-          pdf.text(`${index + 1}. ${change.nombreCliente} - ${change.dominioVehiculo}`, 25, yPos);
-          yPos += 5;
+          pdf.text(`${index + 1}. ${change.nombreCliente}`, 22, yPos + 2);
           
           pdf.setTextColor(60, 60, 60);
           pdf.setFont('helvetica', 'normal');
-          pdf.text(`   ${change.marcaVehiculo} ${change.modeloVehiculo} | En ${daysRemaining} días`, 25, yPos);
-          yPos += 4;
-          pdf.text(`   Tel: ${change.celular || 'No registrado'}`, 25, yPos);
-          yPos += 8;
+          pdf.text(`${change.dominioVehiculo} • ${change.marcaVehiculo} ${change.modeloVehiculo}`, 22, yPos + 6);
+          
+          const urgencyText = daysRemaining === 0 ? 'HOY' : 
+                            daysRemaining === 1 ? 'MAÑANA' : 
+                            `EN ${daysRemaining} DÍAS`;
+          
+          pdf.setTextColor(urgentColor[0], urgentColor[1], urgentColor[2]);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(urgencyText, 130, yPos + 2);
+          
+          if (change.celular) {
+            pdf.setTextColor(60, 60, 60);
+            pdf.setFont('helvetica', 'normal');
+            pdf.text(`Tel: ${change.celular}`, 130, yPos + 6);
+          }
+          
+          pdf.setTextColor(120, 120, 120);
+          pdf.setFontSize(8);
+          pdf.text(`Programado: ${nextDate.toLocaleDateString('es-ES')}`, 130, yPos + 9);
+          
+          yPos += 17;
         });
+        
+        if (urgent.length > 15) {
+          pdf.setFontSize(10);
+          pdf.setTextColor(urgentColor[0], urgentColor[1], urgentColor[2]);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(`... y ${urgent.length - 15} cambios urgentes más`, 22, yPos);
+          yPos += 10;
+        }
+        
+        yPos += 10;
       }
       
       // Nueva página para plan de acción
       pdf.addPage();
       yPos = 20;
       
-      pdf.setFontSize(14);
-      pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      // Plan de acción
+      pdf.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      pdf.rect(0, 0, 210, 25, 'F');
+      
+      pdf.setFontSize(18);
+      pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
-      pdf.text('PLAN DE ACCIÓN RECOMENDADO', 20, yPos);
-      yPos += 15;
+      pdf.text('PLAN DE ACCIÓN ESTRATÉGICO', 105, 15, { align: 'center' });
       
-      pdf.setFontSize(11);
-      pdf.setTextColor(60, 60, 60);
-      pdf.setFont('helvetica', 'normal');
+      yPos = 40;
       
-      const actionPlan = [
-        '1. CONTACTAR INMEDIATAMENTE a clientes con cambios vencidos',
-        '2. PROGRAMAR citas para cambios urgentes (≤7 días)',
-        '3. ENVIAR recordatorios por WhatsApp',
-        '4. PREPARAR inventario necesario',
-        '5. ORGANIZAR agenda de trabajo',
-        '',
-        'SUGERENCIAS ADICIONALES:',
-        '• Ofrecer descuentos por pronto pago a clientes vencidos',
-        '• Implementar recordatorios automáticos',
-        '• Contactar por teléfono si no responden WhatsApp'
+      // Acciones prioritarias
+      const priorityActions = [
+        { 
+          title: 'PRIMERA PRIORIDAD - CRÍTICO', 
+          items: [
+            'Contactar INMEDIATAMENTE por teléfono a clientes con cambios vencidos',
+            'Enviar mensajes urgentes por WhatsApp con llamada a la acción clara',
+            'Ofrecer descuentos especiales por pronto pago (15-20%)',
+            'Programar citas para los próximos 2-3 días hábiles'
+          ],
+          color: overdueColor
+        },
+        { 
+          title: 'SEGUNDA PRIORIDAD - URGENTE', 
+          items: [
+            'Contactar a clientes con vencimientos en 7 días o menos',
+            'Enviar recordatorios preventivos personalizados',
+            'Confirmar disponibilidad de aceites y filtros necesarios',
+            'Preparar agenda de trabajo optimizada para la semana'
+          ],
+          color: urgentColor
+        },
+        { 
+          title: 'PLANIFICACIÓN ESTRATÉGICA', 
+          items: [
+            'Organizar calendario de servicios para próximos 30 días',
+            'Verificar inventario de productos más demandados',
+            'Implementar sistema de recordatorios automáticos',
+            'Capacitar personal en técnicas de retención de clientes'
+          ],
+          color: normalColor
+        }
       ];
       
-      actionPlan.forEach(item => {
-        if (item === '') {
-          yPos += 5;
-        } else {
+      priorityActions.forEach((section) => {
+        // Header de sección
+        pdf.setFillColor(section.color[0], section.color[1], section.color[2]);
+        pdf.roundedRect(15, yPos - 5, 180, 15, 3, 3, 'F');
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(section.title, 20, yPos + 5);
+        
+        yPos += 20;
+        
+        // Items de la sección
+        section.items.forEach((item, index) => {
+          if (yPos > 250) {
+            pdf.addPage();
+            yPos = 20;
+          }
+          
+          pdf.setFontSize(10);
+          pdf.setTextColor(60, 60, 60);
+          pdf.setFont('helvetica', 'normal');
+          
+          // Numeración con cuadrado
+          pdf.setFillColor(section.color[0], section.color[1], section.color[2]);
+          pdf.roundedRect(22, yPos - 3, 6, 6, 1, 1, 'F');
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(8);
+          pdf.text((index + 1).toString(), 25, yPos + 1, { align: 'center' });
+          
+          // Texto del item
+          pdf.setTextColor(60, 60, 60);
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(10);
           const lines = pdf.splitTextToSize(item, 160);
-          lines.forEach((line: string) => {
-            pdf.text(line, 25, yPos);
-            yPos += 6;
+          lines.forEach((line: string, lineIndex: number) => {
+            pdf.text(line, 32, yPos + (lineIndex * 5));
           });
-          yPos += 2;
-        }
+          
+          yPos += Math.max(6, lines.length * 5);
+        });
+        
+        yPos += 8;
       });
+      
+      // Consejos adicionales
+      if (yPos < 180) {
+        pdf.setFillColor(240, 248, 255);
+        pdf.rect(15, yPos - 5, 180, 45, 'F');
+        pdf.setDrawColor(33, 150, 243);
+        pdf.setLineWidth(1);
+        pdf.rect(15, yPos - 5, 180, 45);
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(33, 150, 243);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('CONSEJOS DE EXPERTO', 20, yPos + 5);
+        
+        yPos += 15;
+        const expertTips = [
+          '• Personalice mensajes con nombre del cliente y datos del vehículo',
+          '• Use WhatsApp Business para imagen más profesional',
+          '• Implemente recordatorios 15, 7 y 3 días antes del vencimiento',
+          '• Ofrezca servicios adicionales (bujías, batería, frenos)',
+          '• Mantenga base de datos actualizada con nuevos números',
+          '• Documente respuestas para mejorar estrategias futuras'
+        ];
+        
+        pdf.setFontSize(9);
+        pdf.setTextColor(60, 60, 60);
+        pdf.setFont('helvetica', 'normal');
+        
+        expertTips.forEach((tip) => {
+          const lines = pdf.splitTextToSize(tip, 165);
+          lines.forEach((line: string) => {
+            pdf.text(line, 20, yPos);
+            yPos += 4;
+          });
+        });
+      }
+      
+      // Resumen de contactos
+      if (yPos < 200) {
+        yPos = Math.max(yPos + 10, 210);
+        
+        pdf.setFillColor(248, 250, 252);
+        pdf.rect(15, yPos - 5, 180, 30, 'F');
+        pdf.setDrawColor(34, 197, 94);
+        pdf.setLineWidth(1);
+        pdf.rect(15, yPos - 5, 180, 30);
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(34, 197, 94);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('RESUMEN DE CONTACTABILIDAD', 20, yPos + 5);
+        
+        yPos += 15;
+        const totalWithPhone = upcomingChanges.filter(change => change.celular).length;
+        const overdueWithPhone = overdue.filter(change => change.celular).length;
+        const urgentWithPhone = urgent.filter(change => change.celular).length;
+        const contactabilityRate = ((totalWithPhone / upcomingChanges.length) * 100).toFixed(1);
+        
+        pdf.setFontSize(10);
+        pdf.setTextColor(60, 60, 60);
+        pdf.setFont('helvetica', 'normal');
+        
+        const contactStats = [
+          `Clientes contactables: ${totalWithPhone} de ${upcomingChanges.length} (${contactabilityRate}%)`,
+          `Vencidos contactables: ${overdueWithPhone} clientes`,
+          `Urgentes contactables: ${urgentWithPhone} clientes`
+        ];
+        
+        contactStats.forEach((stat) => {
+          pdf.text(stat, 20, yPos);
+          yPos += 5;
+        });
+      }
+      
+      // Mensaje motivacional
+      if (yPos < 240) {
+        yPos = Math.max(yPos + 15, 250);
+        
+        pdf.setFillColor(34, 197, 94);
+        pdf.roundedRect(30, yPos - 8, 150, 25, 5, 5, 'F');
+        
+        pdf.setFontSize(12);
+        pdf.setTextColor(255, 255, 255);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('¡El seguimiento proactivo es clave del éxito!', 105, yPos, { align: 'center' });
+        
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Contactar a tiempo aumenta la fidelidad y demuestra profesionalismo', 105, yPos + 6, { align: 'center' });
+        
+        pdf.setFontSize(9);
+        pdf.text('Los clientes valoran el cuidado preventivo de sus vehículos', 105, yPos + 12, { align: 'center' });
+      }
       
       // Pie de página
       const pageCount = pdf.getNumberOfPages();
       for (let i = 1; i <= pageCount; i++) {
         pdf.setPage(i);
+        
+        pdf.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        pdf.setLineWidth(0.5);
+        pdf.line(20, 280, 190, 280);
+        
         pdf.setFontSize(8);
         pdf.setTextColor(120, 120, 120);
         pdf.text(`Reporte de Próximos Cambios - ${lubricentroName}`, 20, 285);
         pdf.text(`Página ${i} de ${pageCount}`, 190, 285, { align: 'right' });
-        pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
+        pdf.text(`Generado por Sistema HISMA el ${new Date().toLocaleDateString('es-ES')}`, 105, 290, { align: 'center' });
       }
       
       // Guardar
-      const fileName = `Proximos_Cambios_${lubricentroName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      const todayStr = new Date().toISOString().split('T')[0];
+      const fileName = `Proximos_Cambios_${lubricentroName.replace(/\s+/g, '_')}_${todayStr}.pdf`;
       pdf.save(fileName);
       
       return Promise.resolve();

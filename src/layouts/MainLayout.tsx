@@ -23,7 +23,8 @@ import {
   QuestionMarkCircleIcon,
   MagnifyingGlassIcon,
   CreditCardIcon,
-  ShieldCheckIcon  // 👈 AGREGAR ESTE ÍCONO
+  ShieldCheckIcon ,
+  TruckIcon 
 } from '@heroicons/react/24/outline';
 
 // Componente de carga
@@ -70,47 +71,11 @@ const MainLayout: React.FC = () => {
   
   // Opciones de menú para diferentes roles
   const getMenuItems = () => {
-    const items = [];
-    
-    // Para superadmin, mostrar menú limitado
-    if (userProfile.role === 'superadmin') {
-      return [
-        { 
-          text: 'Dashboard', 
-          icon: <HomeIcon className="w-5 h-5" />, 
-          path: '/dashboard',
-          divider: false
-        },
-        { 
-          text: 'Gestión de Lubricentros', 
-          icon: <BuildingOfficeIcon className="w-5 h-5" />, 
-          path: '/superadmin/lubricentros',
-          divider: false
-        },
-        { 
-          text: 'Gestión de Planes', 
-          icon: <CreditCardIcon className="w-5 h-5" />, 
-          path: '/superadmin/planes',
-          divider: false
-        },
-        { 
-          text: 'Estadísticas Globales', 
-          icon: <ChartBarIcon className="w-5 h-5" />, 
-          path: '/superadmin/reportes',
-          divider: true
-        },
-        { 
-          text: 'Mi Perfil', 
-          icon: <UserIcon className="w-5 h-5" />, 
-          path: '/perfil',
-          divider: false
-        }
-      ];
-    }
-    
-    // Para usuarios que NO son superadmin (admin y user)
-    // Para todos los usuarios autenticados
-    items.push(
+  const items = [];
+  
+  // Para superadmin, mostrar menú limitado
+  if (userProfile.role === 'superadmin') {
+    return [
       { 
         text: 'Dashboard', 
         icon: <HomeIcon className="w-5 h-5" />, 
@@ -118,43 +83,21 @@ const MainLayout: React.FC = () => {
         divider: false
       },
       { 
-        text: 'Cambios de Aceite', 
-        icon: <WrenchIcon className="w-5 h-5" />, 
-        path: '/cambios-aceite',
+        text: 'Gestión de Lubricentros', 
+        icon: <BuildingOfficeIcon className="w-5 h-5" />, 
+        path: '/superadmin/lubricentros',
         divider: false
       },
       { 
-        text: 'Garantías', 
-        icon: <ShieldCheckIcon className="w-5 h-5" />, 
-        path: '/garantias',
+        text: 'Gestión de Planes', 
+        icon: <CreditCardIcon className="w-5 h-5" />, 
+        path: '/superadmin/planes',
         divider: false
       },
-    );
-    
-    // Para admin
-    if (userProfile.role === 'admin') {
-      items.push(
-        { 
-          text: 'Usuarios', 
-          icon: <UserGroupIcon className="w-5 h-5" />, 
-          path: '/usuarios',
-          divider: false
-        },
-        { 
-          text: 'Reportes', 
-          icon: <ChartBarIcon className="w-5 h-5" />, 
-          path: '/reportes',
-          divider: false
-        },
-      );
-    }
-    
-    // Para todos los usuarios que no son superadmin (continuación)
-    items.push(
       { 
-        text: 'Próximos Servicios', 
-        icon: <CalendarIcon className="w-5 h-5" />, 
-        path: '/proximos-servicios',
+        text: 'Estadísticas Globales', 
+        icon: <ChartBarIcon className="w-5 h-5" />, 
+        path: '/superadmin/reportes',
         divider: true
       },
       { 
@@ -162,17 +105,98 @@ const MainLayout: React.FC = () => {
         icon: <UserIcon className="w-5 h-5" />, 
         path: '/perfil',
         divider: false
-      },
+      }
+    ];
+  }
+  
+  // Para usuarios que NO son superadmin (admin y user)
+  items.push(
+    { 
+      text: 'Dashboard', 
+      icon: <HomeIcon className="w-5 h-5" />, 
+      path: '/dashboard',
+      divider: false
+    },
+    { 
+      text: 'Cambios de Aceite', 
+      icon: <WrenchIcon className="w-5 h-5" />, 
+      path: '/cambios-aceite',
+      divider: false
+    },
+    { 
+      text: 'Garantías', 
+      icon: <ShieldCheckIcon className="w-5 h-5" />, 
+      path: '/garantias',
+      divider: false
+    },
+  );
+  
+  // Para admin - ✅ MENÚ EXPANDIDO CON REPORTES
+  if (userProfile.role === 'admin') {
+    items.push(
       { 
-        text: 'Soporte', 
-        icon: <QuestionMarkCircleIcon className="w-5 h-5" />, 
-        path: '/soporte',
+        text: 'Usuarios', 
+        icon: <UserGroupIcon className="w-5 h-5" />, 
+        path: '/usuarios',
         divider: false
       },
+      { 
+        text: 'Reportes', 
+        icon: <ChartBarIcon className="w-5 h-5" />, 
+        path: '/reportes',
+        divider: false,
+        // ✅ AGREGAR SUBMENÚ (Opcional - para implementación futura)
+        hasSubmenu: true,
+        submenuItems: [
+          {
+            text: 'Centro de Reportes',
+            icon: <ChartBarIcon className="w-4 h-4" />,
+            path: '/reportes'
+          },
+          {
+            text: 'Reportes de Garantías',
+            icon: <ShieldCheckIcon className="w-4 h-4" />,
+            path: '/reportes/garantias'
+          },
+          {
+            text: 'Análisis de Operadores',
+            icon: <UserGroupIcon className="w-4 h-4" />,
+            path: '/reportes/operador/todos'
+          },
+          {
+            text: 'Análisis de Vehículos',
+            icon: <TruckIcon className="w-4 h-4" />,
+            path: '/reportes/vehiculo/todos'
+          }
+        ]
+      },
     );
-    
-    return items;
-  };
+  }
+  
+  // Para todos los usuarios que no son superadmin (continuación)
+  items.push(
+    { 
+      text: 'Próximos Servicios', 
+      icon: <CalendarIcon className="w-5 h-5" />, 
+      path: '/proximos-servicios',
+      divider: true
+    },
+    { 
+      text: 'Mi Perfil', 
+      icon: <UserIcon className="w-5 h-5" />, 
+      path: '/perfil',
+      divider: false
+    },
+    { 
+      text: 'Soporte', 
+      icon: <QuestionMarkCircleIcon className="w-5 h-5" />, 
+      path: '/soporte',
+      divider: false
+    },
+  );
+  
+  return items;
+};
   
   const menuItems = getMenuItems();
   
