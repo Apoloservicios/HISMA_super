@@ -1,4 +1,4 @@
-// src/pages/reports/ReportsPage.tsx
+// src/pages/reports/ReportsPage.tsx - VERSIÓN LIMPIA Y CORREGIDA
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -23,8 +23,29 @@ import {
   getUsersOperatorStats 
 } from '../../services/userService';
 import { getLubricentroById } from '../../services/lubricentroService';
-import reportService from '../../services/reportService';
+
+
+// ✅ IMPORTACIONES PARA GARANTÍAS
+import { 
+  getWarrantiesByLubricentro,
+  getWarrantyStats 
+} from '../../services/warrantyService';
+
+// ✅ IMPORTACIONES DEL NUEVO SERVICIO DE REPORTES (Con alias para evitar conflictos)
+import { 
+  generateAdvancedAnalysis as generateAdvancedAnalysisNew,
+  exportAdvancedAnalysisToExcel as exportAdvancedAnalysisToExcelNew,
+  generateWarrantyReport as generateWarrantyReportNew,
+  exportWarrantiesToExcel as exportWarrantiesToExcelNew,
+  exportToExcel as exportToExcelNew 
+} from '../../services/reportService';
+
+// ✅ MANTENER SERVICIO ANTERIOR PARA COMPATIBILIDAD
+import reportServiceLegacy from '../../services/reportService.OLD';
+
 import { OilChangeStats, OperatorStats, Lubricentro, OilChange } from '../../types';
+import { Warranty, WarrantyStats } from '../../types/warranty';
+
 import {
   BarChart,
   Bar,
@@ -49,7 +70,11 @@ import {
   DocumentArrowDownIcon,
   TableCellsIcon,
   ArrowTrendingUpIcon,
-  BellAlertIcon
+  BellAlertIcon,
+  ShieldCheckIcon,
+  ChartPieIcon,
+  AcademicCapIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline';
 
 const COLORS = ['#4caf50', '#66bb6a', '#81c784', '#a5d6a7', '#c8e6c9', '#e8f5e8'];
@@ -62,18 +87,24 @@ const ReportsPage: React.FC = () => {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  
+  // Estados existentes
   const [stats, setStats] = useState<OilChangeStats | null>(null);
   const [operatorStats, setOperatorStats] = useState<OperatorStats[]>([]);
   const [lubricentro, setLubricentro] = useState<Lubricentro | null>(null);
   const [oilChanges, setOilChanges] = useState<OilChange[]>([]);
   const [upcomingChanges, setUpcomingChanges] = useState<OilChange[]>([]);
   
+  // ✅ ESTADOS PARA GARANTÍAS
+  const [warranties, setWarranties] = useState<Warranty[]>([]);
+  const [warrantyStats, setWarrantyStats] = useState<WarrantyStats | null>(null);
+  
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0]
   });
   
-  const [reportType, setReportType] = useState<'general' | 'operators' | 'services' | 'upcoming' | 'evolution'>('general');
+  const [reportType, setReportType] = useState<'general' | 'operators' | 'services' | 'upcoming' | 'evolution' | 'warranties' | 'advanced'>('general');
   
   useEffect(() => {
     if (userProfile?.lubricentroId) {
@@ -123,6 +154,28 @@ const ReportsPage: React.FC = () => {
       );
       setOperatorStats(operatorData);
       
+      // ✅ CARGAR DATOS DE GARANTÍAS
+      try {
+        const [warrantiesData, warrantyStatsData] = await Promise.all([
+          getWarrantiesByLubricentro(userProfile.lubricentroId),
+          getWarrantyStats(userProfile.lubricentroId)
+        ]);
+        
+        // Filtrar garantías por fecha
+        const filteredWarranties = warrantiesData.filter(warranty => {
+          const saleDate = warranty.fechaVenta instanceof Date 
+            ? warranty.fechaVenta 
+            : warranty.fechaVenta.toDate();
+          return saleDate >= startDate && saleDate <= endDate;
+        });
+        
+        setWarranties(filteredWarranties);
+        setWarrantyStats(warrantyStatsData);
+      } catch (warrantyError) {
+        console.warn('Error al cargar datos de garantías:', warrantyError);
+        // No es crítico, continúa sin garantías
+      }
+      
     } catch (err) {
       console.error('Error al cargar datos de reportes:', err);
       setError('Error al cargar los datos. Por favor, intente nuevamente.');
@@ -131,9 +184,10 @@ const ReportsPage: React.FC = () => {
     }
   };
   
-  const generatePDFReport = async () => {
-    if (!stats || !operatorStats || !lubricentro) {
-      setError('No hay datos suficientes para generar el reporte');
+  // ✅ FUNCIONES PARA NUEVOS REPORTES (NOMBRES ÚNICOS)
+  const handleGenerateWarrantyReport = async () => {
+    if (!warranties.length || !warrantyStats || !lubricentro) {
+      setError('No hay datos de garantías suficientes para generar el reporte');
       return;
     }
     
@@ -143,62 +197,105 @@ const ReportsPage: React.FC = () => {
       
       const dateRangeText = `${new Date(dateRange.startDate).toLocaleDateString('es-ES')} - ${new Date(dateRange.endDate).toLocaleDateString('es-ES')}`;
       
-      await reportService.generatePdfReport(
-        stats,
-        operatorStats,
+      await generateWarrantyReportNew(
+        warranties,
+        warrantyStats,
         lubricentro.fantasyName,
         dateRangeText
       );
       
-      setSuccess('Reporte PDF generado correctamente');
+      setSuccess('Reporte de garantías generado correctamente');
     } catch (err) {
-      console.error('Error al generar reporte PDF:', err);
-      setError('Error al generar el reporte PDF');
+      console.error('Error al generar reporte de garantías:', err);
+      setError('Error al generar el reporte de garantías');
     } finally {
       setGenerating(false);
     }
   };
   
-  const generateEvolutionReport = async () => {
+  const handleExportWarrantiesToExcel = async () => {
+    if (!warranties.length || !warrantyStats || !lubricentro) {
+      setError('No hay datos de garantías para exportar');
+      return;
+    }
+    
     try {
       setGenerating(true);
       setError(null);
       
-      await reportService.generateEvolutionReport(
+      const dateRangeText = `${new Date(dateRange.startDate).toLocaleDateString('es-ES')} - ${new Date(dateRange.endDate).toLocaleDateString('es-ES')}`;
+      
+      await exportWarrantiesToExcelNew(
+        warranties,
+        warrantyStats,
+        lubricentro.fantasyName,
+        dateRangeText
+      );
+      
+      setSuccess('Garantías exportadas a Excel correctamente');
+    } catch (err) {
+      console.error('Error al exportar garantías:', err);
+      setError('Error al exportar las garantías');
+    } finally {
+      setGenerating(false);
+    }
+  };
+  
+  const handleGenerateAdvancedAnalysis = async () => {
+    if (oilChanges.length === 0) {
+      setError('No hay datos suficientes para generar el análisis avanzado');
+      return;
+    }
+    
+    try {
+      setGenerating(true);
+      setError(null);
+      
+      const dateRangeText = `${new Date(dateRange.startDate).toLocaleDateString('es-ES')} - ${new Date(dateRange.endDate).toLocaleDateString('es-ES')}`;
+      
+      await generateAdvancedAnalysisNew(
         oilChanges,
         lubricentro?.fantasyName || 'Lubricentro',
-        `${new Date(dateRange.startDate).toLocaleDateString('es-ES')} - ${new Date(dateRange.endDate).toLocaleDateString('es-ES')}`
+        dateRangeText
       );
       
-      setSuccess('Reporte de evolución generado correctamente');
+      setSuccess('Análisis avanzado generado correctamente');
     } catch (err) {
-      console.error('Error al generar reporte de evolución:', err);
-      setError('Error al generar el reporte de evolución');
+      console.error('Error al generar análisis avanzado:', err);
+      setError('Error al generar el análisis avanzado');
     } finally {
       setGenerating(false);
     }
   };
   
-  const generateUpcomingReport = async () => {
+  const handleExportAdvancedAnalysisToExcel = async () => {
+    if (oilChanges.length === 0) {
+      setError('No hay datos para el análisis avanzado');
+      return;
+    }
+    
     try {
       setGenerating(true);
       setError(null);
       
-      await reportService.generateUpcomingChangesReport(
-        upcomingChanges,
-        lubricentro?.fantasyName || 'Lubricentro'
+      const dateRangeText = `${new Date(dateRange.startDate).toLocaleDateString('es-ES')} - ${new Date(dateRange.endDate).toLocaleDateString('es-ES')}`;
+      
+      await exportAdvancedAnalysisToExcelNew(
+        oilChanges,
+        lubricentro?.fantasyName || 'Lubricentro',
+        dateRangeText
       );
       
-      setSuccess('Reporte de próximos cambios generado correctamente');
+      setSuccess('Análisis avanzado exportado a Excel correctamente');
     } catch (err) {
-      console.error('Error al generar reporte de próximos cambios:', err);
-      setError('Error al generar el reporte de próximos cambios');
+      console.error('Error al exportar análisis avanzado:', err);
+      setError('Error al exportar el análisis avanzado');
     } finally {
       setGenerating(false);
     }
   };
   
-  const exportToExcel = async () => {
+  const handleExportToExcel = async () => {
     if (oilChanges.length === 0) {
       setError('No hay datos para exportar');
       return;
@@ -232,7 +329,7 @@ const ReportsPage: React.FC = () => {
         'Observaciones': change.observaciones || ''
       }));
       
-      await reportService.exportToExcel(
+      await exportToExcelNew(
         excelData,
         `Cambios_${dateRange.startDate}_${dateRange.endDate}`.substring(0, 31)
       );
@@ -246,6 +343,7 @@ const ReportsPage: React.FC = () => {
     }
   };
   
+  // Datos para gráficos
   const monthlyData = React.useMemo(() => {
     if (!oilChanges) return [];
     
@@ -278,24 +376,19 @@ const ReportsPage: React.FC = () => {
     }));
   }, [oilChanges]);
   
-  const weeklyEvolutionData = React.useMemo(() => {
-    if (!oilChanges) return [];
+  const warrantyData = React.useMemo(() => {
+    if (!warranties || warranties.length === 0) return [];
     
-    const weeks: { [key: string]: number } = {};
+    const grouped = warranties.reduce((acc, warranty) => {
+      acc[warranty.categoria] = (acc[warranty.categoria] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
     
-    oilChanges.forEach(change => {
-      const date = new Date(change.fecha);
-      const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay());
-      const weekKey = weekStart.toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
-      
-      weeks[weekKey] = (weeks[weekKey] || 0) + 1;
-    });
-    
-    return Object.entries(weeks)
-      .map(([week, count]) => ({ semana: week, servicios: count }))
-      .sort((a, b) => new Date(a.semana).getTime() - new Date(b.semana).getTime());
-  }, [oilChanges]);
+    return Object.entries(grouped).map(([categoria, count]) => ({
+      name: categoria,
+      value: count
+    }));
+  }, [warranties]);
   
   if (loading) {
     return (
@@ -307,8 +400,8 @@ const ReportsPage: React.FC = () => {
   
   return (
     <PageContainer
-      title="Centro de Reportes y Análisis"
-      subtitle="Análisis completo del rendimiento y operaciones del lubricentro"
+      title="Centro de Reportes y Análisis Avanzado"
+      subtitle="Análisis completo con garantías, métricas avanzadas e insights estratégicos"
     >
       {error && (
         <Alert type="error" className="mb-6" dismissible onDismiss={() => setError(null)}>
@@ -346,13 +439,15 @@ const ReportsPage: React.FC = () => {
               name="reportType"
               label="Tipo de Análisis"
               value={reportType}
-              onChange={(e) => setReportType(e.target.value as 'general' | 'operators' | 'services' | 'upcoming' | 'evolution')}
+              onChange={(e) => setReportType(e.target.value as any)}
               options={[
                 { value: 'general', label: 'Análisis General' },
                 { value: 'operators', label: 'Por Operadores' },
                 { value: 'services', label: 'Por Servicios' },
                 { value: 'upcoming', label: 'Próximos Cambios' },
-                { value: 'evolution', label: 'Evolución Temporal' }
+                { value: 'evolution', label: 'Evolución Temporal' },
+                { value: 'warranties', label: '🛡️ Garantías' },
+                { value: 'advanced', label: '🎯 Análisis Avanzado' }
               ]}
             />
             
@@ -371,8 +466,9 @@ const ReportsPage: React.FC = () => {
         </CardBody>
       </Card>
       
+      {/* Dashboard expandido */}
       {stats && (
-        <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2 lg:grid-cols-6">
           <Card>
             <CardBody>
               <div className="flex items-center">
@@ -446,14 +542,36 @@ const ReportsPage: React.FC = () => {
               </div>
             </CardBody>
           </Card>
+          
+          <Card>
+            <CardBody>
+              <div className="flex items-center">
+                <div className="rounded-full p-3 bg-indigo-100 mr-4">
+                  <ShieldCheckIcon className="h-6 w-6 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Garantías Total</p>
+                  <p className="text-2xl font-semibold text-gray-800">
+                    {warrantyStats?.total || 0}
+                  </p>
+                  {warrantyStats?.vencenEn7Dias && warrantyStats.vencenEn7Dias > 0 && (
+                    <p className="text-xs text-red-500 font-medium">
+                      {warrantyStats.vencenEn7Dias} por vencer
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardBody>
+          </Card>
         </div>
       )}
       
+      {/* Gráficos */}
       <div className="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-2">
         <Card>
           <CardHeader 
             title={
-              reportType === 'evolution' ? 'Evolución Semanal' :
+              reportType === 'warranties' ? 'Garantías por Categoría' :
               reportType === 'operators' ? 'Rendimiento de Operadores' :
               'Cambios por Período'
             } 
@@ -461,22 +579,25 @@ const ReportsPage: React.FC = () => {
           <CardBody>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                {reportType === 'evolution' ? (
-                  <LineChart data={weeklyEvolutionData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="semana" />
-                    <YAxis />
+                {reportType === 'warranties' && warrantyData.length > 0 ? (
+                  <PieChart>
+                    <Pie
+                      data={warrantyData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {warrantyData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
                     <Tooltip />
                     <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="servicios" 
-                      stroke="#4caf50" 
-                      name="Servicios por Semana"
-                      strokeWidth={3}
-                      dot={{ fill: '#4caf50', strokeWidth: 2, r: 6 }}
-                    />
-                  </LineChart>
+                  </PieChart>
                 ) : reportType === 'operators' && operatorStats.length > 0 ? (
                   <BarChart data={operatorStats} margin={{ bottom: 50 }}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -507,101 +628,74 @@ const ReportsPage: React.FC = () => {
         </Card>
         
         <Card>
-          <CardHeader title="Distribución por Tipo de Vehículo" />
+          <CardHeader 
+            title={
+              reportType === 'warranties' ? 'Estado de Garantías' : 
+              'Distribución por Tipo de Vehículo'
+            } 
+          />
           <CardBody>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={vehicleTypeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {vehicleTypeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
+                {reportType === 'warranties' && warrantyStats ? (
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Vigentes', value: warrantyStats.vigentes, color: '#4caf50' },
+                        { name: 'Vencidas', value: warrantyStats.vencidas, color: '#f44336' },
+                        { name: 'Reclamadas', value: warrantyStats.reclamadas, color: '#ff9800' }
+                      ]}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {[
+                        { name: 'Vigentes', value: warrantyStats.vigentes, color: '#4caf50' },
+                        { name: 'Vencidas', value: warrantyStats.vencidas, color: '#f44336' },
+                        { name: 'Reclamadas', value: warrantyStats.reclamadas, color: '#ff9800' }
+                      ].map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                ) : (
+                  <PieChart>
+                    <Pie
+                      data={vehicleTypeData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {vehicleTypeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                )}
               </ResponsiveContainer>
             </div>
           </CardBody>
         </Card>
       </div>
       
-      {reportType === 'upcoming' && upcomingChanges.length > 0 && (
-        <Card className="mb-6">
-          <CardHeader 
-            title="Próximos Cambios de Aceite" 
-            subtitle={`${upcomingChanges.length} servicios programados para los próximos 30 días`}
-          />
-          <CardBody>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vehículo</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dominio</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha Próxima</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Días Restantes</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teléfono</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {upcomingChanges.map((change) => {
-                    const daysRemaining = Math.ceil((new Date(change.fechaProximoCambio).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                    const isOverdue = daysRemaining < 0;
-                    const isUrgent = daysRemaining <= 7 && daysRemaining >= 0;
-                    
-                    return (
-                      <tr key={change.id} className={`hover:bg-gray-50 ${isOverdue ? 'bg-red-50' : isUrgent ? 'bg-yellow-50' : ''}`}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {change.nombreCliente}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {`${change.marcaVehiculo} ${change.modeloVehiculo}`}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {change.dominioVehiculo}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(change.fechaProximoCambio).toLocaleDateString('es-ES')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            isOverdue ? 'bg-red-100 text-red-800' :
-                            isUrgent ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
-                            {isOverdue ? `${Math.abs(daysRemaining)} días vencido` :
-                             daysRemaining === 0 ? 'Hoy' :
-                             `${daysRemaining} días`}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {change.celular || 'No registrado'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardBody>
-        </Card>
-      )}
-      
+      {/* Sección de reportes especializados */}
       <div className="grid grid-cols-1 gap-6 mb-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Reporte General */}
         <div 
           className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
-          onClick={() => generatePDFReport()}
+          onClick={() => handleGenerateWarrantyReport()}
         >
           <Card className="hover:shadow-lg transition-shadow h-full">
             <CardBody className="text-center">
@@ -612,39 +706,42 @@ const ReportsPage: React.FC = () => {
           </Card>
         </div>
         
+        {/* Reporte de Garantías */}
         <div 
           className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
-          onClick={() => generateEvolutionReport()}
+          onClick={() => handleGenerateWarrantyReport()}
         >
           <Card className="hover:shadow-lg transition-shadow h-full">
             <CardBody className="text-center">
-              <ArrowTrendingUpIcon className="h-12 w-12 text-green-600 mx-auto mb-3" />
-              <h3 className="font-medium text-gray-900">Evolución Temporal</h3>
-              <p className="text-sm text-gray-600 mt-1">Tendencias y patrones en el tiempo</p>
+              <ShieldCheckIcon className="h-12 w-12 text-indigo-600 mx-auto mb-3" />
+              <h3 className="font-medium text-gray-900">Reporte de Garantías</h3>
+              <p className="text-sm text-gray-600 mt-1">Análisis completo de garantías y productos</p>
             </CardBody>
           </Card>
         </div>
         
+        {/* Análisis Avanzado */}
         <div 
           className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
-          onClick={() => generateUpcomingReport()}
+          onClick={() => handleGenerateAdvancedAnalysis()}
         >
           <Card className="hover:shadow-lg transition-shadow h-full">
             <CardBody className="text-center">
-              <BellAlertIcon className="h-12 w-12 text-red-600 mx-auto mb-3" />
-              <h3 className="font-medium text-gray-900">Próximos Cambios</h3>
-              <p className="text-sm text-gray-600 mt-1">Lista de servicios por vencer</p>
+              <ChartPieIcon className="h-12 w-12 text-purple-600 mx-auto mb-3" />
+              <h3 className="font-medium text-gray-900">Análisis Avanzado</h3>
+              <p className="text-sm text-gray-600 mt-1">Métricas detalladas e insights estratégicos</p>
             </CardBody>
           </Card>
         </div>
         
+        {/* Exportar Excel */}
         <div 
           className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
-          onClick={() => exportToExcel()}
+          onClick={() => handleExportToExcel()}
         >
           <Card className="hover:shadow-lg transition-shadow h-full">
             <CardBody className="text-center">
-              <TableCellsIcon className="h-12 w-12 text-purple-600 mx-auto mb-3" />
+              <TableCellsIcon className="h-12 w-12 text-green-600 mx-auto mb-3" />
               <h3 className="font-medium text-gray-900">Exportar Excel</h3>
               <p className="text-sm text-gray-600 mt-1">Datos completos para análisis</p>
             </CardBody>
@@ -652,27 +749,82 @@ const ReportsPage: React.FC = () => {
         </div>
       </div>
       
+      {/* Exportaciones especializadas */}
+      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-lg mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+          <SparklesIcon className="h-6 w-6 text-indigo-600 mr-2" />
+          Exportaciones Especializadas
+        </h3>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Button
+            color="primary"
+            size="lg"
+            fullWidth
+            icon={<ShieldCheckIcon className="h-5 w-5" />}
+            onClick={() => handleExportWarrantiesToExcel()}
+            disabled={generating || !warranties.length}
+          >
+            Excel Garantías
+          </Button>
+          
+          <Button
+            color="secondary"
+            size="lg"
+            fullWidth
+            icon={<AcademicCapIcon className="h-5 w-5" />}
+            onClick={() => handleExportAdvancedAnalysisToExcel()}
+            disabled={generating || oilChanges.length === 0}
+          >
+            Excel Análisis Avanzado
+          </Button>
+          
+          <Button
+            color="info"
+            size="lg"
+            fullWidth
+            icon={<UserGroupIcon className="h-5 w-5" />}
+            onClick={() => navigate('/reportes/operador/todos')}
+            disabled={generating}
+          >
+            Análisis de Operadores
+          </Button>
+          
+          <Button
+            color="success"
+            size="lg"
+            fullWidth
+            icon={<TruckIcon className="h-5 w-5" />}
+            onClick={() => navigate('/reportes/vehiculo/todos')}
+            disabled={generating}
+          >
+            Análisis de Vehículos
+          </Button>
+        </div>
+      </div>
+      
+      {/* Accesos rápidos */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Button
+          color="primary"
+          size="lg"
+          fullWidth
+          icon={<ShieldCheckIcon className="h-5 w-5" />}
+          onClick={() => navigate('/garantias')}
+          disabled={generating}
+        >
+          Gestionar Garantías
+        </Button>
+        
         <Button
           color="secondary"
           size="lg"
           fullWidth
-          icon={<UserGroupIcon className="h-5 w-5" />}
-          onClick={() => navigate('/reportes/operador/todos')}
+          icon={<ChartBarIcon className="h-5 w-5" />}
+          onClick={() => navigate('/reportes/garantias')}
           disabled={generating}
         >
-          Análisis de Operadores
-        </Button>
-        
-        <Button
-          color="info"
-          size="lg"
-          fullWidth
-          icon={<TruckIcon className="h-5 w-5" />}
-          onClick={() => navigate('/reportes/vehiculo/todos')}
-          disabled={generating}
-        >
-          Análisis de Vehículos
+          Centro de Garantías
         </Button>
         
         <Button
@@ -686,6 +838,27 @@ const ReportsPage: React.FC = () => {
           Gestión de Servicios
         </Button>
       </div>
+      
+      {/* Alerta de garantías críticas */}
+      {warrantyStats && warrantyStats.vencenEn7Dias > 0 && (
+        <Alert type="warning" className="mt-6">
+          <div className="flex items-center">
+            <ShieldCheckIcon className="h-5 w-5 mr-2" />
+            <div>
+              <strong>¡Atención!</strong> Hay {warrantyStats.vencenEn7Dias} garantías que vencen en los próximos 7 días.
+              <Button 
+                size="sm" 
+                color="warning" 
+                variant="outline" 
+                className="ml-4"
+                onClick={() => navigate('/garantias')}
+              >
+                Ver Garantías
+              </Button>
+            </div>
+          </div>
+        </Alert>
+      )}
       
       {generating && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
