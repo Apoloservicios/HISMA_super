@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
   getWarrantiesByLubricentro, 
@@ -12,6 +13,7 @@ import WarrantyClaimModal from '../../components/warranty/WarrantyClaimModal';
 // ✅ CORRECCIÓN: Tipo de componente React correcto
 const WarrantyDashboardPage: React.FC = () => {
   const { userProfile } = useAuth();
+  const navigate = useNavigate();
   
   // Estados
   const [warranties, setWarranties] = useState<Warranty[]>([]);
@@ -20,6 +22,7 @@ const WarrantyDashboardPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('todas');
   const [error, setError] = useState<string | null>(null);
+  
   
   // ✅ ESTADOS PARA EL MODAL DE RECLAMO
   const [showClaimModal, setShowClaimModal] = useState(false);
@@ -148,13 +151,13 @@ const WarrantyDashboardPage: React.FC = () => {
     return toDate(timestamp).toLocaleDateString('es-ES');
   };
 
-  const handleNewWarranty = () => {
-    window.location.href = '/garantias/nueva';
-  };
+const handleNewWarranty = () => {
+  navigate('/garantias/nueva');
+};
 
-  const handleViewWarranty = (id: string) => {
-    window.location.href = `/garantias/${id}`;
-  };
+const handleViewWarranty = (id: string) => {
+  navigate(`/garantias/${id}`);
+};
 
   // ✅ FUNCIÓN PARA MANEJAR EL RECLAMO
   const handleClaimWarranty = (warranty: Warranty) => {

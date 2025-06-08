@@ -20,14 +20,18 @@ import {
   resetMonthlyServicesCounter
 } from '../../services/subscriptionService';
 
+import { getSubscriptionPlans } from '../../services/hybridSubscriptionService';
+
+
+import { Lubricentro } from '../../types';
+import { SubscriptionPlan , SubscriptionPlanType } from '../../types/subscription';
+
+
 import {
   updateLubricentroStatus,
   extendTrialPeriod
 } from '../../services/lubricentroService';
 
-// Types
-import { Lubricentro } from '../../types';
-import { SUBSCRIPTION_PLANS, SubscriptionPlanType } from '../../types/subscription';
 
 // Icons
 import {
@@ -46,6 +50,7 @@ import {
   BanknotesIcon
 } from '@heroicons/react/24/outline';
 
+
 interface EnhancedSubscriptionManagerProps {
   lubricentro: Lubricentro;
   onRefresh: () => void;
@@ -60,6 +65,16 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // ✅ ESTADOS PARA PLANES DINÁMICOS
+  const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, SubscriptionPlan>>({
+    starter: { id: 'starter', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] },
+    basic: { id: 'basic', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] },
+    premium: { id: 'premium', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] },
+    enterprise: { id: 'enterprise', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] }
+  });
+  
+  const [loadingPlans, setLoadingPlans] = useState(true);
 
   // Estados para modales
   const [showPlanChangeModal, setShowPlanChangeModal] = useState(false);
@@ -90,14 +105,30 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
     setAutoRenewal(lubricentro.autoRenewal !== false);
     
     // Establecer monto por defecto del plan actual
-    if (lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType]) {
-      const plan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType];
+    if (lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType]) {
+      const plan = dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType];
       const price = lubricentro.subscriptionRenewalType === 'semiannual' 
         ? plan.price.semiannual 
         : plan.price.monthly;
       setPaymentAmount(price);
     }
   }, [lubricentro]);
+
+  // 3️⃣ CARGAR PLANES AL MONTAR EL COMPONENTE
+    useEffect(() => {
+      const loadPlans = async () => {
+        try {
+          const plans = await getSubscriptionPlans();
+          setDynamicPlans(plans);
+        } catch (error) {
+          console.error('Error al cargar planes:', error);
+        } finally {
+          setLoadingPlans(false);
+        }
+      };
+      
+      loadPlans();
+    }, []);
 
   // Manejar cambio de plan
   const handlePlanChange = async () => {
@@ -111,7 +142,7 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
         autoRenewal
       );
 
-      setSuccess(`Plan actualizado exitosamente a ${SUBSCRIPTION_PLANS[selectedPlan].name}`);
+      setSuccess(`Plan actualizado exitosamente a ${dynamicPlans[selectedPlan].name}`);
       setShowPlanChangeModal(false);
       onRefresh();
     } catch (err: any) {
@@ -216,7 +247,7 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
     }
     
     if (lubricentro.estado === 'activo' && lubricentro.subscriptionPlan) {
-      const plan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType];
+      const plan = dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType];
       if (plan && plan.maxMonthlyServices !== null) {
         const currentServices = lubricentro.servicesUsedThisMonth || 0;
         return Math.min(100, (currentServices / plan.maxMonthlyServices) * 100);
@@ -267,8 +298,8 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
               <div>
                 <p className="text-sm text-gray-500">Plan Actual</p>
                 <p className="font-medium">
-                  {lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan]
-                    ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].name
+                  {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
+                    ? dynamicPlans[lubricentro.subscriptionPlan].name
                     : lubricentro.estado === 'trial' ? 'Período de Prueba' : 'Sin plan'}
                 </p>
               </div>
@@ -347,8 +378,8 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                         <span>Límite:</span>
                         <span className="font-medium">
                           {lubricentro.estado === 'trial' ? '10' : 
-                           lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType]?.maxMonthlyServices !== null
-                             ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType]?.maxMonthlyServices
+                           lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType]?.maxMonthlyServices !== null
+                             ? dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType]?.maxMonthlyServices
                              : 'Ilimitado'}
                         </span>
                       </div>
@@ -377,8 +408,8 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                         <span>Límite de usuarios:</span>
                         <span className="font-medium">
                           {lubricentro.estado === 'trial' ? '2' :
-                           lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType]
-                             ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType].maxUsers
+                           lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType]
+                             ? dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType].maxUsers
                              : 'N/A'}
                         </span>
                       </div>
@@ -426,7 +457,7 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {Object.entries(SUBSCRIPTION_PLANS).map(([planId, plan]) => {
+                  {Object.entries(dynamicPlans).map(([planId, plan]) => {
                     const isCurrentPlan = lubricentro.subscriptionPlan === planId;
                     
                     return (
@@ -658,7 +689,7 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
               Seleccionar Nuevo Plan
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Object.entries(SUBSCRIPTION_PLANS).map(([planId, plan]) => (
+              {Object.entries(dynamicPlans).map(([planId, plan]) => (
                 <div
                   key={planId}
                   className={`border rounded-lg p-4 cursor-pointer transition-colors ${
@@ -735,21 +766,21 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
               <div className="flex justify-between">
                 <span>Plan actual:</span>
                 <span className="font-medium">
-                  {lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan]
-                    ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].name
+                  {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
+                    ? dynamicPlans[lubricentro.subscriptionPlan].name
                     : 'Sin plan'}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span>Nuevo plan:</span>
-                <span className="font-medium">{SUBSCRIPTION_PLANS[selectedPlan].name}</span>
+                <span className="font-medium">{dynamicPlans[selectedPlan].name}</span>
               </div>
               <div className="flex justify-between">
                 <span>Nuevo precio:</span>
                 <span className="font-medium">
                   ${(selectedRenewalType === 'monthly' 
-                    ? SUBSCRIPTION_PLANS[selectedPlan].price.monthly 
-                    : SUBSCRIPTION_PLANS[selectedPlan].price.semiannual
+                    ? dynamicPlans[selectedPlan].price.monthly 
+                    : dynamicPlans[selectedPlan].price.semiannual
                   ).toLocaleString()}
                   {selectedRenewalType === 'monthly' ? '/mes' : '/semestre'}
                 </span>
