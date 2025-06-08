@@ -41,6 +41,7 @@ import OperatorReportPage from './pages/reports/OperatorReportPage';
 import VehicleReportPage from './pages/reports/VehicleReportPage';
 import UpcomingServicesPage from './pages/services/UpcomingServicesPage';
 import SupportPage from './pages/support/SupportPage';
+import WarrantyReportsPage from './pages/reports/WarrantyReportsPage';
 
 // Pages - Admin Lubricentros
 import LubricentroDashboardPage from './pages/admin/LubricentroDashboardPage';
@@ -213,6 +214,17 @@ const App: React.FC = () => {
                 element={
                   <PrivateRoute requiredRoles={['admin', 'superadmin']}>
                     <ReportsPage />
+                  </PrivateRoute>
+                } 
+              />
+
+                    
+              
+              <Route 
+                path="/reportes/garantias"
+                element={
+                  <PrivateRoute requiredRoles={['admin', 'superadmin']}>
+                    <WarrantyReportsPage />
                   </PrivateRoute>
                 } 
               />

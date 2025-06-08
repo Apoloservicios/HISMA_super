@@ -40,8 +40,7 @@ import {
   exportToExcel as exportToExcelNew 
 } from '../../services/reportService';
 
-// ✅ MANTENER SERVICIO ANTERIOR PARA COMPATIBILIDAD
-import reportServiceLegacy from '../../services/reportService.OLD';
+
 
 import { OilChangeStats, OperatorStats, Lubricentro, OilChange } from '../../types';
 import { Warranty, WarrantyStats } from '../../types/warranty';
@@ -695,7 +694,11 @@ const ReportsPage: React.FC = () => {
         {/* Reporte General */}
         <div 
           className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
-          onClick={() => handleGenerateWarrantyReport()}
+          onClick={() => {
+            // CORREGIR: Esta función estaba incorrecta
+            setReportType('general');
+            loadReportData(); // En lugar de handleGenerateWarrantyReport()
+          }}
         >
           <Card className="hover:shadow-lg transition-shadow h-full">
             <CardBody className="text-center">
@@ -709,12 +712,12 @@ const ReportsPage: React.FC = () => {
         {/* Reporte de Garantías */}
         <div 
           className="cursor-pointer transform hover:scale-105 transition-transform duration-200"
-          onClick={() => handleGenerateWarrantyReport()}
+          onClick={() => navigate('/reportes/garantias')} // CORREGIR: Navegación correcta
         >
           <Card className="hover:shadow-lg transition-shadow h-full">
             <CardBody className="text-center">
               <ShieldCheckIcon className="h-12 w-12 text-indigo-600 mx-auto mb-3" />
-              <h3 className="font-medium text-gray-900">Reporte de Garantías</h3>
+              <h3 className="font-medium text-gray-900">Centro de Garantías</h3>
               <p className="text-sm text-gray-600 mt-1">Análisis completo de garantías y productos</p>
             </CardBody>
           </Card>
@@ -748,15 +751,16 @@ const ReportsPage: React.FC = () => {
           </Card>
         </div>
       </div>
-      
-      {/* Exportaciones especializadas */}
+
+      {/* MEJORAR RESPONSIVE: Cambiar la sección de exportaciones especializadas */}
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-lg mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
           <SparklesIcon className="h-6 w-6 text-indigo-600 mr-2" />
           Exportaciones Especializadas
         </h3>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* RESPONSIVE MEJORADO: Mejor organización en pantallas pequeñas */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Button
             color="primary"
             size="lg"
@@ -764,8 +768,9 @@ const ReportsPage: React.FC = () => {
             icon={<ShieldCheckIcon className="h-5 w-5" />}
             onClick={() => handleExportWarrantiesToExcel()}
             disabled={generating || !warranties.length}
+            className="min-h-[3rem]" // Altura mínima consistente
           >
-            Excel Garantías
+            <span className="text-sm">Excel Garantías</span>
           </Button>
           
           <Button
@@ -775,8 +780,9 @@ const ReportsPage: React.FC = () => {
             icon={<AcademicCapIcon className="h-5 w-5" />}
             onClick={() => handleExportAdvancedAnalysisToExcel()}
             disabled={generating || oilChanges.length === 0}
+            className="min-h-[3rem]"
           >
-            Excel Análisis Avanzado
+            <span className="text-sm">Excel Análisis</span>
           </Button>
           
           <Button
@@ -786,8 +792,9 @@ const ReportsPage: React.FC = () => {
             icon={<UserGroupIcon className="h-5 w-5" />}
             onClick={() => navigate('/reportes/operador/todos')}
             disabled={generating}
+            className="min-h-[3rem]"
           >
-            Análisis de Operadores
+            <span className="text-sm">Operadores</span>
           </Button>
           
           <Button
@@ -797,13 +804,14 @@ const ReportsPage: React.FC = () => {
             icon={<TruckIcon className="h-5 w-5" />}
             onClick={() => navigate('/reportes/vehiculo/todos')}
             disabled={generating}
+            className="min-h-[3rem]"
           >
-            Análisis de Vehículos
+            <span className="text-sm">Vehículos</span>
           </Button>
         </div>
       </div>
-      
-      {/* Accesos rápidos */}
+
+      {/* RESPONSIVE MEJORADO: Accesos rápidos */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Button
           color="primary"
