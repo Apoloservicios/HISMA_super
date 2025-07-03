@@ -314,8 +314,7 @@ const generatePDF = async (oilChangeId: string) => {
     
     // Usar el método directo que no depende de html2canvas
     enhancedPdfService.generateDirectPDF(oilChange, lubricentro);
-    console.log("PDF generado exitosamente con método directo");
-    
+   
     setGeneratingPdf(false);
   } catch (err) {
     console.error('Error al generar PDF:', err);

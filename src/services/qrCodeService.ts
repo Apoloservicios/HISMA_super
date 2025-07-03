@@ -26,7 +26,6 @@ export const generateQRCode = async (
       // En una implementación real, importarías qrcode.js o usarías una biblioteca de npm
       // Por ahora, simularemos la generación de un código QR
       
-      console.log('Generando QR con datos:', data);
       
       // Simulamos un tiempo de procesamiento
       await new Promise(resolve => setTimeout(resolve, 100));

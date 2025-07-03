@@ -392,7 +392,6 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
     // Verificar si ya existen planes
     const existingPlans = await getAllPlans();
     if (existingPlans.length > 0) {
-      console.log('Los planes ya están inicializados');
       return;
     }
 
@@ -496,7 +495,6 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
       defaultTrialUsers: 2
     }, createdBy);
 
-    console.log('Planes por defecto inicializados correctamente');
   } catch (error) {
     console.error('Error al inicializar planes por defecto:', error);
     throw error;

@@ -39,17 +39,7 @@ const UserProfilePage: React.FC = () => {
     logoUrl: ''
   });
 
-  // Debug para el logo
-  useEffect(() => {
-    if (lubricentro) {
-      console.log("Logo URL:", lubricentro.logoUrl);
-      console.log("Logo Base64 disponible:", !!lubricentro.logoBase64);
-      if (lubricentro.logoBase64) {
-        console.log("Base64 longitud:", lubricentro.logoBase64.length);
-        console.log("Base64 primeros 100 caracteres:", lubricentro.logoBase64.substring(0, 100));
-      }
-    }
-  }, [lubricentro]);
+
   
   // Cargar datos iniciales
   useEffect(() => {

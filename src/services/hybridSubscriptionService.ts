@@ -55,7 +55,6 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
     const managedPlans = await getActivePlans();
     
     if (managedPlans.length > 0) {
-      console.log('✅ Cargando planes dinámicos desde Firestore');
       
       // Convertir a formato compatible
       const dynamicPlans: Partial<Record<SubscriptionPlanType, SubscriptionPlan>> = {};
@@ -85,7 +84,6 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
     }
     
     // Si no hay planes dinámicos o están vacíos, usar fallback
-    console.log('⚠️ No se encontraron planes dinámicos, usando planes estáticos como fallback');
     plansCache = { ...STATIC_PLANS };
     cacheTimestamp = now;
     return plansCache;
@@ -181,7 +179,6 @@ export const getAvailablePlanIds = async (): Promise<SubscriptionPlanType[]> => 
 export const invalidatePlansCache = (): void => {
   plansCache = null;
   cacheTimestamp = 0;
-  console.log('🗑️ Cache de planes invalidado');
 };
 
 /**
@@ -331,7 +328,6 @@ export const migrateToDynamicPlans = async (adminEmail: string): Promise<void> =
     const { initializeDefaultPlans } = await import('./planManagementService');
     await initializeDefaultPlans(adminEmail);
     invalidatePlansCache();
-    console.log('✅ Migración a planes dinámicos completada');
   } catch (error) {
     console.error('❌ Error en migración a planes dinámicos:', error);
     throw error;

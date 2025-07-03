@@ -104,7 +104,6 @@ export const createWarranty = async (
     if (data.observaciones) warrantyData.observaciones = data.observaciones;
     if (data.condicionesEspeciales) warrantyData.condicionesEspeciales = data.condicionesEspeciales;
     
-    console.log('Datos de garantía a crear:', warrantyData);
     
     const docRef = await addDoc(collection(db, COLLECTION_NAME), warrantyData);
     
@@ -272,11 +271,9 @@ export const processWarrantyClaim = async (
       updateData.estado = newStatus;
     }
     
-    console.log('Datos a actualizar:', updateData);
     
     await updateDoc(warrantyRef, updateData);
     
-    console.log(`Reclamo procesado para garantía ${warrantyId}. Reclamos totales: ${updatedHistory.length}`);
     
   } catch (error) {
     console.error('Error al procesar reclamo:', error);

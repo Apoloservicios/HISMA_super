@@ -2,6 +2,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { HelmetProvider } from 'react-helmet-async'; // ✅ NUEVO IMPORT
 
 // Providers
 import { AuthProvider } from './context/AuthContext';
@@ -72,254 +73,255 @@ const queryClient = new QueryClient({
 
 const App: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            {/* Rutas públicas */}
-            <Route path="/" element={<HomePage />} />
-            <Route path="/consulta-historial" element={<PublicHistoryPage />} />
-            
-            {/* Rutas de autenticación con AuthLayout */}
-            <Route element={<AuthLayout />}>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            </Route>
-            
-            {/* Rutas de registro */}
-            <Route path="/registro-exitoso" element={<RegistroExitosoPage />} />
-            <Route path="/registro-pendiente" element={<RegistroPendientePage />} />
-            
-            {/* Rutas protegidas con MainLayout */}
-            <Route element={<MainLayout />}>
-              {/* Dashboard */}
-              <Route 
-                path="/dashboard" 
-                element={
-                  <PrivateRoute>
-                    <DashboardPage />
-                  </PrivateRoute>
-                } 
-              />
+    // ✅ HELMET PROVIDER AGREGADO AQUÍ
+    <HelmetProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <BrowserRouter>
+            <Routes>
+              {/* Rutas públicas */}
+              <Route path="/" element={<HomePage />} />
+              <Route path="/consulta-historial" element={<PublicHistoryPage />} />
+              
+              {/* Rutas de autenticación con AuthLayout */}
+              <Route element={<AuthLayout />}>
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              </Route>
+              
+              {/* Rutas de registro */}
+              <Route path="/registro-exitoso" element={<RegistroExitosoPage />} />
+              <Route path="/registro-pendiente" element={<RegistroPendientePage />} />
+              
+              {/* Rutas protegidas con MainLayout */}
+              <Route element={<MainLayout />}>
+                {/* Dashboard */}
+                <Route 
+                  path="/dashboard" 
+                  element={
+                    <PrivateRoute>
+                      <DashboardPage />
+                    </PrivateRoute>
+                  } 
+                />
 
-              <Route path="/superadmin/planes" element={<PlanManagementPage />} />
+                <Route path="/superadmin/planes" element={<PlanManagementPage />} />
 
-              {/* Ruta para estadísticas globales del superadmin */}
-              <Route 
-                path="/superadmin/reportes" 
-                element={
-                  <PrivateRoute requiredRoles={['superadmin']}>
-                    <SuperAdminReportPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              {/* Rutas de cambios de aceite */}
-              <Route 
-                path="/cambios-aceite" 
-                element={
-                  <PrivateRoute>
-                    <OilChangeListPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/cambios-aceite/nuevo" 
-                element={
-                  <PrivateRoute requiresActiveSubscription={true}>
-                    <OilChangeFormPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/cambios-aceite/:id" 
-                element={
-                  <PrivateRoute>
-                    <OilChangeDetailPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/cambios-aceite/editar/:id" 
-                element={
-                  <PrivateRoute requiresActiveSubscription={true}>
-                    <OilChangeFormPage />
-                  </PrivateRoute>
-                } 
-              />
+                {/* Ruta para estadísticas globales del superadmin */}
+                <Route 
+                  path="/superadmin/reportes" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <SuperAdminReportPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                {/* Rutas de cambios de aceite */}
+                <Route 
+                  path="/cambios-aceite" 
+                  element={
+                    <PrivateRoute>
+                      <OilChangeListPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/cambios-aceite/nuevo" 
+                  element={
+                    <PrivateRoute requiresActiveSubscription={true}>
+                      <OilChangeFormPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/cambios-aceite/:id" 
+                  element={
+                    <PrivateRoute>
+                      <OilChangeDetailPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/cambios-aceite/editar/:id" 
+                  element={
+                    <PrivateRoute requiresActiveSubscription={true}>
+                      <OilChangeFormPage />
+                    </PrivateRoute>
+                  } 
+                />
 
-              {/* ✅ RUTAS COMPLETAS DE GARANTÍAS */}
-              <Route 
-                path="/garantias" 
-                element={
-                  <PrivateRoute>
-                    <WarrantyDashboardPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/garantias/nueva" 
-                element={
-                  <PrivateRoute requiresActiveSubscription={true}>
-                    <WarrantyFormPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/garantias/:id" 
-                element={
-                  <PrivateRoute>
-                    <WarrantyDetailPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/garantias/editar/:id" 
-                element={
-                  <PrivateRoute requiresActiveSubscription={true}>
-                    <WarrantyFormPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              {/* Rutas de usuarios */}
-              <Route 
-                path="/usuarios" 
-                element={
-                  <PrivateRoute requiredRoles={['admin', 'superadmin']}>
-                    <UserListPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/perfil" 
-                element={
-                  <PrivateRoute>
-                    <UserProfilePage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              {/* Rutas de reportes y servicios */}
-              <Route 
-                path="/reportes" 
-                element={
-                  <PrivateRoute requiredRoles={['admin', 'superadmin']}>
-                    <ReportsPage />
-                  </PrivateRoute>
-                } 
-              />
+                {/* ✅ RUTAS COMPLETAS DE GARANTÍAS */}
+                <Route 
+                  path="/garantias" 
+                  element={
+                    <PrivateRoute>
+                      <WarrantyDashboardPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/garantias/nueva" 
+                  element={
+                    <PrivateRoute requiresActiveSubscription={true}>
+                      <WarrantyFormPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/garantias/:id" 
+                  element={
+                    <PrivateRoute>
+                      <WarrantyDetailPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/garantias/editar/:id" 
+                  element={
+                    <PrivateRoute requiresActiveSubscription={true}>
+                      <WarrantyFormPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                {/* Rutas de usuarios */}
+                <Route 
+                  path="/usuarios" 
+                  element={
+                    <PrivateRoute requiredRoles={['admin', 'superadmin']}>
+                      <UserListPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/perfil" 
+                  element={
+                    <PrivateRoute>
+                      <UserProfilePage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                {/* Rutas de reportes y servicios */}
+                <Route 
+                  path="/reportes" 
+                  element={
+                    <PrivateRoute requiredRoles={['admin', 'superadmin']}>
+                      <ReportsPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/reportes/garantias"
+                  element={
+                    <PrivateRoute requiredRoles={['admin', 'superadmin']}>
+                      <WarrantyReportsPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                {/* Nuevas rutas para reportes detallados */}
+                <Route 
+                  path="/reportes/operador/:id" 
+                  element={
+                    <PrivateRoute requiredRoles={['admin', 'superadmin']}>
+                      <OperatorReportPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/reportes/vehiculo/:dominio" 
+                  element={
+                    <PrivateRoute requiredRoles={['admin', 'superadmin']}>
+                      <VehicleReportPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/proximos-servicios" 
+                  element={
+                    <PrivateRoute>
+                      <UpcomingServicesPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/soporte" 
+                  element={
+                    <PrivateRoute>
+                      <SupportPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                {/* Rutas de superadmin para la gestión de lubricentros */}
+                <Route 
+                  path="/superadmin/lubricentros" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <LubricentroDashboardPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/superadmin/lubricentros/nuevo" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <LubricentroFormPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/superadmin/lubricentros/editar/:id" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <LubricentroFormPage />
+                    </PrivateRoute>
+                  } 
+                />
+                
+                <Route 
+                  path="/superadmin/lubricentros/:id" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <LubricentroDetailPage />
+                    </PrivateRoute>
+                  } 
+                />
 
-                    
+                {/* Nueva ruta para gestión de suscripciones */}
+                <Route 
+                  path="/superadmin/lubricentros/suscripcion/:id" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <LubricentroSubscriptionPage />
+                    </PrivateRoute>
+                  } 
+                />
+              </Route>
               
-              <Route 
-                path="/reportes/garantias"
-                element={
-                  <PrivateRoute requiredRoles={['admin', 'superadmin']}>
-                    <WarrantyReportsPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              {/* Nuevas rutas para reportes detallados */}
-              <Route 
-                path="/reportes/operador/:id" 
-                element={
-                  <PrivateRoute requiredRoles={['admin', 'superadmin']}>
-                    <OperatorReportPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/reportes/vehiculo/:dominio" 
-                element={
-                  <PrivateRoute requiredRoles={['admin', 'superadmin']}>
-                    <VehicleReportPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/proximos-servicios" 
-                element={
-                  <PrivateRoute>
-                    <UpcomingServicesPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/soporte" 
-                element={
-                  <PrivateRoute>
-                    <SupportPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              {/* Rutas de superadmin para la gestión de lubricentros */}
-              <Route 
-                path="/superadmin/lubricentros" 
-                element={
-                  <PrivateRoute requiredRoles={['superadmin']}>
-                    <LubricentroDashboardPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/superadmin/lubricentros/nuevo" 
-                element={
-                  <PrivateRoute requiredRoles={['superadmin']}>
-                    <LubricentroFormPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/superadmin/lubricentros/editar/:id" 
-                element={
-                  <PrivateRoute requiredRoles={['superadmin']}>
-                    <LubricentroFormPage />
-                  </PrivateRoute>
-                } 
-              />
-              
-              <Route 
-                path="/superadmin/lubricentros/:id" 
-                element={
-                  <PrivateRoute requiredRoles={['superadmin']}>
-                    <LubricentroDetailPage />
-                  </PrivateRoute>
-                } 
-              />
-
-              {/* Nueva ruta para gestión de suscripciones */}
-              <Route 
-                path="/superadmin/lubricentros/suscripcion/:id" 
-                element={
-                  <PrivateRoute requiredRoles={['superadmin']}>
-                    <LubricentroSubscriptionPage />
-                  </PrivateRoute>
-                } 
-              />
-            </Route>
-            
-            {/* Redirigir rutas desconocidas */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </QueryClientProvider>
+              {/* Redirigir rutas desconocidas */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </HelmetProvider>
   );
 };
 

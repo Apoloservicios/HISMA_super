@@ -289,7 +289,6 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
 // ✅ FUNCIÓN CORREGIDA: Crear cambio de aceite sin errores de Firebase
 export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>): Promise<string> => {
   try {
-    console.log('🔧 Creando cambio de aceite:', data);
     
     // Validar si es duplicación
     const isDuplication = data.nroCambio && data.nroCambio.includes('-');
@@ -418,11 +417,9 @@ export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>)
     // ✅ LIMPIAR DATOS ANTES DE ENVIAR A FIREBASE
     const cleanedData = cleanDataForFirebase(baseData);
     
-    console.log('🔧 Datos limpios para Firebase:', cleanedData);
     
     const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
     
-    console.log('✅ Cambio de aceite creado exitosamente:', docRef.id);
     
     return docRef.id;
   } catch (error) {
@@ -508,7 +505,6 @@ export const deleteOilChange = async (id: string): Promise<void> => {
 // Generar próximo número de cambio
 export const getNextOilChangeNumber = async (lubricentroId: string, prefix: string): Promise<string> => {
   try {
-    console.log(`🔧 Generando próximo número para: ${lubricentroId}, prefijo: ${prefix}`);
     
     const q = query(
       collection(db, COLLECTION_NAME),
@@ -523,14 +519,12 @@ export const getNextOilChangeNumber = async (lubricentroId: string, prefix: stri
     
     if (querySnapshot.empty) {
       const newNumber = `${prefix}-00001`;
-      console.log(`🔧 Primer número: ${newNumber}`);
       return newNumber;
     }
     
     const lastOilChange = querySnapshot.docs[0].data() as unknown as OilChange;
     const lastNumber = lastOilChange.nroCambio;
     
-    console.log(`🔧 Último número: ${lastNumber}`);
     
     const parts = lastNumber.split('-');
     if (parts.length !== 2) {
@@ -542,13 +536,11 @@ export const getNextOilChangeNumber = async (lubricentroId: string, prefix: stri
     const nextNumber = (parseInt(numericPart) + 1).toString().padStart(5, '0');
     const newNumber = `${prefix}-${nextNumber}`;
     
-    console.log(`🔧 Nuevo número: ${newNumber}`);
     return newNumber;
   } catch (error) {
     console.error('❌ Error al generar número:', error);
     const timestamp = Date.now().toString().slice(-5);
     const fallbackNumber = `${prefix}-${timestamp}`;
-    console.log(`🔧 Número de fallback: ${fallbackNumber}`);
     return fallbackNumber;
   }
 };

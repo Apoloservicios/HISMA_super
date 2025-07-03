@@ -79,14 +79,12 @@ const OilChangeDetailPage: React.FC = () => {
   const handlePrint = useReactToPrint({
     documentTitle: `Cambio de Aceite - ${oilChange?.nroCambio}`,
     onAfterPrint: () => {
-      console.log('Impresión completada');
     },
     content: () => printRef.current,
     // Opciones adicionales para mejorar el manejo de imágenes
     onBeforeGetContent: async () => {
       // Este hook se ejecuta antes de capturar el contenido
       // Podemos usar un timeout para asegurar que las imágenes estén cargadas
-      console.log("Preparando impresión...");
       return new Promise((resolve) => {
         setTimeout(resolve, 1000);
       });
@@ -98,7 +96,6 @@ const handleGeneratePDF = () => {
   
   try {
     enhancedPdfService.generateDirectPDF(oilChange, lubricentro);
-    console.log("PDF generado exitosamente");
   } catch (err) {
     console.error('Error al generar PDF:', err);
     setError('Error al generar el PDF. Por favor, intente nuevamente.');

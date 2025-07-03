@@ -19,10 +19,8 @@ export const incrementServiceCount = async (lubricentroId: string): Promise<bool
       const trialLimit = TRIAL_LIMITS.SERVICES; // ✅ Usar constante coherente (10)
       const currentServices = lubricentro.servicesUsedThisMonth || 0;
       
-      console.log(`🔍 Verificando límites de prueba: ${currentServices}/${trialLimit} servicios utilizados`);
       
       if (currentServices >= trialLimit) {
-        console.log('❌ Límite de servicios de prueba alcanzado');
         return false; // Ha alcanzado el límite
       }
       
@@ -36,7 +34,6 @@ export const incrementServiceCount = async (lubricentroId: string): Promise<bool
         }
       });
       
-      console.log(`✅ Contador incrementado: ${currentServices + 1}/${trialLimit} servicios`);
       return true;
     }
     
@@ -57,14 +54,12 @@ export const incrementServiceCount = async (lubricentroId: string): Promise<bool
           }
         });
         
-        console.log(`✅ Servicio registrado (plan ilimitado): ${currentServices + 1} servicios este mes`);
         return true;
       } else {
         // Plan con límite
         const currentServices = lubricentro.servicesUsedThisMonth || 0;
         
         if (currentServices >= plan.maxMonthlyServices) {
-          console.log(`❌ Límite mensual alcanzado: ${currentServices}/${plan.maxMonthlyServices}`);
           return false; // Ha alcanzado el límite
         }
         
@@ -77,13 +72,11 @@ export const incrementServiceCount = async (lubricentroId: string): Promise<bool
           }
         });
         
-        console.log(`✅ Servicio registrado: ${currentServices + 1}/${plan.maxMonthlyServices} servicios`);
         return true;
       }
     }
     
     // Por defecto, no permitir si no está en trial o activo
-    console.log(`❌ Lubricentro no autorizado para registrar servicios (estado: ${lubricentro.estado})`);
     return false;
   } catch (error) {
     console.error('Error al incrementar contador de servicios:', error);
@@ -123,7 +116,6 @@ export const activateSubscription = async (
       servicesUsedThisMonth: 0
     });
     
-    console.log(`Suscripción ${subscriptionPlan} activada para lubricentro ${lubricentroId}`);
   } catch (error) {
     console.error('Error al activar suscripción:', error);
     throw error;
@@ -159,7 +151,6 @@ export const updateSubscription = async (
       paymentStatus: 'paid'
     });
     
-    console.log(`Suscripción actualizada para lubricentro ${lubricentroId}`);
   } catch (error) {
     console.error('Error al actualizar suscripción:', error);
     throw error;
@@ -204,7 +195,6 @@ export const recordPayment = async (
       ]
     });
     
-    console.log(`Pago registrado para lubricentro ${lubricentroId}: ${amount}`);
   } catch (error) {
     console.error('Error al registrar pago:', error);
     throw error;
@@ -243,7 +233,6 @@ export const cancelSubscription = async (lubricentroId: string): Promise<void> =
       paymentStatus: 'pending'
     });
     
-    console.log(`Suscripción cancelada para lubricentro ${lubricentroId}`);
   } catch (error) {
     console.error('Error al cancelar suscripción:', error);
     throw error;
@@ -267,7 +256,6 @@ export const checkExpiredSubscriptions = async (): Promise<void> => {
             paymentStatus: 'overdue'
           });
           
-          console.log(`Suscripción expirada para lubricentro ${lubricentro.id}`);
         }
       }
     }
@@ -317,7 +305,6 @@ export const resetMonthlyCounters = async (): Promise<void> => {
       }
     }
     
-    console.log('Contadores mensuales reiniciados para todos los lubricentros');
   } catch (error) {
     console.error('Error al reiniciar contadores mensuales:', error);
     throw error;
@@ -389,7 +376,6 @@ export const resetMonthlyServicesCounter = async (lubricentroId: string): Promis
       }
     });
     
-    console.log(`Contador de servicios mensuales reiniciado para lubricentro ${lubricentroId}`);
     return true;
   } catch (error) {
     console.error('Error al reiniciar contador de servicios mensuales:', error);
@@ -445,7 +431,6 @@ export const renewBillingCycle = async (lubricentroId: string): Promise<boolean>
       servicesUsedThisMonth: 0
     });
     
-    console.log(`Ciclo de facturación renovado para lubricentro ${lubricentroId} hasta ${newEndDate.toISOString()}`);
     return true;
   } catch (error) {
     console.error('Error al renovar ciclo de facturación:', error);
@@ -480,7 +465,6 @@ export const checkAndUpdateAllLubricentrosStatus = async (): Promise<{updated: n
               paymentStatus: 'overdue'
             });
             updated++;
-            console.log(`Lubricentro ${lubricentro.id} marcado como inactivo por fin de período de prueba`);
             continue; // Pasar al siguiente lubricentro
           }
         }
@@ -509,7 +493,6 @@ export const checkAndUpdateAllLubricentrosStatus = async (): Promise<{updated: n
                 });
                 
                 updated++;
-                console.log(`Lubricentro ${lubricentro.id} renovado automáticamente hasta ${newEndDate.toISOString()}`);
               } else {
                 // Sin renovación automática o pendiente de pago, marcar como inactivo
                 await updateLubricentro(lubricentro.id, {
@@ -518,7 +501,6 @@ export const checkAndUpdateAllLubricentrosStatus = async (): Promise<{updated: n
                 });
                 
                 updated++;
-                console.log(`Lubricentro ${lubricentro.id} marcado como inactivo por fin de ciclo de facturación`);
               }
             } else if (lubricentro.nextPaymentDate) {
               // Verificar si se acerca la fecha de próximo pago (7 días antes)
@@ -533,7 +515,6 @@ export const checkAndUpdateAllLubricentrosStatus = async (): Promise<{updated: n
                 });
                 
                 updated++;
-                console.log(`Lubricentro ${lubricentro.id} marcado como pendiente de pago`);
               }
             }
           }

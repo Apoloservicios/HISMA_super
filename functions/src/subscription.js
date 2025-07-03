@@ -27,8 +27,7 @@ exports.checkSubscriptionStatus = functions.pubsub
         .where('trialEndDate', '<', now)
         .get();
       
-      console.log(`Encontrados ${trialQuery.size} lubricentros con período de prueba expirado`);
-      
+     
       trialQuery.forEach(doc => {
         batch.update(doc.ref, { 
           estado: 'inactivo',
@@ -42,7 +41,6 @@ exports.checkSubscriptionStatus = functions.pubsub
         .where('subscriptionEndDate', '<', now)
         .get();
       
-      console.log(`Encontrados ${subscriptionQuery.size} lubricentros con suscripción expirada`);
       
       subscriptionQuery.forEach(doc => {
         const data = doc.data();
@@ -68,7 +66,6 @@ exports.checkSubscriptionStatus = functions.pubsub
         .where('billingCycleEndDate', '<', now)
         .get();
       
-      console.log(`Encontrados ${billingQuery.size} lubricentros con ciclo de facturación vencido`);
       
       billingQuery.forEach(doc => {
         const data = doc.data();
@@ -89,7 +86,6 @@ exports.checkSubscriptionStatus = functions.pubsub
       // Ejecutar todas las actualizaciones en lote
       await batch.commit();
       
-      console.log('Actualizaciones de suscripciones completadas con éxito');
       
       return null;
     } catch (error) {
@@ -114,7 +110,6 @@ exports.resetMonthlyServiceCounters = functions.pubsub
       const lubricentrosRef = db.collection('lubricentros');
       const snapshot = await lubricentrosRef.get();
       
-      console.log(`Reiniciando contadores para ${snapshot.size} lubricentros`);
       
       // Reiniciar contador para cada uno
       snapshot.forEach(doc => {
@@ -124,7 +119,6 @@ exports.resetMonthlyServiceCounters = functions.pubsub
       });
       
       await batch.commit();
-      console.log(`Contadores de servicios reiniciados para ${snapshot.size} lubricentros`);
       return null;
     } catch (error) {
       console.error('Error al reiniciar contadores de servicios:', error);
@@ -154,7 +148,6 @@ exports.sendPaymentReminders = functions.pubsub
         .where('nextPaymentDate', '<=', reminderTimestamp)
         .get();
       
-      console.log(`Enviando recordatorios de pago a ${query.size} lubricentros`);
       
       // Aquí se implementaría la lógica para enviar notificaciones
       // por email, SMS, o guardar en una colección de notificaciones
