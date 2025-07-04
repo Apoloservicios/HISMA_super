@@ -8,7 +8,8 @@ import {
 import { 
   SUBSCRIPTION_PLANS as STATIC_PLANS, 
   SubscriptionPlan, 
-  SubscriptionPlanType 
+  SubscriptionPlanType ,
+   PlanType 
 } from '../types/subscription';
 
 import { TRIAL_LIMITS } from '../config/constants';
@@ -31,6 +32,7 @@ const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionP
     id: managedPlan.id,
     name: managedPlan.name,
     description: managedPlan.description,
+    planType: managedPlan.planType || PlanType.MONTHLY, // 🔧 AGREGAR con valor por defecto
     price: managedPlan.price,
     maxUsers: managedPlan.maxUsers,
     maxMonthlyServices: managedPlan.maxMonthlyServices,

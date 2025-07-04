@@ -1,4 +1,4 @@
-// src/types/index.ts
+// src/types/index.ts - CORREGIDO
 // Importar SubscriptionPlanType para usarlo en Lubricentro
 import { SubscriptionPlanType } from './subscription';
 
@@ -48,7 +48,7 @@ export interface Lubricentro {
   trialEndDate?: Date;
   updatedAt?: Date;
   
-  // Campos para suscripción
+  // Campos para suscripción básica
   subscriptionPlan?: SubscriptionPlanType;
   subscriptionStartDate?: Date;
   subscriptionEndDate?: Date;
@@ -69,7 +69,13 @@ export interface Lubricentro {
     method: string;
     reference: string;
   }[];
-  autoRenewal?: boolean;         
+  autoRenewal?: boolean;
+
+  // 🔧 NUEVOS: Campos específicos para planes por servicios
+  totalServicesContracted?: number;    // Servicios totales contratados en plan por servicios
+  servicesUsed?: number;               // Servicios ya utilizados del plan
+  servicesRemaining?: number;          // Servicios restantes
+  serviceSubscriptionExpiryDate?: Date; // Fecha de vencimiento para planes por servicios
 }
 
 // Cambiar esto para evitar conflicto con el nombre

@@ -1,4 +1,4 @@
-// src/types/lubricentro.ts
+// src/types/lubricentro.ts - ACTUALIZADO con campos faltantes
 import { SubscriptionPlanType } from './subscription';
 
 export type LubricentroStatus = 'activo' | 'inactivo' | 'trial';
@@ -20,10 +20,17 @@ export interface Lubricentro {
   createdAt: Date;
   updatedAt?: Date;
   
+  // Campos para ubicación
+  location?: {
+    lat?: number;
+    lng?: number;
+    address?: string;
+  };
+  
   // Campos para período de prueba
   trialEndDate?: Date;
   
-  // Nuevos campos para suscripción
+  // Campos para suscripción básica
   subscriptionPlan?: SubscriptionPlanType;
   subscriptionStartDate?: Date;
   subscriptionEndDate?: Date;
@@ -46,8 +53,12 @@ export interface Lubricentro {
   }[];
   autoRenewal?: boolean;          // Si la suscripción se renueva automáticamente
 
-   totalServicesContracted?: number;    // Servicios totales contratados en plan por servicios
+  // 🔧 NUEVOS: Campos específicos para planes por servicios
+  totalServicesContracted?: number;    // Servicios totales contratados en plan por servicios
   servicesUsed?: number;               // Servicios ya utilizados del plan
   servicesRemaining?: number;          // Servicios restantes
   serviceSubscriptionExpiryDate?: Date; // Fecha de vencimiento para planes por servicios
+  
+  // Campos adicionales para gestión avanzada
+  subscriptionId?: string;        // ID de la suscripción si se maneja separadamente
 }

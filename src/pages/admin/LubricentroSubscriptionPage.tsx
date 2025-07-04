@@ -23,6 +23,7 @@ import {
   updateLubricentroStatus
 } from '../../services/lubricentroService';
 
+
 import {
   updateSubscription,
   recordPayment
@@ -30,7 +31,7 @@ import {
 
 
 import { Lubricentro, SubscriptionPlanType } from '../../types';
-import { SubscriptionPlan } from '../../types/subscription';
+import { SubscriptionPlan, PlanType } from '../../types/subscription';
 import { getSubscriptionPlans } from '../../services/hybridSubscriptionService';
 
 // Iconos
@@ -383,10 +384,46 @@ const LubricentroSubscriptionPage: React.FC = () => {
   
   // ✅ NUEVOS ESTADOS PARA PLANES DINÁMICOS
 const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, SubscriptionPlan>>({
-  starter: { id: 'starter', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] },
-  basic: { id: 'basic', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] },
-  premium: { id: 'premium', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] },
-  enterprise: { id: 'enterprise', name: 'Cargando...', description: '', price: { monthly: 0, semiannual: 0 }, maxUsers: 0, maxMonthlyServices: 0, features: [] }
+  starter: { 
+    id: 'starter', 
+    name: 'Cargando...', 
+    description: '', 
+    planType: PlanType.MONTHLY, // 🔧 AGREGAR
+    price: { monthly: 0, semiannual: 0 }, 
+    maxUsers: 0, 
+    maxMonthlyServices: 0, 
+    features: [] 
+  },
+  basic: { 
+    id: 'basic', 
+    name: 'Cargando...', 
+    description: '', 
+    planType: PlanType.MONTHLY, // 🔧 AGREGAR
+    price: { monthly: 0, semiannual: 0 }, 
+    maxUsers: 0, 
+    maxMonthlyServices: 0, 
+    features: [] 
+  },
+  premium: { 
+    id: 'premium', 
+    name: 'Cargando...', 
+    description: '', 
+    planType: PlanType.MONTHLY, // 🔧 AGREGAR
+    price: { monthly: 0, semiannual: 0 }, 
+    maxUsers: 0, 
+    maxMonthlyServices: 0, 
+    features: [] 
+  },
+  enterprise: { 
+    id: 'enterprise', 
+    name: 'Cargando...', 
+    description: '', 
+    planType: PlanType.MONTHLY, // 🔧 AGREGAR
+    price: { monthly: 0, semiannual: 0 }, 
+    maxUsers: 0, 
+    maxMonthlyServices: 0, 
+    features: [] 
+  }
 });
 
   

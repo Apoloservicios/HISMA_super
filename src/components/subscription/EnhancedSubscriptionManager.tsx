@@ -69,6 +69,7 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
           planId: lubricentro.subscriptionPlan,
           planName: plan.name,
           planDescription: plan.description,
+          // 🔧 CORREGIR: Usar propiedades que existen en la interface Lubricentro
           totalServices: lubricentro.totalServicesContracted || 0,
           usedServices: lubricentro.servicesUsed || 0,
           remainingServices: lubricentro.servicesRemaining || 0,
@@ -235,8 +236,8 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                   <div className="bg-green-50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium text-green-900">Plan por Servicios</h4>
-                      {/* 🔧 CORREGIR: Usar color en lugar de variant */}
-                      <Badge color="success">Activo</Badge>
+                      {/* 🔧 CORREGIR: Usar API correcta del Badge */}
+                      <Badge color="success" text="Activo" />
                     </div>
                     <p className="text-lg font-semibold text-green-700">
                       {subscriptionInfo.planName}
@@ -299,7 +300,8 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                   <div className="bg-blue-50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-medium text-blue-900">Plan Mensual</h4>
-                      <Badge color="primary">Activo</Badge>
+                      {/* 🔧 CORREGIR: Cambiar "primary" por "info" */}
+                      <Badge color="info" text="Activo" />
                     </div>
                     <p className="text-lg font-semibold text-blue-700">
                       {subscriptionInfo.planName}
@@ -358,7 +360,8 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                 <div className="bg-orange-50 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="font-medium text-orange-900">Período de Prueba</h4>
-                    <Badge color="warning">Prueba</Badge>
+                    {/* 🔧 CORREGIR: Usar API correcta del Badge */}
+                    <Badge color="warning" text="Prueba" />
                   </div>
                   <p className="text-lg font-semibold text-orange-700">
                     {subscriptionInfo.planName}
@@ -494,11 +497,10 @@ const EnhancedSubscriptionManager: React.FC<EnhancedSubscriptionManagerProps> = 
                   <h4 className="font-medium text-gray-900">{plan.name}</h4>
                   <div className="flex flex-col gap-1">
                     {plan.recommended && (
-                      <Badge color="primary" size="sm">Recomendado</Badge>
+                      <Badge color="info" text="Recomendado" />
                     )}
-                    <Badge color={isServicePlan(plan) ? 'success' : 'info'} size="sm">
-                      {isServicePlan(plan) ? 'Por Servicios' : 'Mensual'}
-                    </Badge>
+                    {/* 🔧 CORREGIR: Eliminar prop "size" que no existe */}
+                    <Badge color={isServicePlan(plan) ? 'success' : 'info'} text={isServicePlan(plan) ? 'Por Servicios' : 'Mensual'} />
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-3">{plan.description}</p>

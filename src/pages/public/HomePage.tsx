@@ -5,7 +5,7 @@ import { Helmet } from 'react-helmet-async';
 import bg_h from '../../assets/img/bg_hisma.jpg';
 import hismaLogo from '../../assets/img/hisma_logo_horizontal.png';
 
-// ✅ IMPORTAR SERVICIOS PARA CARGAR PLANES
+// ✅ IMPORTAR SERVICIOS PARA CARGAR SOLO PLANES PUBLICADOS
 import { getActivePlans } from '../../services/planManagementService';
 import { ManagedSubscriptionPlan } from '../../types/subscription';
 
@@ -23,6 +23,26 @@ import {
   TruckIcon
 } from '@heroicons/react/24/outline';
 
+const isPlanByServices = (plan: any) => {
+  return plan.planType === 'service' || plan.planType === 'SERVICE';
+};
+
+const getDisplayPrice = (plan: any) => {
+  if (isPlanByServices(plan)) {
+    return {
+      price: plan.servicePrice || 0,
+      suffix: " (pago único)",
+      description: `${plan.totalServices || 0} servicios • ${plan.validityMonths || 6} meses`
+    };
+  } else {
+    return {
+      price: plan.price.monthly,
+      suffix: "/mes",
+      description: plan.price.semiannual ? `$${plan.price.semiannual.toLocaleString('es-AR')}/semestre` : null
+    };
+  }
+};
+
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
   const [domain, setDomain] = useState('');
@@ -32,9 +52,9 @@ const HomePage: React.FC = () => {
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [errorLoadingPlans, setErrorLoadingPlans] = useState(false);
 
-  // ✅ CARGAR PLANES AL MONTAR EL COMPONENTE
+  // ✅ CARGAR SOLO PLANES PUBLICADOS AL MONTAR EL COMPONENTE
   useEffect(() => {
-    const loadPlans = async () => {
+    const loadPublishedPlans = async () => {
       try {
         setLoadingPlans(true);
         setErrorLoadingPlans(false);
@@ -42,20 +62,58 @@ const HomePage: React.FC = () => {
         // Cargar solo planes activos desde Firebase
         const activePlans = await getActivePlans();
         
-        // Ordenar planes por precio (de menor a mayor)
-        const sortedPlans = activePlans.sort((a, b) => a.price.monthly - b.price.monthly);
+        console.log('🔍 Planes activos cargados:', activePlans.length);
+        console.log('📝 Planes activos:', activePlans.map(p => ({ 
+          id: p.id, 
+          name: p.name, 
+          publishOnHomepage: (p as any).publishOnHomepage,
+          isPublished: (p as any).isPublished 
+        })));
+        
+        // ✅ FILTRAR PLANES PUBLICADOS (Compatible con ambas propiedades)
+        const publishedPlans = activePlans.filter(plan => {
+          const publishOnHomepage = (plan as any).publishOnHomepage;
+          const isPublished = (plan as any).isPublished;
+          
+          // Log para debugging
+          console.log(`📋 Plan ${plan.id}:`, { publishOnHomepage, isPublished });
+          
+          // Retornar true si cualquiera es true
+          return publishOnHomepage === true || isPublished === true;
+        });
+        
+        // Ordenar planes por displayOrder y luego por precio
+        const sortedPlans = publishedPlans.sort((a, b) => {
+          // Primero por orden de visualización (si existe)
+          const orderA = (a as any).displayOrder || 999;
+          const orderB = (b as any).displayOrder || 999;
+          
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+          
+          // Si tienen el mismo orden, ordenar por precio (considerando tipo de plan)
+          const priceA = isPlanByServices(a) ? (a as any).servicePrice || 0 : a.price.monthly;
+          const priceB = isPlanByServices(b) ? (b as any).servicePrice || 0 : b.price.monthly;
+          
+          return priceA - priceB;
+        });
         
         setPlans(sortedPlans);
+        
+        console.log(`✅ Se cargaron ${sortedPlans.length} planes publicados de ${activePlans.length} planes activos`);
+        
       } catch (error) {
-        console.error('Error al cargar planes:', error);
+        console.error('❌ Error al cargar planes:', error);
         setErrorLoadingPlans(true);
         
-        // ✅ PLANES DE FALLBACK si falla la carga
+        // ✅ PLANES DE FALLBACK CON publishOnHomepage = true
         setPlans([
           {
             id: 'starter',
             name: 'Starter',
             description: 'Pensado para el inicio, empezá a olvidarte de las tarjetas físicas, digitaliza tus datos.',
+            planType: 'monthly' as any,
             price: { monthly: 13500, semiannual: 70000 },
             maxUsers: 2,
             maxMonthlyServices: 50,
@@ -68,6 +126,9 @@ const HomePage: React.FC = () => {
               'Límite de servicios mensuales (50)'
             ],
             isActive: true,
+            isPublished: true,           // ✅ AGREGAR
+            publishOnHomepage: true,     // ✅ AGREGAR
+            displayOrder: 1,             // ✅ AGREGAR
             createdAt: new Date(),
             updatedAt: new Date(),
             createdBy: 'system',
@@ -79,6 +140,7 @@ const HomePage: React.FC = () => {
             id: 'basic',
             name: 'Plus',
             description: 'Aumentá la capacidad de tu negocio con más usuarios y servicios mensuales.',
+            planType: 'monthly' as any,
             price: { monthly: 19500, semiannual: 105000 },
             maxUsers: 4,
             maxMonthlyServices: 150,
@@ -92,6 +154,9 @@ const HomePage: React.FC = () => {
             ],
             recommended: true,
             isActive: true,
+            isPublished: true,           // ✅ AGREGAR
+            publishOnHomepage: true,     // ✅ AGREGAR
+            displayOrder: 2,             // ✅ AGREGAR
             createdAt: new Date(),
             updatedAt: new Date(),
             createdBy: 'system',
@@ -103,9 +168,10 @@ const HomePage: React.FC = () => {
             id: 'premium',
             name: 'Premium',
             description: 'Acceso completo a todas las funcionalidades sin limitaciones de servicios.',
+            planType: 'monthly' as any,
             price: { monthly: 26500, semiannual: 145000 },
             maxUsers: 6,
-            maxMonthlyServices: null, // null = ilimitado
+            maxMonthlyServices: null,
             features: [
               'Reportes y estadísticas',
               'Sistema de notificaciones',
@@ -115,6 +181,9 @@ const HomePage: React.FC = () => {
               'Sin límite de servicios mensuales'
             ],
             isActive: true,
+            isPublished: true,           // ✅ AGREGAR
+            publishOnHomepage: true,     // ✅ AGREGAR
+            displayOrder: 3,             // ✅ AGREGAR
             createdAt: new Date(),
             updatedAt: new Date(),
             createdBy: 'system',
@@ -122,13 +191,13 @@ const HomePage: React.FC = () => {
             usageCount: 0,
             isDefault: true
           }
-        ] as ManagedSubscriptionPlan[]);
+        ] as any);
       } finally {
         setLoadingPlans(false);
       }
     };
 
-    loadPlans();
+    loadPublishedPlans();
   }, []);
 
   // Manejar búsqueda rápida de dominio
@@ -160,6 +229,32 @@ const HomePage: React.FC = () => {
       );
     }
 
+    // ✅ Si no hay planes publicados, mostrar mensaje informativo
+    if (plans.length === 0) {
+      return (
+        <div className="col-span-full text-center py-12">
+          <div className="max-w-md mx-auto">
+            <div className="rounded-full h-16 w-16 bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              <ChartBarIcon className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Planes en preparación
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Estamos trabajando en nuestros planes de suscripción. 
+              ¡Pronto tendrás opciones increíbles disponibles!
+            </p>
+            <a
+              href="/register"
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              Registrate para estar al día
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     // ✅ DETERMINAR CLASE CSS GRID SEGÚN CANTIDAD DE PLANES
     const getGridClass = () => {
       const planCount = plans.length;
@@ -179,7 +274,7 @@ const HomePage: React.FC = () => {
           </p>
           <p className="mt-8">
             <span className="text-4xl font-extrabold text-gray-900">$0</span>
-            <span className="text-base font-medium text-gray-500">/mes</span>
+            <span className="text-base font-medium text-gray-500">/7 días</span>
           </p>
           <a
             href="/register"
@@ -208,9 +303,10 @@ const HomePage: React.FC = () => {
       </div>
     );
 
-    // Renderizar planes dinámicos desde Firebase
+    // ✅ RENDERIZAR SOLO PLANES PUBLICADOS DINÁMICOS DESDE FIREBASE
     const dynamicPlans = plans.map((plan, index) => {
       const isRecommended = plan.recommended || plan.id === 'basic';
+      const displayPrice = getDisplayPrice(plan);
       
       return (
         <div 
@@ -230,15 +326,48 @@ const HomePage: React.FC = () => {
             <p className="mt-4 text-sm text-gray-500">
               {plan.description}
             </p>
-            <p className="mt-8">
-              <span className="text-4xl font-extrabold text-gray-900">
-                ${plan.price.monthly.toLocaleString('es-AR')}
-              </span>
-              <span className="text-base font-medium text-gray-500">/mes</span>
-            </p>
+            
+            {/* ✅ PRICING DINÁMICO SEGÚN TIPO DE PLAN */}
+            <div className="mt-8">
+              <p className="mb-2">
+                <span className="text-4xl font-extrabold text-gray-900">
+                  ${displayPrice.price.toLocaleString('es-AR')}
+                </span>
+                <span className="text-base font-medium text-gray-500">{displayPrice.suffix}</span>
+              </p>
+              
+              {/* ✅ DESCRIPCIÓN ADICIONAL */}
+              {displayPrice.description && (
+                <p className="text-sm text-gray-500">
+                  {displayPrice.description}
+                </p>
+              )}
+              
+              {/* ✅ INFORMACIÓN ADICIONAL PARA PLANES POR SERVICIOS */}
+              {isPlanByServices(plan) && (
+                <div className="mt-2 text-sm text-gray-600">
+                  <p>💰 ${(displayPrice.price / (plan.totalServices || 1)).toFixed(2)} por servicio</p>
+                  <p>⏰ Válido por {plan.validityMonths || 6} meses</p>
+                  <p>👥 Hasta {plan.maxUsers} usuarios</p>
+                </div>
+              )}
+              
+              {/* ✅ INFORMACIÓN ADICIONAL PARA PLANES MENSUALES */}
+              {!isPlanByServices(plan) && (
+                <div className="mt-2 text-sm text-gray-600">
+                  <p>👥 Hasta {plan.maxUsers} usuarios</p>
+                  <p>🔧 {plan.maxMonthlyServices === null ? 'Servicios ilimitados' : `${plan.maxMonthlyServices} servicios/mes`}</p>
+                </div>
+              )}
+            </div>
+            
             <a
               href="/register"
-              className="mt-8 block w-full bg-primary-600 border border-transparent rounded-md py-2 text-sm font-semibold text-white text-center hover:bg-primary-700 transition-colors"
+              className={`mt-8 block w-full border border-transparent rounded-md py-2 text-sm font-semibold text-white text-center transition-colors ${
+                isPlanByServices(plan) 
+                  ? 'bg-green-600 hover:bg-green-700' 
+                  : 'bg-primary-600 hover:bg-primary-700'
+              }`}
             >
               Elegir {plan.name}
             </a>
@@ -247,7 +376,7 @@ const HomePage: React.FC = () => {
           <div className="px-6 pt-6 pb-8">
             <h4 className="text-sm font-medium text-gray-900">Incluye:</h4>
             <ul className="mt-6 space-y-4">
-              {plan.features.map((feature, index) => (
+              {plan.features.map((feature: string, index: number) => (
                 <li key={index} className="flex space-x-3">
                   <CheckCircleIcon className="flex-shrink-0 h-5 w-5 text-green-500" aria-hidden="true" />
                   <span className="text-sm text-gray-500">{feature}</span>
@@ -267,43 +396,46 @@ const HomePage: React.FC = () => {
     );
   };
 
-  // ✅ STRUCTURED DATA PARA SEO
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "Hisma - Sistema de Gestión para Lubricentros",
-    "applicationCategory": "BusinessApplication",
-    "operatingSystem": "Web Browser",
-    "url": "https://hisma.com.ar",
-    "description": "Sistema para lubricentros que permite administrar los cambios de aceite de forma digital. Gestiona tu lubricentro en la nube.",
-    "offers": {
-      "@type": "AggregateOffer",
-      "priceRange": "$13500-$26500",
-      "priceCurrency": "ARS",
-      "priceSpecification": plans.map(plan => ({
-        "@type": "UnitPriceSpecification",
-        "price": plan.price.monthly.toString(),
+  // ✅ STRUCTURED DATA PARA SEO DINÁMICO
+    const structuredData = {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Hisma - Sistema de Gestión para Lubricentros",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web Browser",
+      "url": "https://hisma.com.ar",
+      "description": "Sistema para lubricentros que permite administrar los cambios de aceite de forma digital. Gestiona tu lubricentro en la nube.",
+      "offers": plans.length > 0 ? {
+        "@type": "AggregateOffer",
+        "priceRange": `${Math.min(...plans.map(p => getDisplayPrice(p).price))}-${Math.max(...plans.map(p => getDisplayPrice(p).price))}`,
         "priceCurrency": "ARS",
-        "name": plan.name,
-        "description": plan.description,
-        "billingPeriod": "P1M"
-      }))
-    },
-    "featureList": [
-      "Gestión digital de cambios de aceite",
-      "Historial completo de vehículos", 
-      "Recordatorios automáticos",
-      "Reportes y estadísticas",
-      "Sistema de notificaciones",
-      "Soporte técnico especializado"
-    ],
-    "applicationSubCategory": "Automotive Management Software",
-    "targetProduct": {
-      "@type": "Product",
-      "name": "Software de Gestión para Lubricentros",
-      "category": "Business Software"
-    }
-  };
+        "priceSpecification": plans.map(plan => {
+          const displayPrice = getDisplayPrice(plan);
+          return {
+            "@type": "UnitPriceSpecification",
+            "price": displayPrice.price.toString(),
+            "priceCurrency": "ARS",
+            "name": plan.name,
+            "description": plan.description,
+            "billingPeriod": isPlanByServices(plan) ? "P6M" : "P1M" // 6 meses para servicios, 1 mes para mensuales
+          };
+        })
+      } : undefined,
+      "featureList": [
+        "Gestión digital de cambios de aceite",
+        "Historial completo de vehículos", 
+        "Recordatorios automáticos",
+        "Reportes y estadísticas",
+        "Sistema de notificaciones",
+        "Soporte técnico especializado"
+      ],
+      "applicationSubCategory": "Automotive Management Software",
+      "targetProduct": {
+        "@type": "Product",
+        "name": "Software de Gestión para Lubricentros",
+        "category": "Business Software"
+      }
+    };
 
   const organizationData = {
     "@context": "https://schema.org",
@@ -341,7 +473,7 @@ const HomePage: React.FC = () => {
         
         {/* Meta tags específicos SaaS */}
         <meta name="product:category" content="SaaS Software" />
-        <meta name="product:price_range" content="$13500-$26500 ARS" />
+        <meta name="product:price_range" content={plans.length > 0 ? `${Math.min(...plans.map(p => p.price.monthly))}-${Math.max(...plans.map(p => p.price.monthly))} ARS` : "$0-$30000 ARS"} />
         <meta name="product:free_trial" content="true" />
         <meta name="product:target_market" content="Lubricentros Argentina" />
         
@@ -558,7 +690,7 @@ const HomePage: React.FC = () => {
           </div>
         </div>
 
-        {/* ✅ SECCIÓN DE PLANES DINÁMICOS CON GRID RESPONSIVO */}
+        {/* ✅ SECCIÓN DE PLANES DINÁMICOS SOLO PUBLICADOS */}
         <div className="bg-gray-50 py-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
@@ -572,21 +704,26 @@ const HomePage: React.FC = () => {
               </p>
               
               {/* ✅ INDICADOR DE ACTUALIZACIÓN AUTOMÁTICA */}
-              {!loadingPlans && !errorLoadingPlans && (
+              {!loadingPlans && !errorLoadingPlans && plans.length > 0 && (
                 <p className="mt-2 text-sm text-gray-400">
-                  ✨ Precios actualizados automáticamente desde nuestro sistema
+                  ✨ Precios actualizados automáticamente desde nuestro sistema | {plans.length} plan{plans.length !== 1 ? 'es' : ''} disponible{plans.length !== 1 ? 's' : ''}
+                </p>
+              )}
+              
+              {/* ✅ MENSAJE CUANDO NO HAY PLANES PUBLICADOS */}
+              {!loadingPlans && plans.length === 0 && !errorLoadingPlans && (
+                <p className="mt-2 text-sm text-yellow-600">
+                  ⚡ Los planes están configurándose. ¡Registrate mientras preparamos opciones increíbles para tu lubricentro!
                 </p>
               )}
             </div>
 
-            {/* ✅ GRID DINÁMICO DE PLANES CON CSS RESPONSIVO */}
+            {/* ✅ GRID DINÁMICO DE PLANES SOLO PUBLICADOS */}
             <div className="mt-10 sm:mt-16">
               {renderPlans()}
             </div>
           </div>
         </div>
-
-       
 
         {/* ✅ TESTIMONIOS LOCALES */}
         <div className="bg-primary-50 py-16">
@@ -812,4 +949,4 @@ const HomePage: React.FC = () => {
   );
 };
 
-export default HomePage;      
+export default HomePage;

@@ -2,6 +2,7 @@
 import { 
   collection, 
   doc, 
+  addDoc,
   getDoc, 
   getDocs, 
   setDoc, 
@@ -12,13 +13,14 @@ import {
   orderBy,
   where 
 } from 'firebase/firestore';
-import { db } from '../lib/firebase'; // Corregido: usar firebaseConfig en lugar de firebase
+import { db } from '../lib/firebase';
 import { 
   SubscriptionPlan, 
   SubscriptionPlanType, 
   ManagedSubscriptionPlan,
   PlanChangeHistory,
-  PlanSystemSettings
+  PlanSystemSettings,
+  PlanType 
 } from '../types/subscription';
 
 // Re-exportar para otros módulos
@@ -100,19 +102,38 @@ export const getPlanById = async (planId: SubscriptionPlanType): Promise<Managed
  * Crea un nuevo plan
  */
 export const createPlan = async (
-  planData: SubscriptionPlan, // Corregido: ahora incluye el ID
+  planData: SubscriptionPlan,
   createdBy: string
 ): Promise<void> => {
   try {
-    // Validar que el ID no exista
-    const existingPlan = await getPlanById(planData.id);
-    if (existingPlan) {
-      throw new Error('Ya existe un plan con ese ID');
+    // Validar datos
+    const errors = validatePlanData(planData);
+    if (errors.length > 0) {
+      throw new Error(`Errores de validación: ${errors.join(', ')}`);
     }
 
-    const newPlan: ManagedSubscriptionPlan = {
-      ...planData, // Esto ya incluye el ID
+    // Verificar si el ID ya existe
+    const existingPlan = await getDoc(doc(db, PLANS_COLLECTION, planData.id));
+    if (existingPlan.exists()) {
+      throw new Error(`Ya existe un plan con el ID: ${planData.id}`);
+    }
+
+    // Obtener el siguiente número de orden
+    const plansRef = collection(db, PLANS_COLLECTION);
+    const existingPlansQuery = query(plansRef, orderBy('displayOrder', 'desc'));
+    const existingPlansSnapshot = await getDocs(existingPlansQuery);
+    
+    let maxOrder = 0;
+    existingPlansSnapshot.forEach((doc) => {
+      const order = doc.data().displayOrder || 0;
+      if (order > maxOrder) maxOrder = order;
+    });
+
+    const managedPlan: ManagedSubscriptionPlan = {
+      ...planData,
       isActive: true,
+      isPublished: false, // Por defecto no publicado
+      displayOrder: maxOrder + 1, // Siguiente orden
       createdAt: new Date(),
       updatedAt: new Date(),
       createdBy,
@@ -121,22 +142,24 @@ export const createPlan = async (
       isDefault: false
     };
 
-    const docRef = doc(db, PLANS_COLLECTION, planData.id);
-    await setDoc(docRef, {
-      ...newPlan,
+    // Crear plan en Firestore
+    await setDoc(doc(db, PLANS_COLLECTION, planData.id), {
+      ...managedPlan,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
     // Registrar en historial
-    await logPlanChange({
+    await addDoc(collection(db, 'planChangeHistory'), {
       planId: planData.id,
-      changeType: 'created',
-      newValues: newPlan,
-      changedBy: createdBy,
-      reason: 'Nuevo plan creado'
+      changeType: 'created' as const,
+      changedBy: createdBy, // ✅ CORREGIDO: usar createdBy en lugar de changedBy
+      timestamp: serverTimestamp(),
+      reason: 'Plan creado desde panel de administración',
+      newValues: managedPlan
     });
 
+    console.log('Plan creado exitosamente:', planData.id);
   } catch (error) {
     console.error('Error al crear plan:', error);
     throw error;
@@ -148,7 +171,7 @@ export const createPlan = async (
  */
 export const updatePlan = async (
   planId: SubscriptionPlanType,
-  planData: Partial<Omit<ManagedSubscriptionPlan, 'id'>>, // Corregido: usar ManagedSubscriptionPlan
+  planData: Partial<Omit<ManagedSubscriptionPlan, 'id'>>,
   updatedBy: string,
   reason?: string
 ): Promise<void> => {
@@ -299,7 +322,7 @@ const logPlanChange = async (change: Omit<PlanChangeHistory, 'id' | 'timestamp'>
       timestamp: new Date()
     };
 
-    await setDoc(doc(historyRef), {
+    await addDoc(historyRef, {
       ...changeLog,
       timestamp: serverTimestamp()
     });
@@ -385,6 +408,72 @@ export const updatePlanSystemSettings = async (
 };
 
 /**
+ * Función para alternar estado de publicación de un plan
+ */
+export const togglePlanPublication = async (
+  planId: SubscriptionPlanType,
+  isPublished: boolean,
+  changedBy: string,
+  reason?: string
+): Promise<void> => {
+  try {
+    const planRef = doc(db, PLANS_COLLECTION, planId);
+    const planDoc = await getDoc(planRef);
+
+    if (!planDoc.exists()) {
+      throw new Error('Plan no encontrado');
+    }
+
+    // Actualizar estado de publicación
+    await updateDoc(planRef, {
+      isPublished,
+      updatedAt: serverTimestamp(),
+      updatedBy: changedBy
+    });
+
+    // Registrar en historial
+    await addDoc(collection(db, 'plan_change_history'), {
+      planId,
+      changeType: isPublished ? 'published' : 'unpublished',
+      changedBy,
+      timestamp: serverTimestamp(),
+      reason: reason || `Plan ${isPublished ? 'publicado' : 'despublicado'} desde panel de administración`,
+      oldValues: { isPublished: !isPublished },
+      newValues: { isPublished }
+    });
+
+    console.log(`Plan ${planId} ${isPublished ? 'publicado' : 'despublicado'} exitosamente`);
+  } catch (error) {
+    console.error('Error al cambiar estado de publicación:', error);
+    throw error;
+  }
+};
+
+/**
+ * Función para actualizar orden de visualización
+ */
+export const updatePlanDisplayOrder = async (
+  planId: SubscriptionPlanType,
+  displayOrder: number,
+  changedBy: string
+): Promise<void> => {
+  try {
+    const planRef = doc(db, PLANS_COLLECTION, planId);
+    
+    await updateDoc(planRef, {
+      displayOrder,
+      updatedAt: serverTimestamp(),
+      updatedBy: changedBy
+    });
+
+    console.log(`Orden de visualización actualizado para plan ${planId}`);
+  } catch (error) {
+    console.error('Error al actualizar orden:', error);
+    throw error;
+  }
+};
+
+/**
  * Inicializa los planes por defecto del sistema
  */
 export const initializeDefaultPlans = async (createdBy: string): Promise<void> => {
@@ -401,6 +490,7 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
         id: 'starter',
         name: 'Plan Iniciante',
         description: 'Ideal para lubricentros que están comenzando',
+        planType: PlanType.MONTHLY,
         price: { monthly: 1500, semiannual: 8000 },
         maxUsers: 1,
         maxMonthlyServices: 25,
@@ -416,6 +506,7 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
         id: 'basic',
         name: 'Plan Básico',
         description: 'Ideal para lubricentros pequeños',
+        planType: PlanType.MONTHLY,
         price: { monthly: 2500, semiannual: 12000 },
         maxUsers: 2,
         maxMonthlyServices: 50,
@@ -432,6 +523,7 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
         id: 'premium',
         name: 'Plan Premium',
         description: 'Perfecto para lubricentros en crecimiento',
+        planType: PlanType.MONTHLY,
         price: { monthly: 4500, semiannual: 22500 },
         maxUsers: 5,
         maxMonthlyServices: 150,
@@ -450,6 +542,7 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
         id: 'enterprise',
         name: 'Plan Empresarial',
         description: 'Para lubricentros grandes y cadenas',
+        planType: PlanType.MONTHLY,
         price: { monthly: 7500, semiannual: 37500 },
         maxUsers: 999,
         maxMonthlyServices: null,
@@ -470,6 +563,8 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
       const newPlan: ManagedSubscriptionPlan = {
         ...planData,
         isActive: true,
+        isPublished: false, // ✅ AGREGADO: propiedad isPublished
+        displayOrder: 0,    // ✅ AGREGADO: propiedad displayOrder
         createdAt: new Date(),
         updatedAt: new Date(),
         createdBy,
@@ -504,42 +599,85 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
 /**
  * Valida los datos de un plan antes de guardarlo
  */
-export const validatePlanData = (planData: Partial<SubscriptionPlan>): string[] => {
+export const validatePlanData = (planData: Partial<SubscriptionPlan>, isEdit = false): string[] => {
   const errors: string[] = [];
-  
-  if (!planData.name || planData.name.trim().length < 3) {
-    errors.push('El nombre del plan debe tener al menos 3 caracteres');
+
+  // Validaciones básicas
+  if (!planData.name?.trim()) {
+    errors.push('El nombre del plan es obligatorio');
   }
-  
-  if (!planData.description || planData.description.trim().length < 10) {
-    errors.push('La descripción debe tener al menos 10 caracteres');
+
+  if (!planData.description?.trim()) {
+    errors.push('La descripción del plan es obligatoria');
   }
-  
-  if (!planData.price) {
-    errors.push('Los precios son obligatorios');
+
+  if (!planData.maxUsers || planData.maxUsers < 1) {
+    errors.push('El plan debe permitir al menos 1 usuario');
+  }
+
+  // Validaciones según tipo de plan
+  const planType = planData.planType || PlanType.MONTHLY;
+
+  if (planType === PlanType.SERVICE) {
+    // Validaciones para planes por servicios
+    if (!planData.servicePrice || planData.servicePrice <= 0) {
+      errors.push('El precio del paquete debe ser mayor a 0');
+    }
+
+    if (!planData.totalServices || planData.totalServices <= 0) {
+      errors.push('La cantidad de servicios debe ser mayor a 0');
+    }
+
+    if (!planData.validityMonths || planData.validityMonths < 1 || planData.validityMonths > 12) {
+      errors.push('La validez debe estar entre 1 y 12 meses');
+    }
+
+    // Validar precio por servicio razonable
+    if (planData.servicePrice && planData.totalServices) {
+      const pricePerService = planData.servicePrice / planData.totalServices;
+      if (pricePerService < 10) {
+        errors.push('El precio por servicio es muy bajo (mínimo $10 por servicio)');
+      }
+    }
   } else {
-    if (planData.price.monthly <= 0) {
+    // Validaciones para planes mensuales
+    if (!planData.price?.monthly || planData.price.monthly <= 0) {
       errors.push('El precio mensual debe ser mayor a 0');
     }
-    if (planData.price.semiannual <= 0) {
+
+    if (!planData.price?.semiannual || planData.price.semiannual <= 0) {
       errors.push('El precio semestral debe ser mayor a 0');
     }
-    if (planData.price.semiannual <= planData.price.monthly) {
-      errors.push('El precio semestral debe ser mayor al precio mensual');
+
+    // Validar que el precio semestral sea mayor al mensual
+    if (planData.price?.monthly && planData.price?.semiannual) {
+      if (planData.price.semiannual <= planData.price.monthly) {
+        errors.push('El precio semestral debe ser mayor al precio mensual');
+      }
+
+      // Validar que el semestral tenga descuento (menos de 6 veces el mensual)
+      if (planData.price.semiannual >= planData.price.monthly * 6) {
+        errors.push('El precio semestral debería ofrecer descuento vs pago mensual');
+      }
+    }
+
+    // Validar servicios mensuales
+    if (planData.maxMonthlyServices !== null && planData.maxMonthlyServices !== undefined) {
+      if (planData.maxMonthlyServices <= 0) {
+        errors.push('Los servicios mensuales deben ser mayor a 0 o ilimitados');
+      }
     }
   }
-  
-  if (planData.maxUsers !== undefined && planData.maxUsers <= 0) {
-    errors.push('El número máximo de usuarios debe ser mayor a 0');
-  }
-  
-  if (planData.maxMonthlyServices !== undefined && planData.maxMonthlyServices !== null && planData.maxMonthlyServices <= 0) {
-    errors.push('El número máximo de servicios debe ser mayor a 0 o null para ilimitado');
-  }
-  
+
+  // Validaciones de características
   if (!planData.features || planData.features.length === 0) {
     errors.push('Debe incluir al menos una característica');
+  } else {
+    const validFeatures = planData.features.filter(f => f && f.trim() !== '');
+    if (validFeatures.length === 0) {
+      errors.push('Debe incluir al menos una característica válida');
+    }
   }
-  
+
   return errors;
 };

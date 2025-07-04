@@ -12,7 +12,7 @@ export interface SubscriptionPlan {
   id: SubscriptionPlanType;
   name: string;
   description: string;
-  planType: PlanType; // 🆕 AGREGAR ESTA LÍNEA
+  planType: PlanType;
   price: {
     monthly: number;
     semiannual: number;
@@ -21,18 +21,17 @@ export interface SubscriptionPlan {
   maxMonthlyServices: number | null;
   features: string[];
   recommended?: boolean;
-  // 🆕 AGREGAR estos campos opcionales
+  // Campos opcionales para planes por servicios
   servicePrice?: number;
   totalServices?: number;
   validityMonths?: number;
 }
 
-
-
-
 // Interfaz extendida para planes gestionados dinámicamente
 export interface ManagedSubscriptionPlan extends SubscriptionPlan {
   isActive: boolean;
+  isPublished: boolean;     // ✅ AGREGADO: si el plan está publicado en la homepage
+  displayOrder: number;     // ✅ AGREGADO: orden de visualización
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -41,13 +40,13 @@ export interface ManagedSubscriptionPlan extends SubscriptionPlan {
   isDefault: boolean; // Si es un plan por defecto del sistema
 }
 
-// Interfaz para el historial de cambios (corregida)
+// Interfaz para el historial de cambios
 export interface PlanChangeHistory {
   id: string;
   planId: SubscriptionPlanType;
-  changeType: 'created' | 'updated' | 'deleted' | 'activated' | 'deactivated';
-  oldValues?: Partial<ManagedSubscriptionPlan>; // Cambiado a ManagedSubscriptionPlan
-  newValues?: Partial<ManagedSubscriptionPlan>; // Cambiado a ManagedSubscriptionPlan
+  changeType: 'created' | 'updated' | 'deleted' | 'activated' | 'deactivated' | 'published' | 'unpublished';
+  oldValues?: Partial<ManagedSubscriptionPlan>;
+  newValues?: Partial<ManagedSubscriptionPlan>;
   changedBy: string;
   timestamp: Date;
   reason?: string;
@@ -69,7 +68,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     id: 'starter',
     name: 'Plan Iniciante',
     description: 'Ideal para lubricentros que están comenzando',
-    planType: PlanType.MONTHLY, // 🆕 AGREGAR ESTA LÍNEA
+    planType: PlanType.MONTHLY,
     price: { monthly: 1500, semiannual: 8000 },
     maxUsers: 1,
     maxMonthlyServices: 25,
@@ -146,7 +145,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
   }
 };
 
-// 🆕 NUEVOS: Funciones de utilidad
+// Funciones de utilidad
 export const isServicePlan = (plan: SubscriptionPlan): boolean => {
   return plan.planType === PlanType.SERVICE;
 };
@@ -160,9 +159,4 @@ export const getEffectivePrice = (plan: SubscriptionPlan, billingType: 'monthly'
     return plan.servicePrice || 0;
   }
   return billingType === 'monthly' ? plan.price.monthly : plan.price.semiannual;
-};
-
-export const getPlanDisplayName = (plan: SubscriptionPlan): string => {
-  const typeLabel = plan.planType === PlanType.SERVICE ? '(Por Servicios)' : '(Mensual)';
-  return `${plan.name} ${typeLabel}`;
 };
