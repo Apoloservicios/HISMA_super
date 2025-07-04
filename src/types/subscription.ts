@@ -1,20 +1,34 @@
 // src/types/subscription.ts
 
-export type SubscriptionPlanType = 'starter' | 'basic' | 'premium' | 'enterprise';
+export type SubscriptionPlanType = 'starter' | 'basic' | 'premium' | 'enterprise' | string;
+
+// Nuevo enum para tipos de planes
+export enum PlanType {
+  MONTHLY = 'monthly',
+  SERVICE = 'service'
+}
 
 export interface SubscriptionPlan {
   id: SubscriptionPlanType;
   name: string;
   description: string;
+  planType: PlanType; // 🆕 AGREGAR ESTA LÍNEA
   price: {
     monthly: number;
     semiannual: number;
   };
   maxUsers: number;
-  maxMonthlyServices: number | null; // null = ilimitado
+  maxMonthlyServices: number | null;
   features: string[];
   recommended?: boolean;
+  // 🆕 AGREGAR estos campos opcionales
+  servicePrice?: number;
+  totalServices?: number;
+  validityMonths?: number;
 }
+
+
+
 
 // Interfaz extendida para planes gestionados dinámicamente
 export interface ManagedSubscriptionPlan extends SubscriptionPlan {
@@ -55,10 +69,8 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     id: 'starter',
     name: 'Plan Iniciante',
     description: 'Ideal para lubricentros que están comenzando',
-    price: {
-      monthly: 1500,
-      semiannual: 8000
-    },
+    planType: PlanType.MONTHLY, // 🆕 AGREGAR ESTA LÍNEA
+    price: { monthly: 1500, semiannual: 8000 },
     maxUsers: 1,
     maxMonthlyServices: 25,
     features: [
@@ -73,6 +85,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     id: 'basic',
     name: 'Plan Básico',
     description: 'Ideal para lubricentros pequeños',
+    planType: PlanType.MONTHLY,
     price: {
       monthly: 2500,
       semiannual: 12000
@@ -92,6 +105,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     id: 'premium',
     name: 'Plan Premium',
     description: 'Perfecto para lubricentros en crecimiento',
+    planType: PlanType.MONTHLY,
     price: {
       monthly: 4500,
       semiannual: 22500
@@ -113,6 +127,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     id: 'enterprise',
     name: 'Plan Empresarial',
     description: 'Para lubricentros grandes y cadenas',
+    planType: PlanType.MONTHLY,
     price: {
       monthly: 7500,
       semiannual: 37500
@@ -129,4 +144,25 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
       'Gestor de cuenta dedicado'
     ]
   }
+};
+
+// 🆕 NUEVOS: Funciones de utilidad
+export const isServicePlan = (plan: SubscriptionPlan): boolean => {
+  return plan.planType === PlanType.SERVICE;
+};
+
+export const isMonthlyPlan = (plan: SubscriptionPlan): boolean => {
+  return plan.planType === PlanType.MONTHLY;
+};
+
+export const getEffectivePrice = (plan: SubscriptionPlan, billingType: 'monthly' | 'semiannual' = 'monthly'): number => {
+  if (plan.planType === PlanType.SERVICE) {
+    return plan.servicePrice || 0;
+  }
+  return billingType === 'monthly' ? plan.price.monthly : plan.price.semiannual;
+};
+
+export const getPlanDisplayName = (plan: SubscriptionPlan): string => {
+  const typeLabel = plan.planType === PlanType.SERVICE ? '(Por Servicios)' : '(Mensual)';
+  return `${plan.name} ${typeLabel}`;
 };

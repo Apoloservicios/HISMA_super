@@ -30,6 +30,7 @@ import {
   validatePlanData
 } from '../../services/planManagementService';
 
+import { PlanType, isServicePlan, isMonthlyPlan } from '../../types/subscription';
 // Types
 import { 
   SubscriptionPlan, 
@@ -61,12 +62,16 @@ interface PlanFormData {
   id: string;
   name: string;
   description: string;
+  planType: PlanType;
   monthlyPrice: number;
   semiannualPrice: number;
   maxUsers: number;
   maxMonthlyServices: number | null;
   features: string[];
   recommended: boolean;
+  servicePrice: number;
+  totalServices: number;
+  validityMonths: number;
 }
 
 const PlanManagementPage: React.FC = () => {
@@ -169,37 +174,46 @@ const PlanManagementPage: React.FC = () => {
   };
 
   // Resetear formulario
-  const resetForm = () => {
-    setFormData({
-      id: '',
-      name: '',
-      description: '',
-      monthlyPrice: 0,
-      semiannualPrice: 0,
-      maxUsers: 1,
-      maxMonthlyServices: null,
-      features: [''],
-      recommended: false
-    });
-    setFormErrors([]);
-  };
+const resetForm = () => {
+  setFormData({
+    id: '',
+    name: '',
+    description: '',
+    planType: PlanType.MONTHLY,
+    monthlyPrice: 0,
+    semiannualPrice: 0,
+    maxUsers: 1,
+    maxMonthlyServices: null,
+    features: [''],
+    recommended: false,
+    servicePrice: 0,
+    totalServices: 50,
+    validityMonths: 6
+  });
+  setFormErrors([]);
+};
 
   // Preparar edición
-  const handleEditPlan = (plan: ManagedSubscriptionPlan) => {
-    setSelectedPlan(plan);
-    setFormData({
-      id: plan.id,
-      name: plan.name,
-      description: plan.description,
-      monthlyPrice: plan.price.monthly,
-      semiannualPrice: plan.price.semiannual,
-      maxUsers: plan.maxUsers,
-      maxMonthlyServices: plan.maxMonthlyServices,
-      features: [...plan.features],
-      recommended: plan.recommended || false
-    });
-    setShowEditModal(true);
-  };
+const handleEditPlan = (plan: ManagedSubscriptionPlan) => {
+  setSelectedPlan(plan);
+  setFormData({
+    id: plan.id,
+    name: plan.name,
+    description: plan.description,
+    planType: plan.planType || PlanType.MONTHLY, // 🆕 NUEVO
+    monthlyPrice: plan.price.monthly,
+    semiannualPrice: plan.price.semiannual,
+    maxUsers: plan.maxUsers,
+    maxMonthlyServices: plan.maxMonthlyServices,
+    features: [...plan.features],
+    recommended: plan.recommended || false,
+    // 🆕 NUEVOS campos
+    servicePrice: plan.servicePrice || 0,
+    totalServices: plan.totalServices || 50,
+    validityMonths: plan.validityMonths || 6
+  });
+  setShowEditModal(true);
+};
 
   // Preparar eliminación
   const handleDeletePlan = (plan: ManagedSubscriptionPlan) => {
@@ -237,38 +251,45 @@ const PlanManagementPage: React.FC = () => {
   };
 
   // Crear plan
-  const handleCreatePlan = async () => {
-    if (!userProfile || !validateForm()) return;
+const handleCreatePlan = async () => {
+  if (!userProfile || !validateForm()) return;
 
-    try {
-      setProcessing(true);
+  try {
+    setProcessing(true);
 
-      const planData: SubscriptionPlan = {
-        id: formData.id as SubscriptionPlanType,
-        name: formData.name,
-        description: formData.description,
-        price: {
-          monthly: formData.monthlyPrice,
-          semiannual: formData.semiannualPrice
-        },
-        maxUsers: formData.maxUsers,
-        maxMonthlyServices: formData.maxMonthlyServices,
-        features: formData.features.filter(f => f.trim() !== ''),
-        recommended: formData.recommended
-      };
+    const planData: SubscriptionPlan = {
+      id: formData.id as SubscriptionPlanType,
+      name: formData.name,
+      description: formData.description,
+      planType: formData.planType, // 🆕 NUEVO
+      price: {
+        monthly: formData.monthlyPrice,
+        semiannual: formData.semiannualPrice
+      },
+      maxUsers: formData.maxUsers,
+      maxMonthlyServices: formData.maxMonthlyServices,
+      features: formData.features.filter(f => f.trim() !== ''),
+      recommended: formData.recommended,
+      // 🆕 NUEVOS campos para planes por servicios
+      ...(formData.planType === PlanType.SERVICE && {
+        servicePrice: formData.servicePrice,
+        totalServices: formData.totalServices,
+        validityMonths: formData.validityMonths
+      })
+    };
 
-      await createPlan(planData, userProfile.email);
-      setSuccess('Plan creado correctamente');
-      setShowCreateModal(false);
-      resetForm();
-      await loadData();
+    await createPlan(planData, userProfile.email);
+    setSuccess('Plan creado correctamente');
+    setShowCreateModal(false);
+    resetForm();
+    await loadData();
 
-    } catch (err: any) {
-      setError(err.message || 'Error al crear el plan');
-    } finally {
-      setProcessing(false);
-    }
-  };
+  } catch (err: any) {
+    setError(err.message || 'Error al crear el plan');
+  } finally {
+    setProcessing(false);
+  }
+};
 
   // Actualizar plan
   const handleUpdatePlan = async () => {
@@ -402,6 +423,419 @@ const PlanManagementPage: React.FC = () => {
       currency: 'ARS'
     }).format(price);
   };
+
+// 🆕 COMPONENTE: Campos del formulario dinámicos
+const PlanFormFields: React.FC<{ formData: PlanFormData; setFormData: (data: PlanFormData) => void }> = ({ formData, setFormData }) => {
+  return (
+    <div className="space-y-6">
+      {/* Información básica */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            ID del Plan
+          </label>
+          <input
+            type="text"
+            value={formData.id}
+            onChange={(e) => setFormData({...formData, id: e.target.value})}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="ej: premium"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Nombre del Plan
+          </label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="ej: Plan Premium"
+          />
+        </div>
+      </div>
+
+      {/* 🆕 NUEVO: Selector de tipo de plan */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Tipo de Plan
+        </label>
+        <div className="grid grid-cols-2 gap-4">
+          <div 
+            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+              formData.planType === PlanType.MONTHLY 
+                ? 'border-blue-500 bg-blue-50' 
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => setFormData({...formData, planType: PlanType.MONTHLY})}
+          >
+            <div className="flex items-center mb-2">
+              <input
+                type="radio"
+                checked={formData.planType === PlanType.MONTHLY}
+                onChange={() => {}}
+                className="mr-2"
+              />
+              <h4 className="font-medium">Plan Mensual</h4>
+            </div>
+            <p className="text-sm text-gray-600">
+              Facturación recurrente mensual o semestral con límite de servicios por mes
+            </p>
+          </div>
+
+          <div 
+            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+              formData.planType === PlanType.SERVICE 
+                ? 'border-green-500 bg-green-50' 
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => setFormData({...formData, planType: PlanType.SERVICE})}
+          >
+            <div className="flex items-center mb-2">
+              <input
+                type="radio"
+                checked={formData.planType === PlanType.SERVICE}
+                onChange={() => {}}
+                className="mr-2"
+              />
+              <h4 className="font-medium">Plan por Servicios</h4>
+            </div>
+            <p className="text-sm text-gray-600">
+              Pago único por cantidad específica de servicios con tiempo de validez limitado
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Descripción
+        </label>
+        <textarea
+          value={formData.description}
+          onChange={(e) => setFormData({...formData, description: e.target.value})}
+          rows={3}
+          className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Describe las características principales del plan"
+        />
+      </div>
+
+      {/* 🆕 CAMPOS CONDICIONALES según tipo de plan */}
+      {formData.planType === PlanType.MONTHLY ? (
+        // Campos para planes mensuales (existentes)
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Precio Mensual ($)
+              </label>
+              <input
+                type="number"
+                value={formData.monthlyPrice}
+                onChange={(e) => setFormData({...formData, monthlyPrice: Number(e.target.value)})}
+                min={0}
+                step={100}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Precio Semestral ($)
+              </label>
+              <input
+                type="number"
+                value={formData.semiannualPrice}
+                onChange={(e) => setFormData({...formData, semiannualPrice: Number(e.target.value)})}
+                min={0}
+                step={100}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Máximo de Usuarios
+              </label>
+              <input
+                type="number"
+                value={formData.maxUsers}
+                onChange={(e) => setFormData({...formData, maxUsers: Number(e.target.value)})}
+                min={1}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Servicios Mensuales
+              </label>
+              <div className="flex space-x-2">
+                <input
+                  type="number"
+                  value={formData.maxMonthlyServices || ''}
+                  onChange={(e) => setFormData({...formData, maxMonthlyServices: e.target.value ? Number(e.target.value) : null})}
+                  min={1}
+                  className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Ej: 100"
+                />
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.maxMonthlyServices === null}
+                    onChange={(e) => setFormData({...formData, maxMonthlyServices: e.target.checked ? null : 50})}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Ilimitado</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        // 🆕 NUEVOS: Campos para planes por servicios
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Precio del Paquete ($)
+              </label>
+              <input
+                type="number"
+                value={formData.servicePrice}
+                onChange={(e) => setFormData({...formData, servicePrice: Number(e.target.value)})}
+                min={0}
+                step={100}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="20000"
+              />
+              <p className="text-xs text-gray-500 mt-1">Pago único por todo el paquete</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Cantidad de Servicios
+              </label>
+              <input
+                type="number"
+                value={formData.totalServices}
+                onChange={(e) => setFormData({...formData, totalServices: Number(e.target.value)})}
+                min={1}
+                step={10}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="100"
+              />
+              <p className="text-xs text-gray-500 mt-1">Servicios incluidos en el paquete</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Validez (meses)
+              </label>
+              <input
+                type="number"
+                value={formData.validityMonths}
+                onChange={(e) => setFormData({...formData, validityMonths: Number(e.target.value)})}
+                min={1}
+                max={12}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="6"
+              />
+              <p className="text-xs text-gray-500 mt-1">Tiempo máximo para usar los servicios</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Máximo de Usuarios
+            </label>
+            <input
+              type="number"
+              value={formData.maxUsers}
+              onChange={(e) => setFormData({...formData, maxUsers: Number(e.target.value)})}
+              min={1}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-green-500 focus:border-green-500"
+            />
+          </div>
+
+          {/* Información adicional para planes por servicios */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <h4 className="font-medium text-green-900 mb-2">Información del Plan por Servicios</h4>
+            <ul className="text-sm text-green-700 space-y-1">
+              <li>• <strong>Precio por servicio:</strong> ${formData.totalServices > 0 ? (formData.servicePrice / formData.totalServices).toFixed(2) : '0'}</li>
+              <li>• <strong>Ahorro vs mensual:</strong> Compare con sus planes mensuales</li>
+              <li>• <strong>Vencimiento:</strong> Los servicios deben usarse en {formData.validityMonths} meses</li>
+              <li>• <strong>Sin renovación automática:</strong> El cliente debe renovar manualmente</li>
+            </ul>
+          </div>
+        </>
+      )}
+
+      {/* Características (común para ambos tipos) */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Características del Plan
+        </label>
+        <div className="space-y-2">
+          {formData.features.map((feature, index) => (
+            <div key={index} className="flex space-x-2">
+              <input
+                type="text"
+                value={feature}
+                onChange={(e) => {
+                  const newFeatures = [...formData.features];
+                  newFeatures[index] = e.target.value;
+                  setFormData({...formData, features: newFeatures});
+                }}
+                className="flex-1 border border-gray-300 rounded-md px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Ej: Soporte 24/7"
+              />
+              <Button
+                size="sm"
+                color="error"
+                variant="outline"
+                onClick={() => {
+                  const newFeatures = formData.features.filter((_, i) => i !== index);
+                  setFormData({...formData, features: newFeatures});
+                }}
+                disabled={formData.features.length <= 1}
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            color="info"
+            variant="outline"
+            icon={<PlusIcon className="h-4 w-4" />}
+            onClick={() => setFormData({...formData, features: [...formData.features, '']})}
+          >
+            Agregar Característica
+          </Button>
+        </div>
+      </div>
+
+      {/* Opción recomendado */}
+      <div className="flex items-center space-x-3">
+        <input
+          type="checkbox"
+          id="recommended"
+          checked={formData.recommended}
+          onChange={(e) => setFormData({...formData, recommended: e.target.checked})}
+          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        />
+        <label htmlFor="recommended" className="text-sm text-gray-700">
+          Marcar como plan recomendado
+        </label>
+      </div>
+    </div>
+  );
+};
+
+// 🆕 MODIFICAR la visualización de planes en el grid
+const PlanCard: React.FC<{ plan: ManagedSubscriptionPlan }> = ({ plan }) => {
+  const isService = isServicePlan(plan);
+  
+  return (
+    <div
+      className={`border rounded-lg p-6 relative ${
+        plan.recommended ? 'border-blue-500 bg-blue-50' : 
+        plan.isActive ? 'border-gray-200' : 'border-gray-200 bg-gray-50'
+      }`}
+    >
+      {/* Badge de tipo de plan */}
+      <div className="absolute top-4 left-4">
+        <Badge 
+          color={isService ? 'success' : 'info'} 
+          text={isService ? 'Por Servicios' : 'Mensual'} 
+        />
+      </div>
+      
+      {/* Badge recomendado */}
+      {plan.recommended && (
+        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+          <Badge color="warning" text="Recomendado" />
+        </div>
+      )}
+
+      {/* Badge de estado */}
+      <div className="absolute top-4 right-4">
+        <Badge 
+          color={plan.isActive ? 'success' : 'error'} 
+          text={plan.isActive ? 'Activo' : 'Inactivo'} 
+        />
+      </div>
+
+      {/* Contenido del plan */}
+      <div className="mt-8">
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+        <p className="text-gray-600 text-sm mb-4">{plan.description}</p>
+
+        {/* Precios según tipo */}
+        <div className="mb-4">
+          {isService ? (
+            <>
+              <div className="text-3xl font-bold text-gray-900">
+                {formatPrice(plan.servicePrice || 0)}
+                <span className="text-lg font-normal text-gray-500"> (pago único)</span>
+              </div>
+              <div className="text-lg text-gray-600">
+                {plan.totalServices} servicios • {plan.validityMonths} meses
+              </div>
+              <div className="text-sm text-gray-500">
+                ${((plan.servicePrice || 0) / (plan.totalServices || 1)).toFixed(2)} por servicio
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-3xl font-bold text-gray-900">
+                {formatPrice(plan.price.monthly)}
+                <span className="text-lg font-normal text-gray-500">/mes</span>
+              </div>
+              <div className="text-lg text-gray-600">
+                {formatPrice(plan.price.semiannual)}
+                <span className="text-sm text-gray-500">/semestre</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Límites */}
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center text-sm">
+            <UserGroupIcon className="h-4 w-4 text-gray-400 mr-2" />
+            <span>Hasta {plan.maxUsers} usuarios</span>
+          </div>
+          <div className="flex items-center text-sm">
+            <WrenchIcon className="h-4 w-4 text-gray-400 mr-2" />
+            <span>
+              {isService 
+                ? `${plan.totalServices} servicios totales`
+                : plan.maxMonthlyServices === null 
+                  ? 'Servicios ilimitados' 
+                  : `${plan.maxMonthlyServices} servicios/mes`
+              }
+            </span>
+          </div>
+          {isService && (
+            <div className="flex items-center text-sm">
+              <ClockIcon className="h-4 w-4 text-gray-400 mr-2" />
+              <span>Válido por {plan.validityMonths} meses</span>
+            </div>
+          )}
+        </div>
+
+        {/* Resto del componente igual... */}
+      </div>
+    </div>
+  );
+};
+
 
   if (loading && plans.length === 0) {
     return (

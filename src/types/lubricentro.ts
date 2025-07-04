@@ -45,4 +45,9 @@ export interface Lubricentro {
     reference: string;
   }[];
   autoRenewal?: boolean;          // Si la suscripción se renueva automáticamente
+
+   totalServicesContracted?: number;    // Servicios totales contratados en plan por servicios
+  servicesUsed?: number;               // Servicios ya utilizados del plan
+  servicesRemaining?: number;          // Servicios restantes
+  serviceSubscriptionExpiryDate?: Date; // Fecha de vencimiento para planes por servicios
 }

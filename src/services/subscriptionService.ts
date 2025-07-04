@@ -631,3 +631,35 @@ export const canAddMoreServices = async (lubricentroId: string): Promise<{canAdd
   }
 };
 
+export const getUnifiedSubscriptionInfo = async (lubricentroId: string) => {
+  // Por ahora, usar datos del lubricentro directamente
+  const lubricentro = await getLubricentroById(lubricentroId);
+  return {
+    type: lubricentro.estado === 'trial' ? 'trial' : 'monthly',
+    isActive: lubricentro.estado === 'activo',
+    planName: lubricentro.subscriptionPlan || 'Sin plan'
+  };
+};
+
+export const activateServiceSubscription = async (
+  lubricentroId: string, 
+  planId: string
+) => {
+  // Por ahora, usar activateSubscription existente
+  return await activateSubscription(lubricentroId, planId, 'monthly');
+};
+
+export const migrateToServiceSubscription = async (
+  lubricentroId: string,
+  planId: string
+) => {
+  return await activateServiceSubscription(lubricentroId, planId);
+};
+
+export const migrateToMonthlySubscription = async (
+  lubricentroId: string,
+  planId: string
+) => {
+  return await activateSubscription(lubricentroId, planId, 'monthly');
+};
+
