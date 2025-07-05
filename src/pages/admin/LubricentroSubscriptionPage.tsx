@@ -1,4 +1,6 @@
 // src/pages/admin/LubricentroSubscriptionPage.tsx
+// IMPLEMENTACIÓN COMPLETA - Reemplazar todo el archivo
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -30,7 +32,7 @@ import {
 
 import { Lubricentro, SubscriptionPlanType } from '../../types';
 import { SubscriptionPlan, PlanType } from '../../types/subscription';
-import { getSubscriptionPlans, invalidatePlansCache } from '../../services/hybridSubscriptionService';
+import { getSubscriptionPlans, invalidatePlansCache,getAllDynamicPlans } from '../../services/hybridSubscriptionService';
 
 // Iconos
 import { 
@@ -65,6 +67,101 @@ interface UpdateSubscriptionModalProps {
   loading: boolean;
   dynamicPlans: Record<SubscriptionPlanType, SubscriptionPlan>;
 }
+
+// 🔍 COMPONENTE DE DEBUG
+const PlansDebugInfo: React.FC<{ 
+  dynamicPlans: Record<SubscriptionPlanType, SubscriptionPlan>,
+  loadingPlans: boolean,
+  lubricentro: Lubricentro | null
+}> = ({ dynamicPlans, loadingPlans, lubricentro }) => {
+  const [showDebug, setShowDebug] = useState(false);
+
+  if (!showDebug) {
+    return (
+      <div className="mb-4">
+        <Button 
+          size="sm" 
+          variant="outline" 
+          onClick={() => setShowDebug(true)}
+        >
+          🔍 Mostrar Debug de Planes
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Card className="mb-6 border-yellow-200 bg-yellow-50">
+      <CardHeader 
+        title="🔍 Debug - Información de Planes" 
+        action={
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setShowDebug(false)}
+          >
+            Ocultar
+          </Button>
+        }
+      />
+      <CardBody>
+        <div className="space-y-4 text-sm font-mono">
+          {/* Estado de carga */}
+          <div>
+            <strong>Estado de carga:</strong>
+            <p className={loadingPlans ? 'text-orange-600' : 'text-green-600'}>
+              {loadingPlans ? '⏳ Cargando planes...' : '✅ Planes cargados'}
+            </p>
+          </div>
+
+          {/* Información del lubricentro */}
+          <div>
+            <strong>Lubricentro actual:</strong>
+            <div className="bg-white p-2 rounded border ml-2">
+              <p>ID: {lubricentro?.id || 'No disponible'}</p>
+              <p>Nombre: {lubricentro?.fantasyName || 'No disponible'}</p>
+              <p>Plan actual: <span className="text-blue-600">{lubricentro?.subscriptionPlan || 'Sin plan'}</span></p>
+              <p>Estado: <span className="text-purple-600">{lubricentro?.estado || 'No disponible'}</span></p>
+            </div>
+          </div>
+
+          {/* Planes dinámicos disponibles */}
+          <div>
+            <strong>Planes dinámicos cargados ({Object.keys(dynamicPlans).length}):</strong>
+            <div className="bg-white p-2 rounded border ml-2 max-h-64 overflow-y-auto">
+              {Object.keys(dynamicPlans).length === 0 ? (
+                <p className="text-red-600">❌ No hay planes cargados</p>
+              ) : (
+                Object.entries(dynamicPlans).map(([planId, planData]) => (
+                  <div key={planId} className="border-b border-gray-200 pb-2 mb-2 last:border-b-0">
+                    <p className="font-semibold text-blue-600">Plan ID: {planId}</p>
+                    <p>Nombre: {planData?.name || '❌ Sin nombre'}</p>
+                    <p>Tipo: {planData?.planType || '❌ Sin tipo'}</p>
+                    <p>Precio mensual: ${planData?.price?.monthly?.toLocaleString() || '❌ Sin precio'}</p>
+                    <p>Precio semestral: ${planData?.price?.semiannual?.toLocaleString() || 'N/A'}</p>
+                    {planData?.servicePrice && (
+                      <p>Precio por servicio: ${planData.servicePrice.toLocaleString()}</p>
+                    )}
+                    {planData?.totalServices && (
+                      <p>Total servicios: {planData.totalServices}</p>
+                    )}
+                    <p>Max usuarios: {planData?.maxUsers || '❌ Sin límite definido'}</p>
+                    <p>Max servicios mensuales: {
+                      planData?.maxMonthlyServices === null 
+                        ? 'Ilimitados' 
+                        : planData?.maxMonthlyServices || '❌ Sin límite definido'
+                    }</p>
+                    <p>Recomendado: {planData?.recommended ? '⭐ Sí' : 'No'}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+};
 
 // Modal para registrar pago
 const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({ 
@@ -197,7 +294,7 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   );
 };
 
-// Modal para actualizar suscripción
+// Modal para actualizar suscripción - VERSIÓN COMPLETA
 const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -206,29 +303,52 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
   loading,
   dynamicPlans
 }) => {
-  const [plan, setPlan] = useState<SubscriptionPlanType>('basic');
-  const [renewalType, setRenewalType] = useState<'monthly' | 'semiannual'>('monthly');
+  const [plan, setPlan] = useState<string>('basic');
+  const [renewalType, setRenewalType] = useState<'monthly' | 'semiannual'>('monthly'); // ✅ Mantener solo los tipos del UI
   const [autoRenewal, setAutoRenewal] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('🔄 UpdateSubscriptionModal - Inicializando', {
+      lubricentroName: lubricentro?.fantasyName,
+      currentPlan: lubricentro?.subscriptionPlan,
+      currentRenewalType: lubricentro?.subscriptionRenewalType,
+      availablePlans: Object.keys(dynamicPlans),
+      totalPlans: Object.keys(dynamicPlans).length
+    });
+
     if (lubricentro) {
       setPlan(lubricentro.subscriptionPlan || 'basic');
-      setRenewalType(lubricentro.subscriptionRenewalType || 'monthly');
+      
+      // 🔧 CORRECCIÓN: Manejar correctamente el tipo 'service'
+      const currentRenewalType = lubricentro.subscriptionRenewalType;
+      if (currentRenewalType === 'service') {
+        // Para planes por servicios, usar 'monthly' como default en el UI
+        // ya que los planes por servicios no tienen ciclo de facturación
+        setRenewalType('monthly');
+      } else if (currentRenewalType === 'monthly' || currentRenewalType === 'semiannual') {
+        setRenewalType(currentRenewalType);
+      } else {
+        setRenewalType('monthly');
+      }
+      
       setAutoRenewal(lubricentro.autoRenewal !== false);
     }
   }, [lubricentro, dynamicPlans]);
 
   const handleSubmit = async () => {
     try {
-      await onConfirm(plan, renewalType, autoRenewal);
+      setError(null);
+      console.log('🚀 Modal - Enviando actualización:', { plan, renewalType, autoRenewal });
+      
+      await onConfirm(plan as SubscriptionPlanType, renewalType, autoRenewal);
     } catch (err: any) {
       setError(err.message || 'Error al actualizar la suscripción');
     }
   };
 
   const calculatePrice = (): number => {
-    const planData = dynamicPlans[plan];
+    const planData = dynamicPlans[plan as SubscriptionPlanType];
     if (!planData) return 0;
     
     if (planData.planType === 'service' && planData.servicePrice) {
@@ -238,11 +358,25 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
     return renewalType === 'monthly' ? planData.price.monthly : planData.price.semiannual;
   };
 
-  const isCurrentPlanService = (planId: SubscriptionPlanType): boolean => {
-    return dynamicPlans[planId]?.planType === 'service';
+  const isCurrentPlanService = (planId: string): boolean => {
+    return dynamicPlans[planId as SubscriptionPlanType]?.planType === 'service';
   };
 
   if (!lubricentro) return null;
+
+  const availablePlansEntries = Object.entries(dynamicPlans).filter(([planId, planData]) => {
+    return planData && planData.name && planData.price;
+  });
+
+  console.log('📋 Modal - Planes disponibles para mostrar:', {
+    total: availablePlansEntries.length,
+    plans: availablePlansEntries.map(([id, data]) => ({
+      id,
+      name: data.name,
+      type: data.planType,
+      price: data.price
+    }))
+  });
 
   return (
     <Modal 
@@ -275,75 +409,124 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Plan de Suscripción
           </label>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Object.entries(dynamicPlans).map(([planId, planData]) => {
-              const isServicePlan = planData.planType === 'service';
-              return (
-                <div 
-                  key={planId}
-                  className={`border rounded-lg p-4 cursor-pointer transition-colors
-                    ${plan === planId ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                  onClick={() => setPlan(planId as SubscriptionPlanType)}
-                >
-                  <h3 className="text-lg font-medium text-gray-900">{planData.name}</h3>
-                  
-                  {isServicePlan ? (
-                    <>
-                      <p className="text-sm text-primary-600 font-medium">
-                        ${(planData.servicePrice || 0).toLocaleString()} - Pago único
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {planData.totalServices || 0} servicios incluidos
-                      </p>
-                      {planData.validityMonths && (
+          
+          {availablePlansEntries.length === 0 ? (
+            <div className="text-center py-8 border-2 border-dashed border-gray-300 rounded-lg">
+              <p className="text-gray-500">
+                No se encontraron planes disponibles. 
+                <br />
+                Verifique la configuración de planes en el sistema.
+              </p>
+            </div>
+          ) : (
+            <div className={`grid gap-4 ${
+              availablePlansEntries.length <= 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' :
+              availablePlansEntries.length <= 6 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' :
+              'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+            }`}>
+              {availablePlansEntries.map(([planId, planData]) => {
+                const isServicePlan = planData.planType === 'service';
+                const isSelected = plan === planId;
+                
+                return (
+                  <div 
+                    key={planId}
+                    className={`border rounded-lg p-4 cursor-pointer transition-colors hover:shadow-md ${
+                      isSelected 
+                        ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200' 
+                        : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                    onClick={() => {
+                      console.log('🖱️ Seleccionando plan:', planId);
+                      setPlan(planId);
+                    }}
+                  >
+                    {isSelected && (
+                      <div className="flex justify-end mb-2">
+                        <div className="w-6 h-6 bg-primary-500 rounded-full flex items-center justify-center">
+                          <CheckIcon className="w-4 h-4 text-white" />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="mb-2">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        isServicePlan 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-blue-100 text-blue-800'
+                      }`}>
+                        {isServicePlan ? '🔧 Por Servicios' : '📅 Mensual'}
+                      </span>
+                    </div>
+                    
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      {planData.name}
+                    </h3>
+                    
+                    {isServicePlan ? (
+                      <>
+                        <p className="text-lg font-semibold text-primary-600 mb-1">
+                          ${(planData.servicePrice || 0).toLocaleString()} - Pago único
+                        </p>
+                        <p className="text-sm text-gray-600 mb-2">
+                          {planData.totalServices || 0} servicios incluidos
+                        </p>
+                        {planData.validityMonths && (
+                          <p className="text-xs text-gray-500">
+                            Válido por {planData.validityMonths} meses
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-lg font-semibold text-gray-900 mb-1">
+                          ${planData.price.monthly.toLocaleString()} /mes
+                        </p>
+                        {planData.price.semiannual && planData.price.semiannual !== planData.price.monthly && (
+                          <p className="text-sm text-gray-600 mb-2">
+                            ${planData.price.semiannual.toLocaleString()} /semestral
+                          </p>
+                        )}
+                      </>
+                    )}
+                    
+                    <div className="space-y-1">
+                      {planData.maxUsers && (
                         <p className="text-xs text-gray-500">
-                          Válido por {planData.validityMonths} meses
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm text-gray-500">
-                        ${planData.price.monthly.toLocaleString()} /mes
-                      </p>
-                      {planData.price.semiannual && (
-                        <p className="text-xs text-gray-400">
-                          ${planData.price.semiannual.toLocaleString()} /semestral
-                        </p>
-                      )}
-                    </>
-                  )}
-                  
-                  {/* Mostrar límites según el tipo de plan */}
-                  {isServicePlan ? (
-                    // Para planes por servicios, mostrar servicios totales
-                    planData.totalServices && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {planData.totalServices} servicios incluidos
-                      </p>
-                    )
-                  ) : (
-                    // Para planes mensuales, mostrar límite mensual
-                    <>
-                      {planData.maxMonthlyServices && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          {planData.maxMonthlyServices} servicios/mes
+                          👥 {planData.maxUsers === 999 ? 'Usuarios ilimitados' : `${planData.maxUsers} usuarios`}
                         </p>
                       )}
                       
-                      {planData.maxMonthlyServices === null && (
-                        <p className="text-xs text-green-600 font-medium mt-1">
-                          Servicios ilimitados
+                      {isServicePlan ? (
+                        planData.totalServices && (
+                          <p className="text-xs text-gray-500">
+                            🔧 {planData.totalServices} servicios totales
+                          </p>
+                        )
+                      ) : (
+                        <p className="text-xs text-gray-500">
+                          🔧 {planData.maxMonthlyServices === null 
+                            ? 'Servicios ilimitados' 
+                            : `${planData.maxMonthlyServices} servicios/mes`}
                         </p>
                       )}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    </div>
+
+                    {planData.recommended && (
+                      <div className="mt-2">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          ⭐ Recomendado
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
+        {/* Solo mostrar opciones de facturación para planes no-servicios */}
         {!isCurrentPlanService(plan) && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -351,76 +534,122 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
             </label>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div 
-                className={`border rounded-lg p-4 cursor-pointer transition-colors
-                  ${renewalType === 'monthly' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                  renewalType === 'monthly' 
+                    ? 'border-primary-500 bg-primary-50' 
+                    : 'border-gray-200 hover:bg-gray-50'
+                }`}
                 onClick={() => setRenewalType('monthly')}
               >
-                <h3 className="text-lg font-medium text-gray-900">Mensual</h3>
-                <p className="text-sm text-gray-500">Facturación cada mes</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">Mensual</h3>
+                    <p className="text-sm text-gray-500">Facturación cada mes</p>
+                  </div>
+                  {renewalType === 'monthly' && (
+                    <CheckIcon className="w-5 h-5 text-primary-500" />
+                  )}
+                </div>
               </div>
+              
               <div 
-                className={`border rounded-lg p-4 cursor-pointer transition-colors
-                  ${renewalType === 'semiannual' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                  renewalType === 'semiannual' 
+                    ? 'border-primary-500 bg-primary-50' 
+                    : 'border-gray-200 hover:bg-gray-50'
+                }`}
                 onClick={() => setRenewalType('semiannual')}
               >
-                <h3 className="text-lg font-medium text-gray-900">Semestral</h3>
-                <p className="text-sm text-gray-500">Facturación cada 6 meses</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">Semestral</h3>
+                    <p className="text-sm text-gray-500">Facturación cada 6 meses</p>
+                  </div>
+                  {renewalType === 'semiannual' && (
+                    <CheckIcon className="w-5 h-5 text-primary-500" />
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* Renovación automática - Solo para planes mensuales */}
         {!isCurrentPlanService(plan) && (
           <div>
-            <label className="flex items-center">
+            <label className="flex items-center space-x-3 p-4 border rounded-lg cursor-pointer hover:bg-gray-50">
               <input
                 type="checkbox"
                 checked={autoRenewal}
                 onChange={(e) => setAutoRenewal(e.target.checked)}
                 className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
               />
-              <span className="ml-2 text-sm text-gray-900">
-                Renovación automática
-              </span>
+              <div>
+                <span className="text-sm font-medium text-gray-900">
+                  Renovación automática
+                </span>
+                <p className="text-xs text-gray-500">
+                  El plan se renovará automáticamente al final de cada período
+                </p>
+              </div>
             </label>
           </div>
         )}
         
+        {/* Resumen de la selección */}
         <div className="bg-gray-50 p-4 rounded-lg">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Resumen</h3>
-          <div className="space-y-2 text-sm text-gray-700">
+          <h3 className="text-lg font-medium text-gray-900 mb-3">Resumen</h3>
+          <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span>Plan:</span>
-              <span className="font-medium">{dynamicPlans[plan]?.name || 'Plan no disponible'}</span>
+              <span className="text-gray-600">Plan:</span>
+              <span className="font-medium text-gray-900">
+                {dynamicPlans[plan as SubscriptionPlanType]?.name || 'Plan no disponible'}
+              </span>
             </div>
             
             {isCurrentPlanService(plan) ? (
               <>
                 <div className="flex justify-between">
-                  <span>Tipo:</span>
-                  <span className="font-medium">Pago único por servicios</span>
+                  <span className="text-gray-600">Tipo:</span>
+                  <span className="font-medium text-gray-900">Pago único por servicios</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Servicios:</span>
-                  <span className="font-medium">{dynamicPlans[plan]?.totalServices || 0}</span>
+                  <span className="text-gray-600">Servicios:</span>
+                  <span className="font-medium text-gray-900">
+                    {dynamicPlans[plan as SubscriptionPlanType]?.totalServices || 0}
+                  </span>
                 </div>
-                {dynamicPlans[plan]?.validityMonths && (
+                {dynamicPlans[plan as SubscriptionPlanType]?.validityMonths && (
                   <div className="flex justify-between">
-                    <span>Validez:</span>
-                    <span className="font-medium">{dynamicPlans[plan].validityMonths} meses</span>
+                    <span className="text-gray-600">Validez:</span>
+                    <span className="font-medium text-gray-900">
+                      {dynamicPlans[plan as SubscriptionPlanType].validityMonths} meses
+                    </span>
                   </div>
                 )}
               </>
             ) : (
-              <div className="flex justify-between">
-                <span>Facturación:</span>
-                <span className="font-medium">{renewalType === 'monthly' ? 'Mensual' : 'Semestral'}</span>
-              </div>
+              <>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Facturación:</span>
+                  <span className="font-medium text-gray-900">
+                    {renewalType === 'monthly' ? 'Mensual' : 'Semestral'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Renovación automática:</span>
+                  <span className="font-medium text-gray-900">
+                    {autoRenewal ? 'Activada' : 'Desactivada'}
+                  </span>
+                </div>
+              </>
             )}
             
-            <div className="flex justify-between border-t pt-2">
-              <span className="font-medium">Total:</span>
-              <span className="font-bold text-primary-600">${calculatePrice().toLocaleString()}</span>
+            <div className="flex justify-between pt-2 border-t border-gray-200">
+              <span className="font-medium text-gray-900">Total:</span>
+              <span className="font-bold text-lg text-primary-600">
+                ${calculatePrice().toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
@@ -441,86 +670,96 @@ const LubricentroSubscriptionPage: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [lubricentro, setLubricentro] = useState<Lubricentro | null>(null);
   const [activeTab, setActiveTab] = useState('info');
+
+  const [dynamicPlans, setDynamicPlans] = useState<Record<string, SubscriptionPlan>>({});
   
-  const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, SubscriptionPlan>>({
-    starter: { 
-      id: 'starter', 
-      name: 'Cargando...', 
-      description: '', 
-      planType: PlanType.MONTHLY,
-      price: { monthly: 0, semiannual: 0 }, 
-      maxUsers: 0, 
-      maxMonthlyServices: 0, 
-      features: [] 
-    },
-    basic: { 
-      id: 'basic', 
-      name: 'Cargando...', 
-      description: '', 
-      planType: PlanType.MONTHLY,
-      price: { monthly: 0, semiannual: 0 }, 
-      maxUsers: 0, 
-      maxMonthlyServices: 0, 
-      features: [] 
-    },
-    premium: { 
-      id: 'premium', 
-      name: 'Cargando...', 
-      description: '', 
-      planType: PlanType.MONTHLY,
-      price: { monthly: 0, semiannual: 0 }, 
-      maxUsers: 0, 
-      maxMonthlyServices: 0, 
-      features: [] 
-    },
-    enterprise: { 
-      id: 'enterprise', 
-      name: 'Cargando...', 
-      description: '', 
-      planType: PlanType.MONTHLY,
-      price: { monthly: 0, semiannual: 0 }, 
-      maxUsers: 0, 
-      maxMonthlyServices: 0, 
-      features: [] 
-    }
-  });
+
   
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
+  
+  // 🔧 FUNCIÓN CORREGIDA loadData
+const loadData = async () => {
+  if (!id) return;
+  
+  try {
+    setLoading(true);
+    setLoadingPlans(true);
+    setError(null);
+    
+    console.log('🔄 LubricentroSubscriptionPage - Iniciando carga de datos...');
+    
+    // Invalidar cache para obtener datos frescos
+    invalidatePlansCache();
+    
+    // 🔧 USAR LA NUEVA FUNCIÓN para obtener TODOS los planes
+    const [lubricentroData, allPlansData] = await Promise.all([
+      getLubricentroById(id),
+      getAllDynamicPlans()
+    ]);
+    
+    console.log('📋 Datos cargados:', {
+      lubricentro: {
+        id: lubricentroData.id,
+        name: lubricentroData.fantasyName,
+        currentPlan: lubricentroData.subscriptionPlan,
+        estado: lubricentroData.estado
+      },
+      planes: {
+        standard: Object.keys(allPlansData.standardPlans).length,
+        dynamic: Object.keys(allPlansData.dynamicPlans).length,
+        total: allPlansData.totalCount,
+        allPlanIds: Object.keys(allPlansData.allPlans),
+        planNames: Object.values(allPlansData.allPlans).map(p => p.name)
+      }
+    });
+    
+    // Verificar que se obtuvieron datos válidos
+    if (!lubricentroData) {
+      throw new Error('No se pudo cargar la información del lubricentro');
+    }
+    
+    if (!allPlansData.allPlans || Object.keys(allPlansData.allPlans).length === 0) {
+      console.warn('⚠️ No se cargaron planes dinámicos, intentando recarga...');
+      
+      // Intentar recargar planes una vez más
+      try {
+        const retryPlans = await getSubscriptionPlans();
+        if (retryPlans && Object.keys(retryPlans).length > 0) {
+          setDynamicPlans(retryPlans as Record<string, SubscriptionPlan>);
+          console.log('✅ Planes recargados exitosamente en segundo intento');
+        } else {
+          throw new Error('No hay planes disponibles');
+        }
+      } catch (retryError) {
+        console.error('❌ Error en segundo intento de carga de planes:', retryError);
+        setError('No se pudieron cargar los planes de suscripción. Verifique la configuración del sistema.');
+        return;
+      }
+    } else {
+      // 🔧 Usar todos los planes (estándar + dinámicos)
+      setDynamicPlans(allPlansData.allPlans);
+    }
+    
+    setLubricentro(lubricentroData);
+    
+    console.log('✅ Carga de datos completada exitosamente');
+    
+  } catch (err) {
+    console.error('❌ Error al cargar datos:', err);
+    setError('Error al cargar los datos del lubricentro. Por favor, intente nuevamente.');
+  } finally {
+    setLoading(false);
+    setLoadingPlans(false);
+  }
+};
   
   useEffect(() => {
     if (id) {
       loadData();
     }
   }, [id]);
-  
-  const loadData = async () => {
-    if (!id) return;
-    
-    try {
-      setLoading(true);
-      setLoadingPlans(true);
-      setError(null);
-      
-      invalidatePlansCache();
-      
-      const [lubricentroData, plansData] = await Promise.all([
-        getLubricentroById(id),
-        getSubscriptionPlans()
-      ]);
-      
-      setLubricentro(lubricentroData);
-      setDynamicPlans(plansData);
-      
-    } catch (err) {
-      console.error('Error al cargar datos:', err);
-      setError('Error al cargar los datos del lubricentro. Por favor, intente nuevamente.');
-    } finally {
-      setLoading(false);
-      setLoadingPlans(false);
-    }
-  };
   
   const handleChangeStatus = async (status: 'activo' | 'inactivo') => {
     if (!id) return;
@@ -549,57 +788,110 @@ const LubricentroSubscriptionPage: React.FC = () => {
     return renewalType === 'monthly' ? planData.price.monthly : planData.price.semiannual;
   };
   
-  const handleUpdateSubscription = async (
-    plan: SubscriptionPlanType,
-    renewalType: 'monthly' | 'semiannual',
-    autoRenewal: boolean
-  ) => {
-    if (!lubricentro) {
-      setError('No se encontró la información del lubricentro');
-      return;
-    }
+const handleUpdateSubscription = async (
+  plan: SubscriptionPlanType,
+  renewalType: 'monthly' | 'semiannual',
+  autoRenewal: boolean
+) => {
+  if (!lubricentro) {
+    setError('No se encontró la información del lubricentro');
+    return;
+  }
+  
+  try {
+    setProcessing(true);
+    setError(null);
     
-    try {
-      setProcessing(true);
+    console.log('🚀 handleUpdateSubscription - Iniciando:', {
+      lubricentroId: lubricentro.id,
+      plan,
+      renewalType,
+      autoRenewal,
+      lubricentroName: lubricentro.fantasyName
+    });
+    
+    // 🔧 PASO 1: Actualizar la suscripción (esto cambia el estado a 'activo')
+    await updateSubscription(lubricentro.id, plan, renewalType, autoRenewal);
+    console.log('✅ Suscripción actualizada');
+    
+    // 🔧 PASO 2: Registrar el pago automáticamente
+    const planData = dynamicPlans[plan];
+    if (planData) {
+      let paymentAmount = 0;
+      let paymentDescription = '';
       
-      const paymentAmount = calculatePrice(plan, renewalType);
-      
-      await updateSubscription(lubricentro.id, plan, renewalType, autoRenewal);
-      
-      if (paymentAmount > 0) {
-        await recordPayment(lubricentro.id, paymentAmount, 'admin_update', `admin_update_${Date.now()}`);
+      if (planData.planType === 'service' && planData.servicePrice) {
+        paymentAmount = planData.servicePrice;
+        paymentDescription = `Pago único - ${planData.name}`;
+      } else {
+        paymentAmount = renewalType === 'monthly' ? planData.price.monthly : planData.price.semiannual;
+        paymentDescription = `Pago ${renewalType === 'monthly' ? 'mensual' : 'semestral'} - ${planData.name}`;
       }
       
-      await loadData();
-      setIsSubscriptionModalOpen(false);
-      setSuccess('Suscripción actualizada correctamente');
-    } catch (err: any) {
-      console.error('Error al actualizar la suscripción:', err);
-      setError(`Error al actualizar la suscripción: ${err.message}`);
-    } finally {
-      setProcessing(false);
-    }
-  };
-  
-  const handleRecordPayment = async (amount: number, method: string, reference: string) => {
-    if (!lubricentro) {
-      setError('No se encontró la información del lubricentro');
-      return;
+      if (paymentAmount > 0) {
+        console.log('💰 Registrando pago automático:', {
+          amount: paymentAmount,
+          description: paymentDescription
+        });
+        
+        await recordPayment(
+          lubricentro.id, 
+          paymentAmount, 
+          'admin_update', 
+          `admin_update_${Date.now()}`
+        );
+        console.log('✅ Pago registrado');
+      }
     }
     
-    try {
-      setProcessing(true);
-      await recordPayment(lubricentro.id, amount, method, reference);
-      await loadData();
-      setIsPaymentModalOpen(false);
-      setSuccess('Pago registrado correctamente');
-    } catch (err: any) {
-      console.error('Error al registrar el pago:', err);
-      setError(`Error al registrar el pago: ${err.message}`);
-    } finally {
-      setProcessing(false);
-    }
-  };
+    // 🔧 PASO 3: Recargar datos para reflejar cambios
+    await loadData();
+    console.log('✅ Datos recargados');
+    
+    // 🔧 PASO 4: Cerrar modal y mostrar éxito
+    setIsSubscriptionModalOpen(false);
+    setSuccess(`Suscripción actualizada correctamente a: ${planData?.name || plan}`);
+    
+  } catch (err: any) {
+    console.error('❌ Error al actualizar la suscripción:', err);
+    setError(`Error al actualizar la suscripción: ${err.message}`);
+  } finally {
+    setProcessing(false);
+  }
+};
+  
+const handleRecordPayment = async (amount: number, method: string, reference: string) => {
+  if (!lubricentro) {
+    setError('No se encontró la información del lubricentro');
+    return;
+  }
+  
+  try {
+    setProcessing(true);
+    setError(null);
+    
+    console.log('💰 handleRecordPayment - Registrando pago manual:', {
+      lubricentroId: lubricentro.id,
+      amount,
+      method,
+      reference,
+      currentPlan: lubricentro.subscriptionPlan
+    });
+    
+    await recordPayment(lubricentro.id, amount, method, reference);
+    console.log('✅ Pago manual registrado');
+    
+    await loadData();
+    setIsPaymentModalOpen(false);
+    setSuccess('Pago registrado correctamente');
+    
+  } catch (err: any) {
+    console.error('❌ Error al registrar el pago:', err);
+    setError(`Error al registrar el pago: ${err.message}`);
+  } finally {
+    setProcessing(false);
+  }
+};
   
   const formatDate = (date: any): string => {
     if (!date) return 'No disponible';
@@ -720,6 +1012,13 @@ const LubricentroSubscriptionPage: React.FC = () => {
           {success}
         </Alert>
       )}
+
+      {/* 🔍 DEBUG INFO - Remover en producción */}
+      <PlansDebugInfo 
+        dynamicPlans={dynamicPlans}
+        loadingPlans={loadingPlans}
+        lubricentro={lubricentro}
+      />
       
       <div className="bg-white shadow rounded-lg mb-6">
         <div className="px-4 py-5 sm:p-6">
@@ -879,16 +1178,123 @@ const LubricentroSubscriptionPage: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Límite de Servicios Mensuales</label>
+                    <label className="block text-sm font-medium text-gray-700">
+                      {/* 🔧 CORRECCIÓN: Título dinámico según tipo de plan */}
+                      {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]?.planType === 'service'
+                        ? 'Servicios del Paquete'
+                        : 'Límite de Servicios Mensuales'}
+                    </label>
                     <div className="mt-1 text-lg font-medium text-gray-900">
-                      {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
-                        ? dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices === null
-                          ? 'Ilimitados'
-                          : `${dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices} servicios`
-                        : 'No definido'}
+                      {(() => {
+                        if (!lubricentro.subscriptionPlan || !dynamicPlans[lubricentro.subscriptionPlan]) {
+                          return 'No definido';
+                        }
+                        
+                        const currentPlan = dynamicPlans[lubricentro.subscriptionPlan];
+                        
+                        // 🔧 CORRECCIÓN: Lógica específica para cada tipo de plan
+                        if (currentPlan.planType === 'service') {
+                          // Para planes por servicios, mostrar servicios totales del paquete
+                          const totalServices = currentPlan.totalServices || 0;
+                          const usedServices = lubricentro.servicesUsed || 0;
+                          const remainingServices = lubricentro.servicesRemaining || totalServices;
+                          
+                          return (
+                            <div>
+                              <div className="text-lg font-medium">
+                                {totalServices} servicios totales
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                Usados: {usedServices} • Restantes: {remainingServices}
+                              </div>
+                              {currentPlan.validityMonths && (
+                                <div className="text-xs text-gray-500">
+                                  Válido por {currentPlan.validityMonths} meses
+                                </div>
+                              )}
+                            </div>
+                          );
+                        } else {
+                          // Para planes mensuales tradicionales
+                          if (currentPlan.maxMonthlyServices === null) {
+                            return 'Ilimitados';
+                          } else {
+                            const monthlyLimit = currentPlan.maxMonthlyServices;
+                            const monthlyUsed = lubricentro.servicesUsedThisMonth || 0;
+                            const monthlyRemaining = Math.max(0, monthlyLimit - monthlyUsed);
+                            
+                            return (
+                              <div>
+                                <div className="text-lg font-medium">
+                                  {monthlyLimit} servicios/mes
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  Usados este mes: {monthlyUsed} • Restantes: {monthlyRemaining}
+                                </div>
+                              </div>
+                            );
+                          }
+                        }
+                      })()}
                     </div>
                   </div>
                 </div>
+                
+                {/* 🔧 NUEVA SECCIÓN: Información adicional para planes por servicios */}
+                {lubricentro.subscriptionPlan && 
+                dynamicPlans[lubricentro.subscriptionPlan]?.planType === 'service' && (
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <h4 className="text-sm font-medium text-blue-900 mb-2">
+                      ℹ️ Información del Plan por Servicios
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-blue-700 font-medium">Servicios Contratados:</span>
+                        <div className="text-blue-900">
+                          {lubricentro.totalServicesContracted || dynamicPlans[lubricentro.subscriptionPlan].totalServices || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-blue-700 font-medium">Servicios Utilizados:</span>
+                        <div className="text-blue-900">
+                          {lubricentro.servicesUsed || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-blue-700 font-medium">Servicios Restantes:</span>
+                        <div className="text-blue-900 font-semibold">
+                          {lubricentro.servicesRemaining || 0}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Barra de progreso para planes por servicios */}
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-blue-700 mb-1">
+                        <span>Progreso de uso</span>
+                        <span>
+                          {lubricentro.servicesUsed || 0} / {lubricentro.totalServicesContracted || 0}
+                        </span>
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ 
+                            width: `${Math.min(100, ((lubricentro.servicesUsed || 0) / 
+                              (lubricentro.totalServicesContracted || 1)) * 100)}%`
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    {/* Fecha de expiración para planes por servicios */}
+                    {lubricentro.serviceSubscriptionExpiryDate && (
+                      <div className="mt-2 text-xs text-blue-600">
+                        <strong>Expira:</strong> {formatDate(lubricentro.serviceSubscriptionExpiryDate)}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardBody>
             </Card>
           </div>
@@ -1075,82 +1481,173 @@ const LubricentroSubscriptionPage: React.FC = () => {
       
       {activeTab === 'usage' && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader title="Uso de Servicios" subtitle="Servicios utilizados en el período actual" />
-            <CardBody>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Servicios Usados (Mes Actual)
-                  </label>
-                  <div className="mt-1 flex items-end">
-                    <span className="text-3xl font-bold text-gray-900">
-                      {lubricentro.servicesUsedThisMonth || 0}
-                    </span>
-                    {lubricentro.subscriptionPlan && 
-                     dynamicPlans[lubricentro.subscriptionPlan] &&
-                     dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices !== null && (
-                      <span className="ml-2 text-sm text-gray-500">
-                        de {dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices}
-                      </span>
-                    )}
-                  </div>
-
-                  {lubricentro.subscriptionPlan && 
-                   dynamicPlans[lubricentro.subscriptionPlan] &&
-                   dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices !== null && (
-                    <div className="mt-2">
-                      <div className="bg-gray-200 rounded-full h-2.5 w-full">
-                        <div 
-                          className="bg-primary-600 h-2.5 rounded-full" 
-                          style={{ 
-                            width: `${Math.min(100, ((lubricentro.servicesUsedThisMonth || 0) / 
-                              (dynamicPlans[lubricentro.subscriptionPlan]?.maxMonthlyServices || 100)) * 100)}%`
-                          }}
-                        ></div>
+        <Card>
+          <CardHeader title="Uso de Servicios" subtitle="Servicios utilizados en el período actual" />
+          <CardBody>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* 🔧 PRIMERA COLUMNA: Información específica según tipo de plan */}
+              <div>
+                {(() => {
+                  if (!lubricentro.subscriptionPlan || !dynamicPlans[lubricentro.subscriptionPlan]) {
+                    return (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Estado</label>
+                        <div className="mt-1 text-lg font-medium text-gray-900">Sin plan asignado</div>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {Math.max(0, (dynamicPlans[lubricentro.subscriptionPlan]?.maxMonthlyServices || 0) - 
-                          (lubricentro.servicesUsedThisMonth || 0))} servicios disponibles
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Usuarios Activos</label>
-                  <div className="mt-1 flex items-end">
-                    <span className="text-3xl font-bold text-gray-900">
-                      {lubricentro.activeUserCount || 0}
-                    </span>
-                    {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
-                      <span className="ml-2 text-sm text-gray-500">
-                        de {dynamicPlans[lubricentro.subscriptionPlan].maxUsers}
-                      </span>
-                    )}
-                  </div>
-
-                  {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
-                    <div className="mt-2">
-                      <div className="bg-gray-200 rounded-full h-2.5 w-full">
-                        <div 
-                          className="bg-primary-600 h-2.5 rounded-full" 
-                          style={{ 
-                            width: `${Math.min(100, ((lubricentro.activeUserCount || 0) / 
-                              dynamicPlans[lubricentro.subscriptionPlan].maxUsers) * 100)}%` 
-                          }}
-                        ></div>
+                    );
+                  }
+                  
+                  const currentPlan = dynamicPlans[lubricentro.subscriptionPlan];
+                  
+                  if (currentPlan.planType === 'service') {
+                    // 🔧 VISTA PARA PLANES POR SERVICIOS
+                    const totalServices = lubricentro.totalServicesContracted || currentPlan.totalServices || 0;
+                    const usedServices = lubricentro.servicesUsed || 0;
+                    const remainingServices = lubricentro.servicesRemaining || (totalServices - usedServices);
+                    
+                    return (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Servicios del Paquete
+                        </label>
+                        <div className="mt-1 flex items-end">
+                          <span className="text-3xl font-bold text-gray-900">
+                            {usedServices}
+                          </span>
+                          <span className="ml-2 text-sm text-gray-500">
+                            de {totalServices} servicios
+                          </span>
+                        </div>
+                        
+                        <div className="mt-2">
+                          <div className="bg-gray-200 rounded-full h-2.5 w-full">
+                            <div 
+                              className="bg-green-600 h-2.5 rounded-full transition-all duration-300" 
+                              style={{ 
+                                width: `${Math.min(100, totalServices > 0 ? (usedServices / totalServices) * 100 : 0)}%`
+                              }}
+                            ></div>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {remainingServices} servicios restantes
+                          </p>
+                        </div>
+                        
+                        {/* Información adicional del paquete */}
+                        <div className="mt-3 p-3 bg-green-50 rounded-lg">
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-green-700">Paquete:</span>
+                              <span className="font-medium text-green-900">{currentPlan.name}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-green-700">Precio pagado:</span>
+                              <span className="font-medium text-green-900">
+                                ${(currentPlan.servicePrice || 0).toLocaleString()}
+                              </span>
+                            </div>
+                            {lubricentro.serviceSubscriptionExpiryDate && (
+                              <div className="flex justify-between">
+                                <span className="text-green-700">Expira:</span>
+                                <span className="font-medium text-green-900">
+                                  {formatDate(lubricentro.serviceSubscriptionExpiryDate)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">
-                        {Math.max(0, dynamicPlans[lubricentro.subscriptionPlan].maxUsers - 
-                          (lubricentro.activeUserCount || 0))} usuarios disponibles
-                      </p>
-                    </div>
-                  )}
-                </div>
+                    );
+                  } else {
+                    // 🔧 VISTA PARA PLANES MENSUALES
+                    const monthlyUsed = lubricentro.servicesUsedThisMonth || 0;
+                    const monthlyLimit = currentPlan.maxMonthlyServices;
+                    
+                    return (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">
+                          Servicios Usados (Mes Actual)
+                        </label>
+                        <div className="mt-1 flex items-end">
+                          <span className="text-3xl font-bold text-gray-900">
+                            {monthlyUsed}
+                          </span>
+                          {monthlyLimit !== null && (
+                            <span className="ml-2 text-sm text-gray-500">
+                              de {monthlyLimit} servicios
+                            </span>
+                          )}
+                          {monthlyLimit === null && (
+                            <span className="ml-2 text-sm text-gray-500">
+                              servicios (ilimitados)
+                            </span>
+                          )}
+                        </div>
+
+                        {monthlyLimit !== null && (
+                          <div className="mt-2">
+                            <div className="bg-gray-200 rounded-full h-2.5 w-full">
+                              <div 
+                                className="bg-primary-600 h-2.5 rounded-full transition-all duration-300" 
+                                style={{ 
+                                  width: `${Math.min(100, (monthlyUsed / monthlyLimit) * 100)}%`
+                                }}
+                              ></div>
+                            </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {Math.max(0, monthlyLimit - monthlyUsed)} servicios disponibles este mes
+                            </p>
+                          </div>
+                        )}
+                        
+                        {monthlyLimit === null && (
+                          <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                            <p className="text-sm text-blue-700">
+                              ✨ Plan con servicios ilimitados
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                })()}
               </div>
-            </CardBody>
-          </Card>
+
+              {/* 🔧 SEGUNDA COLUMNA: Usuarios (sin cambios) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Usuarios Activos</label>
+                <div className="mt-1 flex items-end">
+                  <span className="text-3xl font-bold text-gray-900">
+                    {lubricentro.activeUserCount || 0}
+                  </span>
+                  {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
+                    <span className="ml-2 text-sm text-gray-500">
+                      de {dynamicPlans[lubricentro.subscriptionPlan].maxUsers}
+                    </span>
+                  )}
+                </div>
+
+                {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
+                  <div className="mt-2">
+                    <div className="bg-gray-200 rounded-full h-2.5 w-full">
+                      <div 
+                        className="bg-primary-600 h-2.5 rounded-full transition-all duration-300" 
+                        style={{ 
+                          width: `${Math.min(100, ((lubricentro.activeUserCount || 0) / 
+                            dynamicPlans[lubricentro.subscriptionPlan].maxUsers) * 100)}%` 
+                        }}
+                      ></div>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {Math.max(0, dynamicPlans[lubricentro.subscriptionPlan].maxUsers - 
+                        (lubricentro.activeUserCount || 0))} usuarios disponibles
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
 
           {lubricentro.servicesUsedHistory && Object.keys(lubricentro.servicesUsedHistory).length > 0 && (
             <Card>

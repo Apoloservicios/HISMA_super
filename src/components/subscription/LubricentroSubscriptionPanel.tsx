@@ -221,19 +221,31 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
   const [autoRenewal, setAutoRenewal] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    console.log('🔄 UpdateSubscriptionModal - Inicializando', {
-      lubricentroName: lubricentro.fantasyName,
-      currentPlan: lubricentro.subscriptionPlan,
-      availablePlans: Object.keys(dynamicPlans)
-    });
+useEffect(() => {
+  console.log('🔄 UpdateSubscriptionModal - Inicializando', {
+    lubricentroName: lubricentro.fantasyName,
+    currentPlan: lubricentro.subscriptionPlan,
+    currentRenewalType: lubricentro.subscriptionRenewalType,
+    availablePlans: Object.keys(dynamicPlans)
+  });
 
-    if (lubricentro) {
-      setPlan(lubricentro.subscriptionPlan || 'basic');
-      setRenewalType(lubricentro.subscriptionRenewalType || 'monthly');
-      setAutoRenewal(lubricentro.autoRenewal !== false);
+  if (lubricentro) {
+    setPlan(lubricentro.subscriptionPlan || 'basic');
+    
+    // 🔧 CORRECCIÓN: Manejar correctamente el tipo 'service'
+    const currentRenewalType = lubricentro.subscriptionRenewalType;
+    if (currentRenewalType === 'service') {
+      // Para planes por servicios, usar 'monthly' como default en el UI
+      setRenewalType('monthly');
+    } else if (currentRenewalType === 'monthly' || currentRenewalType === 'semiannual') {
+      setRenewalType(currentRenewalType);
+    } else {
+      setRenewalType('monthly');
     }
-  }, [lubricentro, dynamicPlans]);
+    
+    setAutoRenewal(lubricentro.autoRenewal !== false);
+  }
+}, [lubricentro, dynamicPlans]);
 
   const handleSubmit = async () => {
     try {

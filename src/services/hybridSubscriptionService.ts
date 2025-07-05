@@ -201,46 +201,71 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
     });
     
     if (managedPlans.length > 0) {
-      // Convertir a formato compatible
-      const dynamicPlans: Partial<Record<SubscriptionPlanType, SubscriptionPlan>> = {};
+      // 🔧 NUEVA ESTRATEGIA: Crear un mapa extendido que incluya TODOS los planes
+      const allPlansMap: Record<string, SubscriptionPlan> = {};
       
+      // Primero, agregar todos los planes dinámicos con sus IDs originales
       managedPlans.forEach((managedPlan) => {
         console.log(`🔄 Procesando plan: ${managedPlan.id} (${managedPlan.name})`);
         
-        // Intentar mapear el ID al tipo estándar
-        const mappedType = mapPlanIdToStandardType(managedPlan.id);
+        const convertedPlan = convertManagedPlan(managedPlan);
         
+        // Agregar el plan con su ID original
+        allPlansMap[managedPlan.id] = convertedPlan;
+        
+        // También intentar mapear a tipo estándar (pero sin sobrescribir)
+        const mappedType = mapPlanIdToStandardType(managedPlan.id);
         if (mappedType) {
-          console.log(`✅ Plan ${managedPlan.id} mapeado a: ${mappedType}`);
-          dynamicPlans[mappedType] = convertManagedPlan(managedPlan);
+          console.log(`✅ Plan ${managedPlan.id} también mapeado a: ${mappedType}`);
+          
+          // Solo mapear si no existe ya un plan con ese tipo estándar
+          if (!allPlansMap[mappedType]) {
+            allPlansMap[mappedType] = convertedPlan;
+          } else {
+            console.log(`⚠️ Ya existe un plan ${mappedType}, manteniendo ambos separados`);
+          }
         } else {
           console.warn(`⚠️ Plan ${managedPlan.id} no pudo ser mapeado a un tipo estándar`);
         }
       });
       
-      console.log('🎯 Planes dinámicos procesados:', Object.keys(dynamicPlans));
+      console.log('🎯 Todos los planes procesados:', {
+        totalPlanes: Object.keys(allPlansMap).length,
+        planIds: Object.keys(allPlansMap)
+      });
       
-      // Si encontramos planes válidos, completar con los que falten desde estáticos
-      if (Object.keys(dynamicPlans).length > 0) {
-        // Completar con planes estáticos para garantizar que todos estén presentes
-        const completePlans: Record<SubscriptionPlanType, SubscriptionPlan> = {
-          starter: dynamicPlans.starter || STATIC_PLANS.starter,
-          basic: dynamicPlans.basic || STATIC_PLANS.basic,
-          premium: dynamicPlans.premium || STATIC_PLANS.premium,
-          enterprise: dynamicPlans.enterprise || STATIC_PLANS.enterprise,
-        };
-        
-        console.log('✅ Planes finales combinados:', {
-          starter: { name: completePlans.starter.name, price: completePlans.starter.price },
-          basic: { name: completePlans.basic.name, price: completePlans.basic.price },
-          premium: { name: completePlans.premium.name, price: completePlans.premium.price },
-          enterprise: { name: completePlans.enterprise.name, price: completePlans.enterprise.price }
-        });
-        
-        plansCache = completePlans;
-        cacheTimestamp = now;
-        return completePlans;
-      }
+      // Asegurar que tengamos los 4 tipos estándar mínimos
+      const finalPlans: Record<SubscriptionPlanType, SubscriptionPlan> = {
+        starter: allPlansMap['starter'] || STATIC_PLANS.starter,
+        basic: allPlansMap['basic'] || STATIC_PLANS.basic,
+        premium: allPlansMap['premium'] || STATIC_PLANS.premium,
+        enterprise: allPlansMap['enterprise'] || STATIC_PLANS.enterprise,
+      };
+      
+      // 🔧 NUEVO: Agregar planes adicionales que no sean los tipos estándar
+      Object.entries(allPlansMap).forEach(([planId, planData]) => {
+        if (!['starter', 'basic', 'premium', 'enterprise'].includes(planId)) {
+          // Este es un plan adicional (como Plan50, P100, etc.)
+          console.log(`➕ Agregando plan adicional: ${planId}`);
+          
+          // Usar type assertion para agregar planes dinámicos
+          (finalPlans as any)[planId] = planData;
+        }
+      });
+      
+      console.log('✅ Planes finales combinados:', {
+        total: Object.keys(finalPlans).length,
+        planes: Object.entries(finalPlans).map(([key, plan]) => ({
+          id: key,
+          name: plan.name,
+          price: plan.price,
+          type: plan.planType
+        }))
+      });
+      
+      plansCache = finalPlans;
+      cacheTimestamp = now;
+      return finalPlans;
     }
     
     console.log('⚠️ No hay planes dinámicos válidos, usando fallback estático');
@@ -257,6 +282,49 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
     plansCache = { ...STATIC_PLANS };
     cacheTimestamp = now;
     return plansCache;
+  }
+};
+
+export const getAllDynamicPlans = async (): Promise<{
+  standardPlans: Record<SubscriptionPlanType, SubscriptionPlan>;
+  dynamicPlans: Record<string, SubscriptionPlan>;
+  allPlans: Record<string, SubscriptionPlan>;
+  totalCount: number;
+}> => {
+  try {
+    const allPlans = await getSubscriptionPlans();
+    
+    // Separar planes estándar de dinámicos
+    const standardPlans: Record<SubscriptionPlanType, SubscriptionPlan> = {
+      starter: allPlans.starter,
+      basic: allPlans.basic,
+      premium: allPlans.premium,
+      enterprise: allPlans.enterprise,
+    };
+    
+    const dynamicPlans: Record<string, SubscriptionPlan> = {};
+    
+    Object.entries(allPlans).forEach(([key, plan]) => {
+      if (!['starter', 'basic', 'premium', 'enterprise'].includes(key)) {
+        dynamicPlans[key] = plan;
+      }
+    });
+    
+    return {
+      standardPlans,
+      dynamicPlans,
+      allPlans: allPlans as Record<string, SubscriptionPlan>,
+      totalCount: Object.keys(allPlans).length
+    };
+    
+  } catch (error) {
+    console.error('Error al obtener planes dinámicos:', error);
+    return {
+      standardPlans: STATIC_PLANS,
+      dynamicPlans: {},
+      allPlans: STATIC_PLANS as Record<string, SubscriptionPlan>,
+      totalCount: Object.keys(STATIC_PLANS).length
+    };
   }
 };
 

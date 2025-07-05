@@ -362,50 +362,59 @@ const LubricentroDetailPage: React.FC = () => {
   };
 
   // Función para cambiar el plan de suscripción
-  const handleChangePlan = async (plan: SubscriptionPlanType) => {
-    if (!id) return;
+const handleChangePlan = async (plan: SubscriptionPlanType) => {
+  if (!id) return;
+  
+  // Solo continuar si hay un cambio de plan
+  if (lubricentro?.subscriptionPlan === plan) {
+    return;
+  }
+  
+  try {
+    setProcessingAction(true);
     
-    // Solo continuar si hay un cambio de plan
-    if (lubricentro?.subscriptionPlan === plan) {
-      return;
+    // 🔧 CORRECCIÓN: Determinar el tipo de renovación manejando 'service'
+    let renewalType: 'monthly' | 'semiannual' = 'monthly';
+    
+    const currentRenewalType = lubricentro?.subscriptionRenewalType;
+    if (currentRenewalType === 'monthly' || currentRenewalType === 'semiannual') {
+      renewalType = currentRenewalType;
+    } else {
+      // Para 'service' o undefined, usar 'monthly' como default
+      renewalType = 'monthly';
     }
     
-    try {
-      setProcessingAction(true);
-      
-      // Determinar el tipo de renovación (mantener el actual o usar mensual por defecto)
-      const renewalType = lubricentro?.subscriptionRenewalType || 'monthly';
-      
-      // Determinar la renovación automática (mantener o activar por defecto)
-      const autoRenewal = lubricentro?.autoRenewal !== false;
-      
-      // Llamar al servicio para actualizar la suscripción
-      if (!lubricentro) return;
-      await updateSubscription(
-        lubricentro.id,
-        plan,
-        renewalType,
-        autoRenewal
-      );
-      // Si necesitas registrar el cambio como pago, hazlo por separado:
-      await recordPayment(
-        lubricentro.id,
-        0, // Sin costo adicional por cambio de plan
-        'admin_update',
-        `plan_change_${Date.now()}`
-      );
-      
-      // Recargar datos
-      await loadData();
-      
-      setSuccess(`Plan actualizado a ${SUBSCRIPTION_PLANS[plan].name}`);
-    } catch (err) {
-      console.error('Error al cambiar el plan de suscripción:', err);
-      setError('Error al cambiar el plan de suscripción');
-    } finally {
-      setProcessingAction(false);
-    }
-  };
+    // Determinar la renovación automática (mantener o activar por defecto)
+    const autoRenewal = lubricentro?.autoRenewal !== false;
+    
+    // Llamar al servicio para actualizar la suscripción
+    if (!lubricentro) return;
+    await updateSubscription(
+      lubricentro.id,
+      plan,
+      renewalType, // ✅ Ahora es seguro porque siempre es 'monthly' | 'semiannual'
+      autoRenewal
+    );
+    
+    // Si necesitas registrar el cambio como pago, hazlo por separado:
+    await recordPayment(
+      lubricentro.id,
+      0, // Sin costo adicional por cambio de plan
+      'admin_update',
+      `plan_change_${Date.now()}`
+    );
+    
+    // Recargar datos
+    await loadData();
+    
+    setSuccess(`Plan actualizado a ${SUBSCRIPTION_PLANS[plan].name}`);
+  } catch (err) {
+    console.error('Error al cambiar el plan de suscripción:', err);
+    setError('Error al cambiar el plan de suscripción');
+  } finally {
+    setProcessingAction(false);
+  }
+};
 
   // Función para renovar el ciclo de facturación
   const handleUpdateBillingCycle = async () => {
