@@ -23,34 +23,30 @@ import {
   updateLubricentroStatus
 } from '../../services/lubricentroService';
 
-
 import {
   updateSubscription,
   recordPayment
 } from '../../services/subscriptionService';
 
-
 import { Lubricentro, SubscriptionPlanType } from '../../types';
 import { SubscriptionPlan, PlanType } from '../../types/subscription';
-import { getSubscriptionPlans } from '../../services/hybridSubscriptionService';
+import { getSubscriptionPlans, invalidatePlansCache } from '../../services/hybridSubscriptionService';
 
 // Iconos
 import { 
   BuildingOfficeIcon,
   CreditCardIcon,
   CalendarDaysIcon,
-  ClockIcon,
   ChevronLeftIcon,
   CheckIcon,
   XMarkIcon,
-  ArrowPathIcon,
   DocumentCheckIcon,
   CurrencyDollarIcon,
   UserGroupIcon,
   ChartBarIcon
 } from '@heroicons/react/24/outline';
 
-  // 2️⃣ INTERFACE CORREGIDA PARA MODALES
+// Interfaces para modales
 interface RecordPaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -58,7 +54,7 @@ interface RecordPaymentModalProps {
   lubricentro: Lubricentro | null;
   loading: boolean;
   dynamicPlans: Record<SubscriptionPlanType, SubscriptionPlan>;
-  loadingPlans: boolean; // 👉 AGREGAR ESTA LÍNEA
+  loadingPlans: boolean;
 }
 
 interface UpdateSubscriptionModalProps {
@@ -67,13 +63,10 @@ interface UpdateSubscriptionModalProps {
   onConfirm: (plan: SubscriptionPlanType, renewalType: 'monthly' | 'semiannual', autoRenewal: boolean) => Promise<void>;
   lubricentro: Lubricentro | null;
   loading: boolean;
-  // ✅ AGREGAR PLANES DINÁMICOS
   dynamicPlans: Record<SubscriptionPlanType, SubscriptionPlan>;
 }
 
-
-
-// Componente para registrar un pago
+// Modal para registrar pago
 const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -81,8 +74,7 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   lubricentro, 
   loading,
   dynamicPlans,
-  loadingPlans // ✅ NUEVA PROP
-  
+  loadingPlans
 }) => {
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState('transferencia');
@@ -92,34 +84,29 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   useEffect(() => {
     if (lubricentro?.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType]) {
       const plan = dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType];
-      const planPrice = lubricentro.subscriptionRenewalType === 'semiannual' 
-        ? plan.price.semiannual 
-        : plan.price.monthly;
+      let planPrice = 0;
+      
+      if (plan.planType === 'service' && plan.servicePrice) {
+        planPrice = plan.servicePrice;
+      } else {
+        planPrice = lubricentro.subscriptionRenewalType === 'semiannual' 
+          ? plan.price.semiannual 
+          : plan.price.monthly;
+      }
+      
       setAmount(planPrice);
     }
   }, [lubricentro, dynamicPlans]);
-
-
-      // ✅ VERIFICACIÓN DE LOADING CORREGIDA
-      if (loading || loadingPlans) {
-        return (
-          <div className="flex justify-center items-center h-80">
-            <Spinner size="lg" />
-          </div>
-        );
-      }
 
   const handleSubmit = async () => {
     if (amount <= 0) {
       setError('El monto debe ser mayor a cero');
       return;
     }
-
     if (!reference.trim()) {
       setError('La referencia de pago es obligatoria');
       return;
     }
-
     try {
       await onConfirm(amount, method, reference);
     } catch (err: any) {
@@ -127,7 +114,15 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     }
   };
 
-  if (!lubricentro) return null;
+  if (loading || loadingPlans || !lubricentro) {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Registrar Pago" size="md">
+        <div className="flex justify-center items-center h-40">
+          <Spinner size="lg" />
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal 
@@ -137,78 +132,34 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
       size="md"
       footer={
         <div className="flex justify-end space-x-2">
-          <Button 
-            color="secondary" 
-            variant="outline" 
-            onClick={onClose}
-          >
+          <Button color="secondary" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button 
-            color="success"
-            onClick={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Spinner size="sm" color="white" className="mr-2" />
-                Procesando...
-              </>
-            ) : (
-              'Registrar Pago'
-            )}
+          <Button color="success" onClick={handleSubmit} disabled={loading}>
+            {loading ? <>
+              <Spinner size="sm" color="white" className="mr-2" />
+              Procesando...
+            </> : 'Registrar Pago'}
           </Button>
         </div>
       }
     >
-          {/* Contenido del modal igual que antes pero usando dynamicPlans */}
-          <div>
-            <p className="text-base font-medium text-gray-900">
-              {lubricentro?.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType]
-                ? dynamicPlans[lubricentro.subscriptionPlan as SubscriptionPlanType].name 
-                : 'Sin plan'}
-            </p>
-          </div>
-
-
-
       {error && (
         <Alert type="error" className="mb-4" dismissible onDismiss={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      <div className="mb-6">
-        <div className="flex items-center mb-4">
-          <BuildingOfficeIcon className="h-6 w-6 text-gray-400 mr-2" />
-          <div>
-            <p className="text-sm font-medium text-gray-500">Lubricentro</p>
-            <p className="text-lg font-medium text-gray-900">{lubricentro.fantasyName}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <p className="text-sm font-medium text-gray-500">Plan Actual</p>
-            <p className="text-base font-medium text-gray-900">
-              {lubricentro.subscriptionPlan 
-                ? dynamicPlans[lubricentro.subscriptionPlan].name 
-                : 'Sin plan'}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-sm font-medium text-gray-500">Ciclo de Facturación</p>
-            <p className="text-base font-medium text-gray-900">
-              {lubricentro.subscriptionRenewalType === 'semiannual' 
-                ? 'Semestral' 
-                : 'Mensual'}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="space-y-4">
+        <div>
+          <p className="text-lg font-medium text-gray-900">{lubricentro.fantasyName}</p>
+          <p className="text-sm text-gray-500">
+            Plan: {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
+              ? dynamicPlans[lubricentro.subscriptionPlan].name 
+              : 'Sin plan'}
+          </p>
+        </div>
+
         <Input
           label="Monto"
           name="amount"
@@ -239,32 +190,26 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
           value={reference}
           onChange={(e) => setReference(e.target.value)}
           required
-          helperText="Número de transacción, últimos 4 dígitos de tarjeta, etc."
+          helperText="Número de transacción, comprobante, etc."
         />
-
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 text-sm text-yellow-700">
-          <p className="font-medium">Importante:</p>
-          <p>Al registrar este pago, se actualizará el estado de la suscripción a 'Activo' si estaba previamente desactivado.</p>
-        </div>
       </div>
     </Modal>
   );
 };
 
-// Componente para actualizar suscripción
+// Modal para actualizar suscripción
 const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({ 
   isOpen, 
   onClose, 
   onConfirm, 
   lubricentro, 
   loading,
-  dynamicPlans // ✅ NUEVA PROP
+  dynamicPlans
 }) => {
   const [plan, setPlan] = useState<SubscriptionPlanType>('basic');
   const [renewalType, setRenewalType] = useState<'monthly' | 'semiannual'>('monthly');
   const [autoRenewal, setAutoRenewal] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingPlans, setLoadingPlans] = useState(true);
 
   useEffect(() => {
     if (lubricentro) {
@@ -272,7 +217,7 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
       setRenewalType(lubricentro.subscriptionRenewalType || 'monthly');
       setAutoRenewal(lubricentro.autoRenewal !== false);
     }
-  }, [lubricentro]);
+  }, [lubricentro, dynamicPlans]);
 
   const handleSubmit = async () => {
     try {
@@ -282,16 +227,24 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
     }
   };
 
-  if (!lubricentro) return null;
-
-  // Calcular precio según plan y tipo de renovación
- const calculatePrice = (): number => {
+  const calculatePrice = (): number => {
     const planData = dynamicPlans[plan];
     if (!planData) return 0;
+    
+    if (planData.planType === 'service' && planData.servicePrice) {
+      return planData.servicePrice;
+    }
+    
     return renewalType === 'monthly' ? planData.price.monthly : planData.price.semiannual;
   };
 
-return (
+  const isCurrentPlanService = (planId: SubscriptionPlanType): boolean => {
+    return dynamicPlans[planId]?.planType === 'service';
+  };
+
+  if (!lubricentro) return null;
+
+  return (
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
@@ -299,65 +252,174 @@ return (
       size="lg"
       footer={
         <div className="flex justify-end space-x-2">
-          <Button 
-            color="secondary" 
-            variant="outline" 
-            onClick={onClose}
-          >
+          <Button color="secondary" variant="outline" onClick={onClose}>
             Cancelar
           </Button>
-          <Button 
-            color="primary"
-            onClick={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Spinner size="sm" color="white" className="mr-2" />
-                Procesando...
-              </>
-            ) : (
-              'Actualizar Suscripción'
-            )}
+          <Button color="primary" onClick={handleSubmit} disabled={loading}>
+            {loading ? <>
+              <Spinner size="sm" color="white" className="mr-2" />
+              Procesando...
+            </> : 'Actualizar Suscripción'}
           </Button>
         </div>
       }
     >
+      {error && (
+        <Alert type="error" className="mb-4" dismissible onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
       <div className="space-y-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Plan de Suscripción
           </label>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {Object.entries(dynamicPlans).map(([planId, planData]) => (
-              <div 
-                key={planId}
-                className={`border rounded-lg p-4 cursor-pointer transition-colors
-                  ${plan === planId ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
-                onClick={() => setPlan(planId as SubscriptionPlanType)}
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">{planData.name}</h3>
-                    <p className="text-sm text-gray-500">${planData.price.monthly.toLocaleString()} /mes</p>
-                  </div>
+            {Object.entries(dynamicPlans).map(([planId, planData]) => {
+              const isServicePlan = planData.planType === 'service';
+              return (
+                <div 
+                  key={planId}
+                  className={`border rounded-lg p-4 cursor-pointer transition-colors
+                    ${plan === planId ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                  onClick={() => setPlan(planId as SubscriptionPlanType)}
+                >
+                  <h3 className="text-lg font-medium text-gray-900">{planData.name}</h3>
+                  
+                  {isServicePlan ? (
+                    <>
+                      <p className="text-sm text-primary-600 font-medium">
+                        ${(planData.servicePrice || 0).toLocaleString()} - Pago único
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {planData.totalServices || 0} servicios incluidos
+                      </p>
+                      {planData.validityMonths && (
+                        <p className="text-xs text-gray-500">
+                          Válido por {planData.validityMonths} meses
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-gray-500">
+                        ${planData.price.monthly.toLocaleString()} /mes
+                      </p>
+                      {planData.price.semiannual && (
+                        <p className="text-xs text-gray-400">
+                          ${planData.price.semiannual.toLocaleString()} /semestral
+                        </p>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Mostrar límites según el tipo de plan */}
+                  {isServicePlan ? (
+                    // Para planes por servicios, mostrar servicios totales
+                    planData.totalServices && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {planData.totalServices} servicios incluidos
+                      </p>
+                    )
+                  ) : (
+                    // Para planes mensuales, mostrar límite mensual
+                    <>
+                      {planData.maxMonthlyServices && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {planData.maxMonthlyServices} servicios/mes
+                        </p>
+                      )}
+                      
+                      {planData.maxMonthlyServices === null && (
+                        <p className="text-xs text-green-600 font-medium mt-1">
+                          Servicios ilimitados
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-        
-        <div className="bg-gray-50 p-4 rounded-lg mt-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-medium text-gray-900">Resumen</h3>
+
+        {!isCurrentPlanService(plan) && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Ciclo de Facturación
+            </label>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div 
+                className={`border rounded-lg p-4 cursor-pointer transition-colors
+                  ${renewalType === 'monthly' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setRenewalType('monthly')}
+              >
+                <h3 className="text-lg font-medium text-gray-900">Mensual</h3>
+                <p className="text-sm text-gray-500">Facturación cada mes</p>
+              </div>
+              <div 
+                className={`border rounded-lg p-4 cursor-pointer transition-colors
+                  ${renewalType === 'semiannual' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setRenewalType('semiannual')}
+              >
+                <h3 className="text-lg font-medium text-gray-900">Semestral</h3>
+                <p className="text-sm text-gray-500">Facturación cada 6 meses</p>
+              </div>
+            </div>
           </div>
-          <div className="mt-4 space-y-2 text-sm text-gray-700">
+        )}
+
+        {!isCurrentPlanService(plan) && (
+          <div>
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={autoRenewal}
+                onChange={(e) => setAutoRenewal(e.target.checked)}
+                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              />
+              <span className="ml-2 text-sm text-gray-900">
+                Renovación automática
+              </span>
+            </label>
+          </div>
+        )}
+        
+        <div className="bg-gray-50 p-4 rounded-lg">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Resumen</h3>
+          <div className="space-y-2 text-sm text-gray-700">
             <div className="flex justify-between">
-              <span>Plan seleccionado:</span>
+              <span>Plan:</span>
               <span className="font-medium">{dynamicPlans[plan]?.name || 'Plan no disponible'}</span>
             </div>
-            <div className="flex justify-between border-t border-gray-200 pt-2 mt-2">
-              <span className="font-medium">Importe a pagar:</span>
+            
+            {isCurrentPlanService(plan) ? (
+              <>
+                <div className="flex justify-between">
+                  <span>Tipo:</span>
+                  <span className="font-medium">Pago único por servicios</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Servicios:</span>
+                  <span className="font-medium">{dynamicPlans[plan]?.totalServices || 0}</span>
+                </div>
+                {dynamicPlans[plan]?.validityMonths && (
+                  <div className="flex justify-between">
+                    <span>Validez:</span>
+                    <span className="font-medium">{dynamicPlans[plan].validityMonths} meses</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex justify-between">
+                <span>Facturación:</span>
+                <span className="font-medium">{renewalType === 'monthly' ? 'Mensual' : 'Semestral'}</span>
+              </div>
+            )}
+            
+            <div className="flex justify-between border-t pt-2">
+              <span className="font-medium">Total:</span>
               <span className="font-bold text-primary-600">${calculatePrice().toLocaleString()}</span>
             </div>
           </div>
@@ -372,110 +434,101 @@ const LubricentroSubscriptionPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { userProfile } = useAuth();
-  const [loadingPlans, setLoadingPlans] = useState(true);
-
   
-  // ✅ ESTADOS CORREGIDOS
   const [loading, setLoading] = useState(true);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lubricentro, setLubricentro] = useState<Lubricentro | null>(null);
   const [activeTab, setActiveTab] = useState('info');
   
-  // ✅ NUEVOS ESTADOS PARA PLANES DINÁMICOS
-const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, SubscriptionPlan>>({
-  starter: { 
-    id: 'starter', 
-    name: 'Cargando...', 
-    description: '', 
-    planType: PlanType.MONTHLY, // 🔧 AGREGAR
-    price: { monthly: 0, semiannual: 0 }, 
-    maxUsers: 0, 
-    maxMonthlyServices: 0, 
-    features: [] 
-  },
-  basic: { 
-    id: 'basic', 
-    name: 'Cargando...', 
-    description: '', 
-    planType: PlanType.MONTHLY, // 🔧 AGREGAR
-    price: { monthly: 0, semiannual: 0 }, 
-    maxUsers: 0, 
-    maxMonthlyServices: 0, 
-    features: [] 
-  },
-  premium: { 
-    id: 'premium', 
-    name: 'Cargando...', 
-    description: '', 
-    planType: PlanType.MONTHLY, // 🔧 AGREGAR
-    price: { monthly: 0, semiannual: 0 }, 
-    maxUsers: 0, 
-    maxMonthlyServices: 0, 
-    features: [] 
-  },
-  enterprise: { 
-    id: 'enterprise', 
-    name: 'Cargando...', 
-    description: '', 
-    planType: PlanType.MONTHLY, // 🔧 AGREGAR
-    price: { monthly: 0, semiannual: 0 }, 
-    maxUsers: 0, 
-    maxMonthlyServices: 0, 
-    features: [] 
-  }
-});
-
+  const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, SubscriptionPlan>>({
+    starter: { 
+      id: 'starter', 
+      name: 'Cargando...', 
+      description: '', 
+      planType: PlanType.MONTHLY,
+      price: { monthly: 0, semiannual: 0 }, 
+      maxUsers: 0, 
+      maxMonthlyServices: 0, 
+      features: [] 
+    },
+    basic: { 
+      id: 'basic', 
+      name: 'Cargando...', 
+      description: '', 
+      planType: PlanType.MONTHLY,
+      price: { monthly: 0, semiannual: 0 }, 
+      maxUsers: 0, 
+      maxMonthlyServices: 0, 
+      features: [] 
+    },
+    premium: { 
+      id: 'premium', 
+      name: 'Cargando...', 
+      description: '', 
+      planType: PlanType.MONTHLY,
+      price: { monthly: 0, semiannual: 0 }, 
+      maxUsers: 0, 
+      maxMonthlyServices: 0, 
+      features: [] 
+    },
+    enterprise: { 
+      id: 'enterprise', 
+      name: 'Cargando...', 
+      description: '', 
+      planType: PlanType.MONTHLY,
+      price: { monthly: 0, semiannual: 0 }, 
+      maxUsers: 0, 
+      maxMonthlyServices: 0, 
+      features: [] 
+    }
+  });
   
-  // Estados para modales
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   
-  // Cargar datos iniciales
   useEffect(() => {
     if (id) {
       loadData();
     }
   }, [id]);
   
-         // ✅ FUNCIÓN loadData CORREGIDA
-        const loadData = async () => {
-          if (!id) return;
-          
-          try {
-            setLoading(true);
-            setError(null);
-            
-            // Cargar lubricentro y planes en paralelo
-            const [lubricentroData, plansData] = await Promise.all([
-              getLubricentroById(id),
-              getSubscriptionPlans()
-            ]);
-            
-            setLubricentro(lubricentroData);
-            setDynamicPlans(plansData);
-            
-          } catch (err) {
-            console.error('Error al cargar datos:', err);
-            setError('Error al cargar los datos del lubricentro. Por favor, intente nuevamente.');
-          } finally {
-            setLoading(false);
-            setLoadingPlans(false);
-          }
-        };
+  const loadData = async () => {
+    if (!id) return;
+    
+    try {
+      setLoading(true);
+      setLoadingPlans(true);
+      setError(null);
+      
+      invalidatePlansCache();
+      
+      const [lubricentroData, plansData] = await Promise.all([
+        getLubricentroById(id),
+        getSubscriptionPlans()
+      ]);
+      
+      setLubricentro(lubricentroData);
+      setDynamicPlans(plansData);
+      
+    } catch (err) {
+      console.error('Error al cargar datos:', err);
+      setError('Error al cargar los datos del lubricentro. Por favor, intente nuevamente.');
+    } finally {
+      setLoading(false);
+      setLoadingPlans(false);
+    }
+  };
   
-  // Manejar cambio de estado de suscripción
   const handleChangeStatus = async (status: 'activo' | 'inactivo') => {
     if (!id) return;
     
     try {
       setProcessing(true);
       await updateLubricentroStatus(id, status);
-      
-      // Recargar datos
       await loadData();
-      
       setSuccess(`Estado del lubricentro cambiado a ${status === 'activo' ? 'Activo' : 'Inactivo'}`);
     } catch (err) {
       console.error('Error al cambiar el estado:', err);
@@ -485,13 +538,17 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
     }
   };
   
-  // Función para calcular precio (definida a nivel del componente principal)
   const calculatePrice = (plan: SubscriptionPlanType, renewalType: 'monthly' | 'semiannual'): number => {
     const planData = dynamicPlans[plan];
+    if (!planData) return 0;
+    
+    if (planData.planType === 'service' && planData.servicePrice) {
+      return planData.servicePrice;
+    }
+    
     return renewalType === 'monthly' ? planData.price.monthly : planData.price.semiannual;
   };
   
-  // Manejar actualización de suscripción
   const handleUpdateSubscription = async (
     plan: SubscriptionPlanType,
     renewalType: 'monthly' | 'semiannual',
@@ -505,30 +562,15 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
     try {
       setProcessing(true);
       
-      // Calcular el monto a pagar
       const paymentAmount = calculatePrice(plan, renewalType);
       
-      // Actualizar la suscripción
-      await updateSubscription(
-        lubricentro.id,
-        plan,
-        renewalType,
-        autoRenewal
-      );
+      await updateSubscription(lubricentro.id, plan, renewalType, autoRenewal);
       
-      // Registrar el pago si hay un monto
       if (paymentAmount > 0) {
-        await recordPayment(
-          lubricentro.id,
-          paymentAmount,
-          'admin_update',
-          `admin_update_${Date.now()}`
-        );
+        await recordPayment(lubricentro.id, paymentAmount, 'admin_update', `admin_update_${Date.now()}`);
       }
       
-      // Recargar datos
       await loadData();
-      
       setIsSubscriptionModalOpen(false);
       setSuccess('Suscripción actualizada correctamente');
     } catch (err: any) {
@@ -539,12 +581,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
     }
   };
   
-  // Manejar registro de pago
-  const handleRecordPayment = async (
-    amount: number,
-    method: string,
-    reference: string
-  ) => {
+  const handleRecordPayment = async (amount: number, method: string, reference: string) => {
     if (!lubricentro) {
       setError('No se encontró la información del lubricentro');
       return;
@@ -553,10 +590,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
     try {
       setProcessing(true);
       await recordPayment(lubricentro.id, amount, method, reference);
-      
-      // Recargar datos
       await loadData();
-      
       setIsPaymentModalOpen(false);
       setSuccess('Pago registrado correctamente');
     } catch (err: any) {
@@ -567,19 +601,12 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
     }
   };
   
-  // Formatear fecha
   const formatDate = (date: any): string => {
     if (!date) return 'No disponible';
     
     try {
-      // Verificar si es un Timestamp de Firestore (tiene método toDate())
       const dateObj = typeof date.toDate === 'function' ? date.toDate() : new Date(date);
-      
-      // Asegurarse de que la fecha es válida
-      if (isNaN(dateObj.getTime())) {
-        console.error('Fecha inválida:', date);
-        return 'Fecha inválida';
-      }
+      if (isNaN(dateObj.getTime())) return 'Fecha inválida';
       
       return dateObj.toLocaleDateString('es-ES', {
         day: '2-digit',
@@ -587,24 +614,16 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         year: 'numeric'
       });
     } catch (error) {
-      console.error('Error al formatear fecha:', error);
       return 'Fecha inválida';
     }
   };
   
-  // Calcular días restantes
   const getDaysRemaining = (date: any): number => {
     if (!date) return 0;
     
     try {
-      // Verificar si es un Timestamp de Firestore (tiene método toDate())
       const dateObj = typeof date.toDate === 'function' ? date.toDate() : new Date(date);
-      
-      // Asegurarse de que la fecha es válida
-      if (isNaN(dateObj.getTime())) {
-        console.error('Fecha inválida:', date);
-        return 0;
-      }
+      if (isNaN(dateObj.getTime())) return 0;
       
       const now = new Date();
       const diffTime = dateObj.getTime() - now.getTime();
@@ -612,12 +631,10 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
       
       return diffDays > 0 ? diffDays : 0;
     } catch (error) {
-      console.error('Error al calcular días restantes:', error);
       return 0;
     }
   };
   
-  // Obtener badge para estado
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'activo':
@@ -631,7 +648,6 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
     }
   };
   
-  // Obtener badge para estado de pago
   const getPaymentStatusBadge = (status: string) => {
     switch (status) {
       case 'paid':
@@ -705,7 +721,6 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         </Alert>
       )}
       
-      {/* Resumen de estado */}
       <div className="bg-white shadow rounded-lg mb-6">
         <div className="px-4 py-5 sm:p-6">
           <div className="sm:flex sm:items-center sm:justify-between">
@@ -757,7 +772,6 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         </div>
       </div>
       
-      {/* Tabs para navegar entre secciones */}
       <Tabs
         activeTab={activeTab}
         onChange={setActiveTab}
@@ -769,25 +783,21 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         className="mb-6"
       />
       
-      {/* Información de Suscripción */}
       {activeTab === 'info' && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Datos de la suscripción */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader title="Detalles de la Suscripción" />
               <CardBody>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Plan Actual
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Plan Actual</label>
                     <div className="mt-1 text-lg font-medium text-gray-900">
-                      {lubricentro.subscriptionPlan
+                      {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
                         ? dynamicPlans[lubricentro.subscriptionPlan].name
                         : 'Sin plan asignado'}
                     </div>
-                    {lubricentro.subscriptionPlan && (
+                    {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
                       <p className="mt-1 text-sm text-gray-500">
                         {dynamicPlans[lubricentro.subscriptionPlan].description}
                       </p>
@@ -795,9 +805,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Ciclo de Facturación
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Ciclo de Facturación</label>
                     <div className="mt-1 text-lg font-medium text-gray-900">
                       {lubricentro.subscriptionRenewalType === 'semiannual'
                         ? 'Semestral'
@@ -805,43 +813,22 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                           ? 'Mensual'
                           : 'No definido'}
                     </div>
-                    {lubricentro.subscriptionRenewalType && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        {lubricentro.subscriptionRenewalType === 'semiannual'
-                          ? 'Facturación cada 6 meses'
-                          : 'Facturación mensual'}
-                      </p>
-                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Renovación Automática
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Renovación Automática</label>
                     <div className="mt-1 text-lg font-medium text-gray-900">
                       {lubricentro.autoRenewal !== false ? 'Activada' : 'Desactivada'}
                     </div>
-                    <p className="mt-1 text-sm text-gray-500">
-                      {lubricentro.autoRenewal !== false
-                        ? 'La suscripción se renovará automáticamente al finalizar el período'
-                        : 'La suscripción debe renovarse manualmente'}
-                    </p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Estado del Pago
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Estado del Pago</label>
                     <div className="mt-1">
                       {lubricentro.paymentStatus
                         ? getPaymentStatusBadge(lubricentro.paymentStatus)
                         : <Badge color="default" text="No disponible" />}
                     </div>
-                    {lubricentro.nextPaymentDate && (
-                      <p className="mt-1 text-sm text-gray-500">
-                        Próximo pago: {formatDate(lubricentro.nextPaymentDate)}
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -849,9 +836,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Fecha de Inicio
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Fecha de Inicio</label>
                     <div className="mt-1 text-base font-medium text-gray-900">
                       {lubricentro.subscriptionStartDate
                         ? formatDate(lubricentro.subscriptionStartDate)
@@ -860,9 +845,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Fin del Contrato
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Fin del Contrato</label>
                     <div className="mt-1 text-base font-medium text-gray-900">
                       {lubricentro.contractEndDate
                         ? formatDate(lubricentro.contractEndDate)
@@ -871,9 +854,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Fin del Ciclo Actual
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Fin del Ciclo Actual</label>
                     <div className="mt-1 text-base font-medium text-gray-900">
                       {lubricentro.billingCycleEndDate
                         ? formatDate(lubricentro.billingCycleEndDate)
@@ -884,28 +865,23 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
               </CardBody>
             </Card>
 
-            {/* Límites del Plan */}
             <Card className="mt-6">
               <CardHeader title="Límites del Plan" />
               <CardBody>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Límite de Usuarios
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Límite de Usuarios</label>
                     <div className="mt-1 text-lg font-medium text-gray-900">
-                      {lubricentro.subscriptionPlan
+                      {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
                         ? `${dynamicPlans[lubricentro.subscriptionPlan].maxUsers} usuarios`
                         : 'No definido'}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Límite de Servicios Mensuales
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700">Límite de Servicios Mensuales</label>
                     <div className="mt-1 text-lg font-medium text-gray-900">
-                      {lubricentro.subscriptionPlan
+                      {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
                         ? dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices === null
                           ? 'Ilimitados'
                           : `${dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices} servicios`
@@ -917,9 +893,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
             </Card>
           </div>
 
-          {/* Panel de acciones */}
           <div className="lg:col-span-1">
-            {/* Acciones rápidas */}
             <Card>
               <CardHeader title="Acciones Rápidas" />
               <CardBody>
@@ -967,20 +941,15 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
               </CardBody>
             </Card>
             
-            {/* Resumen de los siguientes eventos */}
             <Card className="mt-6">
               <CardHeader title="Próximos Eventos" />
               <CardBody>
                 <div className="space-y-4">
                   {lubricentro.billingCycleEndDate && (
                     <div className="flex items-start">
-                      <div className="flex-shrink-0">
-                        <CalendarDaysIcon className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">
-                          Fin del Ciclo de Facturación
-                        </p>
+                      <CalendarDaysIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Fin del Ciclo de Facturación</p>
                         <p className="text-sm text-gray-500">
                           {formatDate(lubricentro.billingCycleEndDate)}
                           {getDaysRemaining(lubricentro.billingCycleEndDate) > 0 &&
@@ -992,13 +961,9 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
 
                   {lubricentro.nextPaymentDate && (
                     <div className="flex items-start">
-                      <div className="flex-shrink-0">
-                        <CreditCardIcon className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">
-                          Próximo Pago
-                        </p>
+                      <CreditCardIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Próximo Pago</p>
                         <p className="text-sm text-gray-500">
                           {formatDate(lubricentro.nextPaymentDate)}
                           {getDaysRemaining(lubricentro.nextPaymentDate) > 0 &&
@@ -1010,13 +975,9 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
 
                   {lubricentro.contractEndDate && (
                     <div className="flex items-start">
-                      <div className="flex-shrink-0">
-                        <DocumentCheckIcon className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm font-medium text-gray-900">
-                          Fin del Contrato
-                        </p>
+                      <DocumentCheckIcon className="h-5 w-5 text-gray-400 mt-0.5 mr-3" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Fin del Contrato</p>
                         <p className="text-sm text-gray-500">
                           {formatDate(lubricentro.contractEndDate)}
                           {getDaysRemaining(lubricentro.contractEndDate) > 0 &&
@@ -1032,7 +993,6 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         </div>
       )}
       
-      {/* Historial de Pagos */}
       {activeTab === 'payments' && (
         <Card>
           <CardHeader 
@@ -1055,16 +1015,16 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Fecha
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Monto
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Método
                       </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Referencia
                       </th>
                     </tr>
@@ -1103,10 +1063,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                   Comience registrando un pago para este lubricentro.
                 </p>
                 <div className="mt-6">
-                  <Button
-                    color="success"
-                    onClick={() => setIsPaymentModalOpen(true)}
-                  >
+                  <Button color="success" onClick={() => setIsPaymentModalOpen(true)}>
                     Registrar Pago
                   </Button>
                 </div>
@@ -1116,15 +1073,10 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         </Card>
       )}
       
-      {/* Uso del Servicio */}
       {activeTab === 'usage' && (
         <div className="space-y-6">
-          {/* Uso de servicios actuales */}
           <Card>
-            <CardHeader 
-              title="Uso de Servicios" 
-              subtitle="Servicios utilizados en el período actual"
-            />
+            <CardHeader title="Uso de Servicios" subtitle="Servicios utilizados en el período actual" />
             <CardBody>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -1136,6 +1088,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                       {lubricentro.servicesUsedThisMonth || 0}
                     </span>
                     {lubricentro.subscriptionPlan && 
+                     dynamicPlans[lubricentro.subscriptionPlan] &&
                      dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices !== null && (
                       <span className="ml-2 text-sm text-gray-500">
                         de {dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices}
@@ -1144,19 +1097,20 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                   </div>
 
                   {lubricentro.subscriptionPlan && 
+                   dynamicPlans[lubricentro.subscriptionPlan] &&
                    dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices !== null && (
                     <div className="mt-2">
-                      <div className="bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 w-full">
+                      <div className="bg-gray-200 rounded-full h-2.5 w-full">
                         <div 
                           className="bg-primary-600 h-2.5 rounded-full" 
                           style={{ 
                             width: `${Math.min(100, ((lubricentro.servicesUsedThisMonth || 0) / 
-                              (lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]?.maxMonthlyServices || 100)) * 100)}%`
+                              (dynamicPlans[lubricentro.subscriptionPlan]?.maxMonthlyServices || 100)) * 100)}%`
                           }}
                         ></div>
                       </div>
                       <p className="mt-1 text-xs text-gray-500">
-                        {Math.max(0, (lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]?.maxMonthlyServices || 0) - 
+                        {Math.max(0, (dynamicPlans[lubricentro.subscriptionPlan]?.maxMonthlyServices || 0) - 
                           (lubricentro.servicesUsedThisMonth || 0))} servicios disponibles
                       </p>
                     </div>
@@ -1164,23 +1118,21 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Usuarios Activos
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700">Usuarios Activos</label>
                   <div className="mt-1 flex items-end">
                     <span className="text-3xl font-bold text-gray-900">
                       {lubricentro.activeUserCount || 0}
                     </span>
-                    {lubricentro.subscriptionPlan && (
+                    {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
                       <span className="ml-2 text-sm text-gray-500">
                         de {dynamicPlans[lubricentro.subscriptionPlan].maxUsers}
                       </span>
                     )}
                   </div>
 
-                  {lubricentro.subscriptionPlan && (
+                  {lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan] && (
                     <div className="mt-2">
-                      <div className="bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 w-full">
+                      <div className="bg-gray-200 rounded-full h-2.5 w-full">
                         <div 
                           className="bg-primary-600 h-2.5 rounded-full" 
                           style={{ 
@@ -1200,28 +1152,24 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
             </CardBody>
           </Card>
 
-          {/* Historial de uso */}
-          <Card>
-            <CardHeader 
-              title="Historial de Uso" 
-              subtitle="Servicios utilizados por mes"
-            />
-            <CardBody>
-              {lubricentro.servicesUsedHistory && Object.keys(lubricentro.servicesUsedHistory).length > 0 ? (
+          {lubricentro.servicesUsedHistory && Object.keys(lubricentro.servicesUsedHistory).length > 0 && (
+            <Card>
+              <CardHeader title="Historial de Uso" subtitle="Servicios utilizados por mes" />
+              <CardBody>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Mes
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Servicios Realizados
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Limite
                         </th>
-                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Utilización
                         </th>
                       </tr>
@@ -1234,13 +1182,11 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                           const monthName = new Date(parseInt(year), parseInt(monthNum) - 1, 1)
                             .toLocaleDateString('es-ES', { month: 'long' });
                           
-                          const limit = lubricentro.subscriptionPlan 
+                          const limit = lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]
                             ? dynamicPlans[lubricentro.subscriptionPlan].maxMonthlyServices 
                             : null;
                           
-                          const utilizationPercent = limit 
-                            ? Math.min(100, (count / limit) * 100) 
-                            : 0;
+                          const utilizationPercent = limit ? Math.min(100, (count / limit) * 100) : 0;
                           
                           return (
                             <tr key={month} className="hover:bg-gray-50">
@@ -1280,17 +1226,9 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <div className="text-center py-8">
-                  <ChartBarIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No hay datos de uso</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    No se ha registrado uso del servicio para este lubricentro.
-                  </p>
-                </div>
-              )}
-            </CardBody>
-          </Card>
+              </CardBody>
+            </Card>
+          )}
         </div>
       )}
       
@@ -1305,16 +1243,15 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         </Button>
       </div>
       
-      {/* Modales */}
-        <RecordPaymentModal
+      <RecordPaymentModal
         isOpen={isPaymentModalOpen}
         onClose={() => setIsPaymentModalOpen(false)}
         onConfirm={handleRecordPayment}
         lubricentro={lubricentro}
         loading={processing}
-        dynamicPlans={dynamicPlans} // ✅ NUEVA PROP
+        dynamicPlans={dynamicPlans}
         loadingPlans={loadingPlans}
-       />
+      />
       
       <UpdateSubscriptionModal
         isOpen={isSubscriptionModalOpen}
@@ -1322,7 +1259,7 @@ const [dynamicPlans, setDynamicPlans] = useState<Record<SubscriptionPlanType, Su
         onConfirm={handleUpdateSubscription}
         lubricentro={lubricentro}
         loading={processing}
-        dynamicPlans={dynamicPlans} // ✅ NUEVA PROP
+        dynamicPlans={dynamicPlans}
       />
     </PageContainer>
   );

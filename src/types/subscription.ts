@@ -21,7 +21,7 @@ export interface SubscriptionPlan {
   maxMonthlyServices: number | null;
   features: string[];
   recommended?: boolean;
-  // Campos opcionales para planes por servicios
+  // 🆕 Campos opcionales para planes por servicios
   servicePrice?: number;
   totalServices?: number;
   validityMonths?: number;
@@ -30,14 +30,15 @@ export interface SubscriptionPlan {
 // Interfaz extendida para planes gestionados dinámicamente
 export interface ManagedSubscriptionPlan extends SubscriptionPlan {
   isActive: boolean;
-  isPublished: boolean;     // ✅ AGREGADO: si el plan está publicado en la homepage
-  displayOrder: number;     // ✅ AGREGADO: orden de visualización
+  isPublished: boolean;     // ✅ si el plan está publicado en la homepage
+  displayOrder: number;     // ✅ orden de visualización
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
   updatedBy: string;
-  usageCount: number; // Cantidad de lubricentros usando este plan
-  isDefault: boolean; // Si es un plan por defecto del sistema
+  usageCount: number;       // Cantidad de lubricentros usando este plan
+  isDefault: boolean;       // Si es un plan por defecto del sistema
+  publishOnHomepage?: boolean; // 🆕 AGREGADO: para compatibilidad con Firebase
 }
 
 // Interfaz para el historial de cambios
@@ -63,6 +64,7 @@ export interface PlanSystemSettings {
   updatedBy: string;
 }
 
+// Planes estáticos como fallback - manteniendo la estructura existente
 export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> = {
   starter: {
     id: 'starter',
@@ -145,7 +147,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
   }
 };
 
-// Funciones de utilidad
+// Funciones de utilidad - manteniendo las existentes y agregando nuevas
 export const isServicePlan = (plan: SubscriptionPlan): boolean => {
   return plan.planType === PlanType.SERVICE;
 };
@@ -159,4 +161,58 @@ export const getEffectivePrice = (plan: SubscriptionPlan, billingType: 'monthly'
     return plan.servicePrice || 0;
   }
   return billingType === 'monthly' ? plan.price.monthly : plan.price.semiannual;
+};
+
+// 🆕 NUEVAS funciones de utilidad para planes por servicios
+export const getPlanDisplayInfo = (plan: SubscriptionPlan): {
+  priceText: string;
+  billingText: string;
+  servicesText: string;
+} => {
+  if (plan.planType === PlanType.SERVICE) {
+    return {
+      priceText: `${(plan.servicePrice || 0).toLocaleString()}`,
+      billingText: 'Pago único',
+      servicesText: `${plan.totalServices || 0} servicios incluidos`
+    };
+  }
+  
+  return {
+    priceText: `${plan.price.monthly.toLocaleString()} /mes`,
+    billingText: 'Facturación mensual',
+    servicesText: plan.maxMonthlyServices 
+      ? `Hasta ${plan.maxMonthlyServices} servicios/mes`
+      : 'Servicios ilimitados'
+  };
+};
+
+// 🆕 Función para validar si un plan por servicios está vencido
+export const isServicePlanExpired = (
+  plan: SubscriptionPlan, 
+  subscriptionStartDate: Date
+): boolean => {
+  if (plan.planType !== PlanType.SERVICE || !plan.validityMonths) {
+    return false;
+  }
+  
+  const now = new Date();
+  const expiryDate = new Date(subscriptionStartDate);
+  expiryDate.setMonth(expiryDate.getMonth() + plan.validityMonths);
+  
+  return now > expiryDate;
+};
+
+// 🆕 Función para calcular fecha de vencimiento de plan por servicios
+export const getServicePlanExpiryDate = (
+  plan: SubscriptionPlan,
+  subscriptionStartDate: Date
+): Date | null => {
+  if (plan.planType !== PlanType.SERVICE || !plan.validityMonths) {
+    return null;
+  }
+  
+  const expiryDate = new Date(subscriptionStartDate);
+  expiryDate.setMonth(expiryDate.getMonth() + plan.validityMonths);
+  
+  return expiryDate;
 };
