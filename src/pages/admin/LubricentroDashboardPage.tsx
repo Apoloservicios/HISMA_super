@@ -1,4 +1,5 @@
 // src/pages/admin/LubricentroDashboardPage.tsx
+// VERSIÓN MEJORADA - Mantiene toda la funcionalidad existente + mejoras de tabla
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -11,14 +12,15 @@ import {
   Alert, 
   Spinner, 
   Badge,
-  Table,
-  TableRow,
-  TableCell,
   Modal,
-  Select,
-  Tabs,
-  Tab
+  Tabs
 } from '../../components/ui';
+
+// Importar el nuevo componente de tabla mejorado
+import LubricentroTable from '../../components/tables/LubricentroTable';
+
+// Si el modal está en pages/admin/components/modals/ usar esta ruta:
+// import ChangeStatusModal from './components/modals/ChangeStatusModal';
 
 import { 
   getAllLubricentros, 
@@ -28,6 +30,7 @@ import {
 } from '../../services/lubricentroService';
 
 import { Lubricentro, LubricentroStatus } from '../../types';
+import { SUBSCRIPTION_PLANS, SubscriptionPlanType } from '../../types/subscription';
 
 // Iconos
 import { 
@@ -41,10 +44,10 @@ import {
   ChartBarIcon,
   UserGroupIcon,
   CreditCardIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
-import { SUBSCRIPTION_PLANS, SubscriptionPlanType } from '../../types/subscription';
 // Componente para extender período de prueba
 const ExtendTrialModal: React.FC<{
   isOpen: boolean;
@@ -57,7 +60,6 @@ const ExtendTrialModal: React.FC<{
 
   if (!lubricentro) return null;
 
-  // CORRECCIÓN: Función sin parámetro de evento
   const handleSubmit = () => {
     onConfirm(days);
   };
@@ -111,7 +113,6 @@ const ExtendTrialModal: React.FC<{
         </div>
         
         <div className="mt-4">
-          {/* CORRECCIÓN: Input nativo en lugar del componente Input */}
           <div>
             <label htmlFor="days" className="block text-sm font-medium text-gray-700 mb-1">
               Días a extender
@@ -160,7 +161,6 @@ const ChangeStatusModal: React.FC<{
 }> = ({ isOpen, onClose, onConfirm, lubricentro, newStatus, loading }) => {
   if (!lubricentro) return null;
 
-  // Textos según el estado
   const getStatusText = () => {
     switch (newStatus) {
       case 'activo':
@@ -266,7 +266,6 @@ const LubricentroDetailsModal: React.FC<{
 }> = ({ isOpen, onClose, lubricentro }) => {
   if (!lubricentro) return null;
 
-  // Formatear fecha
   const formatDate = (date: Date | undefined): string => {
     if (!date) return 'No disponible';
     return new Date(date).toLocaleDateString('es-ES', {
@@ -326,7 +325,6 @@ const LubricentroDetailsModal: React.FC<{
               </div>
             </div>
           </div>
-
           
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-2">Estado y Registro</h3>
@@ -469,11 +467,10 @@ const LubricentroDashboardPage: React.FC = () => {
     }
   };
   
-  // Aplicar filtros y búsqueda - CORREGIDO
+  // Aplicar filtros y búsqueda
   const applyFilters = () => {
     let filtered = [...lubricentros];
     
-    // CORRECCIÓN: Lógica de filtrado mejorada
     if (activeTab === 'activo') {
       filtered = filtered.filter(l => l.estado === 'activo');
     } else if (activeTab === 'trial') {
@@ -481,7 +478,6 @@ const LubricentroDashboardPage: React.FC = () => {
     } else if (activeTab === 'inactivo') {
       filtered = filtered.filter(l => l.estado === 'inactivo');
     } else if (activeTab === 'expirando') {
-      // Filtrar por período de prueba a punto de expirar (próximos 7 días)
       const now = new Date();
       const in7Days = new Date(now);
       in7Days.setDate(in7Days.getDate() + 7);
@@ -493,7 +489,6 @@ const LubricentroDashboardPage: React.FC = () => {
         new Date(l.trialEndDate) <= in7Days
       );
     }
-    // Si es 'todos', no aplicamos filtro adicional por estado
     
     // Aplicar búsqueda
     if (searchTerm.trim()) {
@@ -509,14 +504,16 @@ const LubricentroDashboardPage: React.FC = () => {
     setFilteredLubricentros(filtered);
   };
   
-  // Preparar cambio de estado
-  const prepareChangeStatus = (lubricentro: Lubricentro, status: LubricentroStatus) => {
+  // FUNCIONES ADAPTADAS PARA LA NUEVA TABLA
+  
+  // Manejar cambio de estado desde la tabla
+  const handleChangeStatusFromTable = (lubricentro: Lubricentro, status: LubricentroStatus) => {
     setSelectedLubricentro(lubricentro);
     setNewStatus(status);
     setIsChangeStatusModalOpen(true);
   };
   
-  // Manejar cambio de estado
+  // Confirmar cambio de estado
   const handleChangeStatus = async () => {
     if (!selectedLubricentro) return;
     
@@ -525,9 +522,10 @@ const LubricentroDashboardPage: React.FC = () => {
       await updateLubricentroStatus(selectedLubricentro.id, newStatus);
       
       // Actualizar la lista de lubricentros
-      loadLubricentros();
+      await loadLubricentros();
       
       setIsChangeStatusModalOpen(false);
+      setSelectedLubricentro(null);
     } catch (err) {
       console.error('Error al cambiar el estado del lubricentro:', err);
       setError('Error al cambiar el estado del lubricentro');
@@ -551,9 +549,10 @@ const LubricentroDashboardPage: React.FC = () => {
       await extendTrialPeriod(selectedLubricentro.id, days);
       
       // Actualizar la lista de lubricentros
-      loadLubricentros();
+      await loadLubricentros();
       
       setIsExtendTrialModalOpen(false);
+      setSelectedLubricentro(null);
     } catch (err) {
       console.error('Error al extender el período de prueba:', err);
       setError('Error al extender el período de prueba');
@@ -574,41 +573,16 @@ const LubricentroDashboardPage: React.FC = () => {
     }
   };
   
-  // Obtener badge para estado
-  const getStatusBadge = (status: LubricentroStatus) => {
-    switch (status) {
-      case 'activo':
-        return <Badge color="success" text="Activo" />;
-      case 'inactivo':
-        return <Badge color="error" text="Inactivo" />;
-      case 'trial':
-        return <Badge color="warning" text="Prueba" />;
-      default:
-        return <Badge color="default" text={status} />;
-    }
-  };
-  
-  // Formatear fecha
-  const formatDate = (date: Date | undefined): string => {
-    if (!date) return 'No disponible';
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-  
-  // Calcular días restantes
-  const getDaysRemaining = (endDate: Date | undefined): number => {
-    if (!endDate) return 0;
-    
-    const end = new Date(endDate);
-    const now = new Date();
-    const diffTime = end.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    return diffDays > 0 ? diffDays : 0;
-  };
+  // Verificar permisos
+  if (userProfile?.role !== 'superadmin') {
+    return (
+      <div className="flex justify-center items-center h-80">
+        <Alert type="error">
+          No tienes permisos para acceder a esta página.
+        </Alert>
+      </div>
+    );
+  }
   
   if (loading && lubricentros.length === 0) {
     return (
@@ -700,7 +674,7 @@ const LubricentroDashboardPage: React.FC = () => {
           <CardBody>
             <div className="flex items-center">
               <div className="rounded-full p-3 bg-orange-100 mr-4">
-                <CalendarDaysIcon className="h-6 w-6 text-orange-600" />
+                <ExclamationTriangleIcon className="h-6 w-6 text-orange-600" />
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-600">Por Expirar</p>
@@ -734,6 +708,7 @@ const LubricentroDashboardPage: React.FC = () => {
               variant="outline"
               icon={<ArrowPathIcon className="h-5 w-5" />}
               onClick={loadLubricentros}
+              disabled={loading}
             >
               Actualizar
             </Button>
@@ -755,150 +730,44 @@ const LubricentroDashboardPage: React.FC = () => {
         className="mb-6"
       />
       
-      {/* Tabla de lubricentros */}
+      {/* NUEVA TABLA MEJORADA */}
       <Card>
         <CardHeader
-          title={`Lubricentros ${activeTab !== 'todos' ? activeTab === 'expirando' ? 'por Expirar' : activeTab === 'activo' ? 'Activos' : activeTab === 'trial' ? 'en Prueba' : 'Inactivos' : ''}`}
-          subtitle={`Mostrando ${filteredLubricentros.length} ${filteredLubricentros.length === 1 ? 'lubricentro' : 'lubricentros'}`}
+          title={`Lubricentros ${
+            activeTab === 'todos' ? '' : 
+            activeTab === 'expirando' ? 'por Expirar' : 
+            activeTab === 'activo' ? 'Activos' : 
+            activeTab === 'trial' ? 'en Prueba' : 'Inactivos'
+          }`}
+          subtitle={`${filteredLubricentros.length} ${filteredLubricentros.length === 1 ? 'lubricentro encontrado' : 'lubricentros encontrados'}`}
         />
-        <CardBody>
-          {filteredLubricentros.length > 0 ? (
-            <div className="overflow-x-auto">
-              <Table
-                headers={['Nombre', 'Responsable', 'CUIT', 'Estado', 'Registro', 'Fin Prueba', 'Acciones']}
-              >
-                {filteredLubricentros.map((lubricentro) => (
-                  <TableRow key={lubricentro.id}>
-                    <TableCell className="font-medium text-gray-900">
-                      {lubricentro.fantasyName}
-                      <div className="text-xs text-gray-500 mt-1">
-                        {lubricentro.domicilio}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {lubricentro.responsable}
-                    </TableCell>
-                    <TableCell>
-                      {lubricentro.cuit}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(lubricentro.estado)}
-                    </TableCell>
-                    <TableCell>
-                      {formatDate(lubricentro.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      {lubricentro.estado === 'trial' && lubricentro.trialEndDate ? (
-                        <div>
-                          <div className="text-sm">{formatDate(lubricentro.trialEndDate)}</div>
-                          <div className="text-xs text-gray-500">
-                            {getDaysRemaining(lubricentro.trialEndDate) > 0 
-                              ? `${getDaysRemaining(lubricentro.trialEndDate)} días restantes` 
-                              : 'Expirado'}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-gray-400">N/A</span>
-                      )}
-                    </TableCell>
-
-                     {/* Nueva columna para el Plan */}
-                      <TableCell>
-                        {lubricentro.subscriptionPlan ? (
-                          <Badge color="info" text={SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan]?.name || 'N/A'} />
-                        ) : (
-                          <span className="text-gray-400">Sin Plan</span>
-                        )}
-                      </TableCell>
-
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          color="primary"
-                          variant="outline"
-                          onClick={() => viewLubricentroDetails(lubricentro.id)}
-                          title="Ver detalles"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                            <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                          </svg>
-                        </Button>
-                        
-                        {lubricentro.estado !== 'activo' && (
-                          <Button
-                            size="sm"
-                            color="success"
-                            variant="outline"
-                            onClick={() => prepareChangeStatus(lubricentro, 'activo')}
-                            title="Activar"
-                          >
-                            <CheckIcon className="h-4 w-4" />
-                          </Button>
-                        )}
-                        
-                        {lubricentro.estado !== 'inactivo' && (
-                          <Button
-                            size="sm"
-                            color="error"
-                            variant="outline"
-                            onClick={() => prepareChangeStatus(lubricentro, 'inactivo')}
-                            title="Desactivar"
-                          >
-                            <XMarkIcon className="h-4 w-4" />
-                          </Button>
-                        )}
-                        
-                        {lubricentro.estado === 'trial' && (
-                          <Button
-                            size="sm"
-                            color="warning"
-                            variant="outline"
-                            onClick={() => prepareExtendTrial(lubricentro)}
-                            title="Extender prueba"
-                          >
-                            <ClockIcon className="h-4 w-4" />
-                          </Button>
-                        )}
-                        
-                        {lubricentro.estado !== 'trial' && (
-                          <Button
-                            size="sm"
-                            color="info"
-                            variant="outline"
-                            onClick={() => prepareChangeStatus(lubricentro, 'trial')}
-                            title="Cambiar a prueba"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
-                            </svg>
-                          </Button>
-                        )}
-                         <Button
-                            size="sm"
-                            color="info"
-                            variant="outline"
-                            onClick={() => navigate(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
-                            title="Gestionar Suscripción"
-                          >
-                            <CreditCardIcon className="h-4 w-4" />
-                          </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </Table>
-            </div>
-          ) : (
-            <div className="py-8 text-center">
-              <p className="text-gray-500">
-                {searchTerm 
-                  ? 'No se encontraron lubricentros con ese criterio de búsqueda.' 
+        <CardBody className="p-0">
+          <LubricentroTable
+            lubricentros={filteredLubricentros}
+            onChangeStatus={handleChangeStatusFromTable}
+            onExtendTrial={prepareExtendTrial}
+            onViewDetails={viewLubricentroDetails}
+            onManageSubscription={(lubricentro) => navigate(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
+            loading={loading && lubricentros.length === 0}
+          />
+        </CardBody>
+      </Card>
+      
+      {/* Mensaje cuando no hay resultados */}
+      {!loading && filteredLubricentros.length === 0 && (
+        <Card className="mt-6">
+          <CardBody>
+            <div className="text-center py-8">
+              <BuildingOfficeIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-500 text-lg mb-2">
+                {searchTerm ? 
+                  'No se encontraron lubricentros con ese criterio de búsqueda.' 
                   : activeTab !== 'todos' 
-                    ? `No hay lubricentros ${activeTab === 'activo' ? 'activos' : 
-                       activeTab === 'trial' ? 'en período de prueba' : 
-                       activeTab === 'expirando' ? 'que expiren pronto' : 'inactivos'}.` 
+                    ? `No hay lubricentros ${
+                        activeTab === 'activo' ? 'activos' : 
+                        activeTab === 'trial' ? 'en período de prueba' : 
+                        activeTab === 'expirando' ? 'que expiren pronto' : 'inactivos'
+                      }.` 
                     : 'No hay lubricentros registrados.'}
               </p>
               {searchTerm && (
@@ -912,9 +781,9 @@ const LubricentroDashboardPage: React.FC = () => {
                 </Button>
               )}
             </div>
-          )}
-        </CardBody>
-      </Card>
+          </CardBody>
+        </Card>
+      )}
       
       {/* Guía de gestión de lubricentros */}
       <Card className="mt-6">
@@ -939,6 +808,17 @@ const LubricentroDashboardPage: React.FC = () => {
               <li><strong>Desactivar Membresía:</strong> Cambiar el estado de un lubricentro a "Inactivo".</li>
             </ul>
             
+            <p>
+              <strong>Funciones de la Tabla Mejorada:</strong>
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Ordenamiento:</strong> Haga clic en los encabezados de las columnas para ordenar los datos ascendente o descendente.</li>
+              <li><strong>Paginación:</strong> Use los controles en la parte inferior para navegar entre páginas (10 lubricentros por página).</li>
+              <li><strong>Detalles:</strong> Haga doble clic en una fila para ver los detalles completos del lubricentro.</li>
+              <li><strong>Tooltips:</strong> Pase el cursor sobre los botones de acción para ver descripciones de cada función.</li>
+              <li><strong>Filtrado:</strong> Use las pestañas y la barra de búsqueda para encontrar lubricentros específicos.</li>
+            </ul>
+            
             <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mt-4">
               <p className="text-sm text-yellow-700">
                 <strong>Nota:</strong> Los lubricentros en período de prueba que alcanzan la fecha de finalización sin ser activados pasarán automáticamente a estado "Inactivo". Es recomendable revisar regularmente los lubricentros que están por expirar.
@@ -948,10 +828,13 @@ const LubricentroDashboardPage: React.FC = () => {
         </CardBody>
       </Card>
       
-      {/* Modales */}
+      {/* Modales existentes */}
       <ChangeStatusModal
         isOpen={isChangeStatusModalOpen}
-        onClose={() => setIsChangeStatusModalOpen(false)}
+        onClose={() => {
+          setIsChangeStatusModalOpen(false);
+          setSelectedLubricentro(null);
+        }}
         onConfirm={handleChangeStatus}
         lubricentro={selectedLubricentro}
         newStatus={newStatus}
@@ -960,7 +843,10 @@ const LubricentroDashboardPage: React.FC = () => {
       
       <ExtendTrialModal
         isOpen={isExtendTrialModalOpen}
-        onClose={() => setIsExtendTrialModalOpen(false)}
+        onClose={() => {
+          setIsExtendTrialModalOpen(false);
+          setSelectedLubricentro(null);
+        }}
         onConfirm={handleExtendTrial}
         lubricentro={selectedLubricentro}
         loading={processingAction}
@@ -968,7 +854,10 @@ const LubricentroDashboardPage: React.FC = () => {
       
       <LubricentroDetailsModal
         isOpen={isDetailsModalOpen}
-        onClose={() => setIsDetailsModalOpen(false)}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedLubricentro(null);
+        }}
         lubricentro={selectedLubricentro}
       />
     </PageContainer>

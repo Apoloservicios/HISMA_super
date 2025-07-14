@@ -461,7 +461,7 @@ const SuperAdminDashboard: React.FC = () => {
   
   return (
     <PageContainer
-      title="Gestión de Lubricentros"
+      title="Gestión de Lubricentro"
       subtitle="Administración de lubricentros registrados en el sistema"
       action={
         <Button
@@ -469,7 +469,7 @@ const SuperAdminDashboard: React.FC = () => {
           icon={<PlusIcon className="h-5 w-5" />}
           onClick={() => navigate('/superadmin/lubricentros/nuevo')}
         >
-          Nuevo Lubricentro
+          Nuevo Lubricentro4
         </Button>
       }
     >

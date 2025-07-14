@@ -5,7 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import { PageContainer, Card, CardHeader, CardBody, Button, Alert, Spinner } from '../../components/ui';
 import { DashboardService } from '../../services/dashboardService';
 import { Lubricentro, OilChangeStats, User, OilChange } from '../../types';
-import { SUBSCRIPTION_PLANS } from '../../types/subscription';
+import { getSubscriptionPlans } from '../../services/hybridSubscriptionService';
+import { SubscriptionPlan } from '../../types/subscription';
 
 // Recharts - Carga condicional
 import {
@@ -29,7 +30,9 @@ import {
   ArrowDownIcon,
   CalendarDaysIcon,
   WrenchIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  CreditCardIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 
 // Componente de carga rápida
@@ -50,148 +53,307 @@ const ChartSkeleton = () => (
   </div>
 );
 
-// Información de período de prueba
-const TrialInfoCard: React.FC<{ lubricentro: Lubricentro; stats: OilChangeStats }> = React.memo(({ lubricentro, stats }) => {
-  if (lubricentro.estado !== 'trial') return null;
+// 🆕 Interfaz para información de suscripción mejorada
+interface SubscriptionInfo {
+  planName: string;
+  isTrialPeriod: boolean;
+  userLimit: number;
+  currentUsers: number;
+  serviceLimit: number | null; // null = ilimitado
+  currentServices: number;
+  servicesRemaining: number | null;
+  daysRemaining?: number;
+  planType: 'monthly' | 'service' | 'trial';
+  isExpiring: boolean;
+  isLimitReached: boolean;
+}
 
+// 🔧 Función mejorada para obtener información de suscripción
+const getSubscriptionInfo = (
+  lubricentro: Lubricentro, 
+  stats: OilChangeStats, 
+  users: User[], 
+  dynamicPlans: Record<string, SubscriptionPlan>
+): SubscriptionInfo => {
   const TRIAL_SERVICE_LIMIT = 10;
-  const servicesUsed = stats.thisMonth || 0;
-  const servicesRemaining = Math.max(0, TRIAL_SERVICE_LIMIT - servicesUsed);
-  
-  // CORREGIDO: Mejorar el cálculo de días restantes
-  const getDaysRemaining = (): number => {
-    if (!lubricentro.trialEndDate) return 0;
-    
-    try {
-      let endDate: Date;
-      
-      // Manejar diferentes formatos de fecha
-      if (typeof lubricentro.trialEndDate === 'object' && 'toDate' in lubricentro.trialEndDate && typeof lubricentro.trialEndDate.toDate === 'function') {
-        // Timestamp de Firebase
-        endDate = (lubricentro.trialEndDate as any).toDate();
-      } else if (typeof lubricentro.trialEndDate === 'string') {
-        // String de fecha
-        endDate = new Date(lubricentro.trialEndDate);
-      } else if (lubricentro.trialEndDate instanceof Date) {
-        // Ya es un objeto Date
-        endDate = lubricentro.trialEndDate;
-      } else {
-        // Formato desconocido
-        console.warn('Formato de fecha desconocido:', lubricentro.trialEndDate);
-        return 0;
-      }
-      
-      // Verificar que la fecha es válida
-      if (isNaN(endDate.getTime())) {
-        console.warn('Fecha inválida:', lubricentro.trialEndDate);
-        return 0;
-      }
-      
-      const now = new Date();
-      const diffTime = endDate.getTime() - now.getTime();
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      return Math.max(0, diffDays);
-    } catch (error) {
-      console.error('Error calculando días restantes:', error);
-      return 0;
-    }
-  };
-  
-  const daysRemaining = getDaysRemaining();
+  const TRIAL_USER_LIMIT = 2;
 
-  const isExpiring = daysRemaining <= 2;
-  const isLimitReached = servicesRemaining === 0;
+  // Período de prueba
+  if (lubricentro.estado === 'trial') {
+    const servicesUsed = stats.thisMonth || 0;
+    const servicesRemaining = Math.max(0, TRIAL_SERVICE_LIMIT - servicesUsed);
+    
+    const getDaysRemaining = (): number => {
+      if (!lubricentro.trialEndDate) return 0;
+      
+      try {
+        let endDate: Date;
+        
+        if (typeof lubricentro.trialEndDate === 'object' && 'toDate' in lubricentro.trialEndDate) {
+          endDate = (lubricentro.trialEndDate as any).toDate();
+        } else if (typeof lubricentro.trialEndDate === 'string') {
+          endDate = new Date(lubricentro.trialEndDate);
+        } else if (lubricentro.trialEndDate instanceof Date) {
+          endDate = lubricentro.trialEndDate;
+        } else {
+          return 0;
+        }
+        
+        if (isNaN(endDate.getTime())) return 0;
+        
+        const now = new Date();
+        const diffTime = endDate.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return Math.max(0, diffDays);
+      } catch (error) {
+        console.error('Error calculando días restantes:', error);
+        return 0;
+      }
+    };
+
+    const daysRemaining = getDaysRemaining();
+    
+    return {
+      planName: 'Período de Prueba',
+      isTrialPeriod: true,
+      userLimit: TRIAL_USER_LIMIT,
+      currentUsers: users.length,
+      serviceLimit: TRIAL_SERVICE_LIMIT,
+      currentServices: servicesUsed,
+      servicesRemaining,
+      daysRemaining,
+      planType: 'trial',
+      isExpiring: daysRemaining <= 2,
+      isLimitReached: servicesRemaining === 0
+    };
+  }
+
+  // Plan activo
+  if (lubricentro.estado === 'activo' && lubricentro.subscriptionPlan) {
+    // Buscar el plan en planes dinámicos primero
+    let plan = dynamicPlans[lubricentro.subscriptionPlan];
+    
+    if (!plan) {
+      console.warn(`Plan ${lubricentro.subscriptionPlan} no encontrado en planes dinámicos`);
+      return {
+        planName: 'Plan Desconocido',
+        isTrialPeriod: false,
+        userLimit: 1,
+        currentUsers: users.length,
+        serviceLimit: null,
+        currentServices: stats.thisMonth || 0,
+        servicesRemaining: null,
+        planType: 'monthly',
+        isExpiring: false,
+        isLimitReached: false
+      };
+    }
+
+    const currentServices = stats.thisMonth || 0;
+    
+    // Plan por servicios
+    if (plan.planType === 'service') {
+      const totalContracted = lubricentro.totalServicesContracted || plan.totalServices || 0;
+      const servicesUsed = lubricentro.servicesUsed || 0;
+      const servicesRemaining = Math.max(0, totalContracted - servicesUsed);
+      
+      return {
+        planName: plan.name,
+        isTrialPeriod: false,
+        userLimit: plan.maxUsers,
+        currentUsers: users.length,
+        serviceLimit: totalContracted,
+        currentServices: servicesUsed,
+        servicesRemaining,
+        planType: 'service',
+        isExpiring: servicesRemaining <= 5, // Advertir cuando quedan pocos servicios
+        isLimitReached: servicesRemaining === 0
+      };
+    }
+
+    // Plan mensual/semestral
+    const serviceLimit = plan.maxMonthlyServices;
+    const servicesRemaining = serviceLimit ? Math.max(0, serviceLimit - currentServices) : null;
+    
+    return {
+      planName: plan.name,
+      isTrialPeriod: false,
+      userLimit: plan.maxUsers,
+      currentUsers: users.length,
+      serviceLimit,
+      currentServices,
+      servicesRemaining,
+      planType: 'monthly',
+      isExpiring: false,
+      isLimitReached: serviceLimit ? currentServices >= serviceLimit : false
+    };
+  }
+
+  // Plan inactivo o sin plan
+  return {
+    planName: 'Sin Plan Activo',
+    isTrialPeriod: false,
+    userLimit: 1,
+    currentUsers: users.length,
+    serviceLimit: 0,
+    currentServices: 0,
+    servicesRemaining: 0,
+    planType: 'monthly',
+    isExpiring: false,
+    isLimitReached: true
+  };
+};
+
+// 🆕 Componente mejorado para información de suscripción
+const SubscriptionInfoCard: React.FC<{ 
+  subscriptionInfo: SubscriptionInfo;
+  lubricentro: Lubricentro;
+}> = React.memo(({ subscriptionInfo, lubricentro }) => {
+  if (!subscriptionInfo.isTrialPeriod && !subscriptionInfo.isExpiring && !subscriptionInfo.isLimitReached) {
+    return null; // No mostrar si todo está normal
+  }
+
+  const {
+    planName,
+    isTrialPeriod,
+    daysRemaining,
+    servicesRemaining,
+    isExpiring,
+    isLimitReached,
+    serviceLimit,
+    currentServices,
+    planType
+  } = subscriptionInfo;
+
+  const getCardColor = () => {
+    if (isLimitReached) return 'border-red-200 bg-red-50';
+    if (isExpiring) return 'border-orange-200 bg-orange-50';
+    return 'border-blue-200 bg-blue-50';
+  };
+
+  const getIconColor = () => {
+    if (isLimitReached) return 'text-red-600';
+    if (isExpiring) return 'text-orange-600';
+    return 'text-blue-600';
+  };
 
   return (
-    <Card className={`mb-6 ${isExpiring || isLimitReached ? 'border-orange-200 bg-orange-50' : 'border-blue-200 bg-blue-50'}`}>
+    <Card className={`mb-6 ${getCardColor()}`}>
       <CardHeader 
-        title="Período de Prueba Gratuita" 
-        subtitle="Información sobre tu período de evaluación"
+        title={isTrialPeriod ? "Período de Prueba Gratuita" : "Estado de Suscripción"} 
+        subtitle={`Plan actual: ${planName}`}
       />
       <CardBody>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className={`p-4 rounded-lg ${isExpiring ? 'bg-orange-100' : 'bg-blue-100'}`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Días restantes (solo para trial) */}
+          {isTrialPeriod && daysRemaining !== undefined && (
+            <div className={`p-4 rounded-lg ${isExpiring ? 'bg-orange-100' : 'bg-blue-100'}`}>
+              <div className="flex items-center">
+                <CalendarDaysIcon className={`h-6 w-6 mr-2 ${getIconColor()}`} />
+                <div>
+                  <h3 className={`font-medium ${isExpiring ? 'text-orange-700' : 'text-blue-700'}`}>
+                    Días Restantes
+                  </h3>
+                  <p className={`text-2xl font-bold ${isExpiring ? 'text-orange-800' : 'text-blue-800'}`}>
+                    {daysRemaining}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Servicios */}
+          <div className={`p-4 rounded-lg ${isLimitReached ? 'bg-red-100' : isExpiring ? 'bg-orange-100' : 'bg-green-100'}`}>
             <div className="flex items-center">
-              <WrenchIcon className={`h-6 w-6 mr-2 ${isExpiring ? 'text-orange-600' : 'text-blue-600'}`} />
+              <WrenchIcon className={`h-6 w-6 mr-2 ${isLimitReached ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-green-600'}`} />
               <div>
-                <h3 className={`font-medium ${isExpiring ? 'text-orange-700' : 'text-blue-700'}`}>
-                  Días Restantes
+                <h3 className={`font-medium ${isLimitReached ? 'text-red-700' : isExpiring ? 'text-orange-700' : 'text-green-700'}`}>
+                  {planType === 'service' ? 'Servicios Restantes' : 'Servicios Disponibles'}
                 </h3>
-                <p className={`text-2xl font-bold ${isExpiring ? 'text-orange-800' : 'text-blue-800'}`}>
-                  {daysRemaining}
+                <p className={`text-2xl font-bold ${isLimitReached ? 'text-red-800' : isExpiring ? 'text-orange-800' : 'text-green-800'}`}>
+                  {servicesRemaining !== null ? servicesRemaining : '∞'}
                 </p>
+                {serviceLimit && (
+                  <p className={`text-sm mt-1 ${isLimitReached ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-green-600'}`}>
+                    {planType === 'service' 
+                      ? `de ${serviceLimit} totales` 
+                      : `de ${serviceLimit} este mes`
+                    }
+                  </p>
+                )}
               </div>
             </div>
           </div>
 
-          <div className={`p-4 rounded-lg ${isLimitReached ? 'bg-orange-100' : 'bg-green-100'}`}>
-            <div className="flex items-center">
-              <WrenchIcon className={`h-6 w-6 mr-2 ${isLimitReached ? 'text-orange-600' : 'text-green-600'}`} />
-              <div>
-                <h3 className={`font-medium ${isLimitReached ? 'text-orange-700' : 'text-green-700'}`}>
-                  Servicios Disponibles
-                </h3>
-                <p className={`text-2xl font-bold ${isLimitReached ? 'text-orange-800' : 'text-green-800'}`}>
-                  {servicesRemaining}
-                </p>
-                <p className={`text-sm ${isLimitReached ? 'text-orange-600' : 'text-green-600'} mt-1`}>
-                  de {TRIAL_SERVICE_LIMIT} en total
-                </p>
+          {/* Progreso visual */}
+          {serviceLimit && (
+            <div className="p-4 rounded-lg bg-gray-100">
+              <div className="flex items-center mb-2">
+                <ChartBarIcon className="h-6 w-6 mr-2 text-gray-600" />
+                <div>
+                  <h3 className="font-medium text-gray-700">Uso de Servicios</h3>
+                  <p className="text-2xl font-bold text-gray-800">{currentServices}</p>
+                  <p className="text-xs text-gray-600 mt-1">de {serviceLimit} {planType === 'service' ? 'contratados' : 'mensuales'}</p>
+                </div>
+              </div>
+              <div className="mt-2 bg-gray-200 rounded-full h-2">
+                <div 
+                  className={`h-2 rounded-full ${
+                    (currentServices / serviceLimit) * 100 >= 90 ? 'bg-red-500' : 
+                    (currentServices / serviceLimit) * 100 >= 75 ? 'bg-orange-500' : 'bg-green-500'
+                  }`}
+                  style={{ width: `${Math.min(100, (currentServices / serviceLimit) * 100)}%` }}
+                ></div>
               </div>
             </div>
-          </div>
-
-          <div className="p-4 rounded-lg bg-gray-100">
-            <div className="flex items-center mb-2">
-              <ChartBarIcon className="h-6 w-6 mr-2 text-gray-600" />
-              <div>
-                <h3 className="font-medium text-gray-700">Servicios Utilizados</h3>
-                <p className="text-2xl font-bold text-gray-800">{servicesUsed}</p>
-                <p className="text-xs text-gray-600 mt-1">de {TRIAL_SERVICE_LIMIT} servicios</p>
-              </div>
-            </div>
-            <div className="mt-2 bg-gray-200 rounded-full h-2">
-              <div 
-                className={`h-2 rounded-full ${
-                  (servicesUsed / TRIAL_SERVICE_LIMIT) * 100 >= 80 ? 'bg-orange-500' : 
-                  (servicesUsed / TRIAL_SERVICE_LIMIT) * 100 >= 60 ? 'bg-yellow-500' : 'bg-green-500'
-                }`}
-                style={{ width: `${Math.min(100, (servicesUsed / TRIAL_SERVICE_LIMIT) * 100)}%` }}
-              ></div>
-            </div>
-          </div>
+          )}
         </div>
 
+        {/* Alertas y acciones */}
         {(isExpiring || isLimitReached) && (
           <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-start">
               <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mt-0.5 mr-3" />
               <div className="flex-1">
                 <h4 className="text-sm font-medium text-yellow-800">
-                  {isLimitReached ? 'Límite de Servicios Alcanzado' : 'Período de Prueba por Vencer'}
+                  {isLimitReached ? 'Límite Alcanzado' : 'Atención Requerida'}
                 </h4>
                 <div className="mt-2 text-sm text-yellow-700">
-                  {isLimitReached && (
+                  {isLimitReached && planType === 'service' && (
                     <p className="mb-2">
-                      Has utilizado los {TRIAL_SERVICE_LIMIT} servicios disponibles durante tu período de prueba.
+                      Has utilizado todos los servicios contratados en tu plan.
                     </p>
                   )}
-                  {isExpiring && !isLimitReached && (
+                  {isLimitReached && planType === 'monthly' && (
+                    <p className="mb-2">
+                      Has alcanzado el límite de servicios para este mes.
+                    </p>
+                  )}
+                  {isTrialPeriod && isExpiring && !isLimitReached && (
                     <p className="mb-2">
                       Tu período de prueba vence en {daysRemaining} día{daysRemaining !== 1 ? 's' : ''}.
                     </p>
                   )}
-                  <p>Nuestro equipo está listo para ayudarte.</p>
+                  <p>Contacta a nuestro equipo para obtener ayuda.</p>
                 </div>
                 <div className="mt-3 flex flex-col sm:flex-row gap-2">
                   <Button
                     size="sm"
                     color="warning"
-                    onClick={() => window.location.href = `mailto:soporte@hisma.com.ar?subject=Activar suscripción - ${lubricentro.fantasyName}`}
+                    onClick={() => window.location.href = `mailto:soporte@hisma.com.ar?subject=Soporte para ${lubricentro.fantasyName}`}
                   >
                     Contactar Soporte
                   </Button>
+                  {planType === 'service' && isLimitReached && (
+                    <Button
+                      size="sm"
+                      color="primary"
+                      onClick={() => window.location.href = `mailto:ventas@hisma.com.ar?subject=Renovar plan de servicios - ${lubricentro.fantasyName}`}
+                    >
+                      Renovar Plan
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -202,7 +364,7 @@ const TrialInfoCard: React.FC<{ lubricentro: Lubricentro; stats: OilChangeStats 
   );
 });
 
-// Dashboard híbrido principal
+// Dashboard híbrido principal mejorado
 const HybridOwnerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
@@ -226,6 +388,23 @@ const HybridOwnerDashboard: React.FC = () => {
     upcomingChanges: [],
     operatorStats: []
   });
+
+  // Estado para planes dinámicos
+  const [dynamicPlans, setDynamicPlans] = useState<Record<string, SubscriptionPlan>>({});
+
+  // Cargar planes dinámicos
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const plans = await getSubscriptionPlans();
+        setDynamicPlans(plans);
+      } catch (error) {
+        console.warn('Error cargando planes dinámicos:', error);
+      }
+    };
+
+    loadPlans();
+  }, []);
 
   // Cargar datos esenciales primero (rápido)
   useEffect(() => {
@@ -299,6 +478,14 @@ const HybridOwnerDashboard: React.FC = () => {
     return () => clearTimeout(timer);
   }, [userProfile?.lubricentroId, dashboardData.stats]);
 
+  // Información de suscripción calculada
+  const subscriptionInfo = useMemo(() => {
+    if (!dashboardData.lubricentro || !dashboardData.stats || Object.keys(dynamicPlans).length === 0) {
+      return null;
+    }
+    return getSubscriptionInfo(dashboardData.lubricentro, dashboardData.stats, dashboardData.users, dynamicPlans);
+  }, [dashboardData.lubricentro, dashboardData.stats, dashboardData.users, dynamicPlans]);
+
   // Cálculos optimizados
   const monthlyChange = useMemo(() => {
     if (!dashboardData.stats) return { value: 0, increase: true };
@@ -367,7 +554,13 @@ const HybridOwnerDashboard: React.FC = () => {
       title={`Dashboard de ${lubricentro.fantasyName}`}
       subtitle={`Bienvenido, ${userProfile?.nombre} ${userProfile?.apellido}`}
     >
-      <TrialInfoCard lubricentro={lubricentro} stats={stats} />
+      {/* Información de suscripción mejorada */}
+      {subscriptionInfo && (
+        <SubscriptionInfoCard 
+          subscriptionInfo={subscriptionInfo} 
+          lubricentro={lubricentro} 
+        />
+      )}
 
       {/* Estadísticas principales - Cargan inmediatamente */}
       <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2 lg:grid-cols-4">
@@ -418,6 +611,11 @@ const HybridOwnerDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Empleados</p>
                 <p className="text-2xl font-semibold text-gray-800">{users.length}</p>
+                {subscriptionInfo && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    de {subscriptionInfo.userLimit} disponibles
+                  </p>
+                )}
               </div>
             </div>
           </CardBody>
@@ -563,36 +761,98 @@ const HybridOwnerDashboard: React.FC = () => {
           </CardBody>
         </Card>
         
-        {/* Información de suscripción */}
+        {/* Información de suscripción mejorada */}
         <Card>
           <CardHeader title="Mi Suscripción" />
           <CardBody>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-primary-50 p-4 rounded-lg">
-                <h3 className="font-medium text-primary-700">Plan Actual</h3>
-                <p className="text-xl font-bold text-primary-800">
-                  {lubricentro?.subscriptionPlan && SUBSCRIPTION_PLANS?.[lubricentro.subscriptionPlan]?.name 
-                    ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].name
-                    : lubricentro?.estado === 'trial' 
-                      ? 'Período de Prueba' 
-                      : 'Plan Básico'}
-                </p>
+            {subscriptionInfo ? (
+              <div className="space-y-4">
+                {/* Plan actual */}
+                <div className="bg-primary-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-primary-700">Plan Actual</h3>
+                      <p className="text-xl font-bold text-primary-800">
+                        {subscriptionInfo.planName}
+                      </p>
+                      {subscriptionInfo.isTrialPeriod && subscriptionInfo.daysRemaining !== undefined && (
+                        <p className="text-sm text-primary-600 mt-1">
+                          {subscriptionInfo.daysRemaining} días restantes
+                        </p>
+                      )}
+                    </div>
+                    <CreditCardIcon className="h-8 w-8 text-primary-600" />
+                  </div>
+                </div>
+                
+                {/* Métricas de uso */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h3 className="font-medium text-blue-700">Usuarios</h3>
+                    <p className="text-xl font-bold text-blue-800">
+                      {subscriptionInfo.currentUsers} / {subscriptionInfo.userLimit}
+                    </p>
+                    <div className="mt-2 bg-blue-200 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full" 
+                        style={{ width: `${Math.min(100, (subscriptionInfo.currentUsers / subscriptionInfo.userLimit) * 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h3 className="font-medium text-green-700">
+                      {subscriptionInfo.planType === 'service' ? 'Servicios Usados' : 'Servicios este mes'}
+                    </h3>
+                    <p className="text-xl font-bold text-green-800">
+                      {subscriptionInfo.currentServices} / {subscriptionInfo.serviceLimit || '∞'}
+                    </p>
+                    {subscriptionInfo.serviceLimit && (
+                      <div className="mt-2 bg-green-200 rounded-full h-2">
+                        <div 
+                          className={`h-2 rounded-full ${
+                            (subscriptionInfo.currentServices / subscriptionInfo.serviceLimit) * 100 >= 90 ? 'bg-red-600' :
+                            (subscriptionInfo.currentServices / subscriptionInfo.serviceLimit) * 100 >= 75 ? 'bg-orange-600' : 'bg-green-600'
+                          }`}
+                          style={{ width: `${Math.min(100, (subscriptionInfo.currentServices / subscriptionInfo.serviceLimit) * 100)}%` }}
+                        ></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Estado del plan */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-gray-700">Estado</h3>
+                      <div className="flex items-center mt-1">
+                        <div className={`w-2 h-2 rounded-full mr-2 ${
+                          subscriptionInfo.isLimitReached ? 'bg-red-500' :
+                          subscriptionInfo.isExpiring ? 'bg-orange-500' : 'bg-green-500'
+                        }`}></div>
+                        <span className={`text-sm font-medium ${
+                          subscriptionInfo.isLimitReached ? 'text-red-700' :
+                          subscriptionInfo.isExpiring ? 'text-orange-700' : 'text-green-700'
+                        }`}>
+                          {subscriptionInfo.isLimitReached ? 'Límite Alcanzado' :
+                           subscriptionInfo.isExpiring ? 'Requiere Atención' : 'Activo'}
+                        </span>
+                      </div>
+                    </div>
+                    <ShieldCheckIcon className={`h-6 w-6 ${
+                      subscriptionInfo.isLimitReached ? 'text-red-500' :
+                      subscriptionInfo.isExpiring ? 'text-orange-500' : 'text-green-500'
+                    }`} />
+                  </div>
+                </div>
               </div>
-              
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-medium text-blue-700">Usuarios</h3>
-                <p className="text-xl font-bold text-blue-800">
-                  {users.length} / {lubricentro?.estado === 'trial' ? '2' : '5'}
-                </p>
+            ) : (
+              <div className="text-center py-4">
+                <CreditCardIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                <p className="text-gray-500">Cargando información de suscripción...</p>
               </div>
-              
-              <div className="bg-green-50 p-4 rounded-lg">
-                <h3 className="font-medium text-green-700">Servicios este mes</h3>
-                <p className="text-xl font-bold text-green-800">
-                  {stats.thisMonth} / {lubricentro?.estado === 'trial' ? '10' : '∞'}
-                </p>
-              </div>
-            </div>
+            )}
           </CardBody>
         </Card>
       </div>
@@ -605,6 +865,7 @@ const HybridOwnerDashboard: React.FC = () => {
           fullWidth 
           icon={<PlusIcon className="h-5 w-5" />} 
           onClick={() => navigate('/cambios-aceite/nuevo')}
+          disabled={subscriptionInfo?.isLimitReached}
         >
           Nuevo Cambio
         </Button>
