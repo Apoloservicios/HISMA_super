@@ -309,13 +309,7 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('🔄 UpdateSubscriptionModal - Inicializando', {
-      lubricentroName: lubricentro?.fantasyName,
-      currentPlan: lubricentro?.subscriptionPlan,
-      currentRenewalType: lubricentro?.subscriptionRenewalType,
-      availablePlans: Object.keys(dynamicPlans),
-      totalPlans: Object.keys(dynamicPlans).length
-    });
+  
 
     if (lubricentro) {
       setPlan(lubricentro.subscriptionPlan || 'basic');
@@ -339,7 +333,7 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
   const handleSubmit = async () => {
     try {
       setError(null);
-      console.log('🚀 Modal - Enviando actualización:', { plan, renewalType, autoRenewal });
+
       
       await onConfirm(plan as SubscriptionPlanType, renewalType, autoRenewal);
     } catch (err: any) {
@@ -368,15 +362,7 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
     return planData && planData.name && planData.price;
   });
 
-  console.log('📋 Modal - Planes disponibles para mostrar:', {
-    total: availablePlansEntries.length,
-    plans: availablePlansEntries.map(([id, data]) => ({
-      id,
-      name: data.name,
-      type: data.planType,
-      price: data.price
-    }))
-  });
+ 
 
   return (
     <Modal 
@@ -437,7 +423,7 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
                         : 'border-gray-200 hover:bg-gray-50'
                     }`}
                     onClick={() => {
-                      console.log('🖱️ Seleccionando plan:', planId);
+
                       setPlan(planId);
                     }}
                   >
@@ -688,7 +674,7 @@ const loadData = async () => {
     setLoadingPlans(true);
     setError(null);
     
-    console.log('🔄 LubricentroSubscriptionPage - Iniciando carga de datos...');
+
     
     // Invalidar cache para obtener datos frescos
     invalidatePlansCache();
@@ -699,21 +685,8 @@ const loadData = async () => {
       getAllDynamicPlans()
     ]);
     
-    console.log('📋 Datos cargados:', {
-      lubricentro: {
-        id: lubricentroData.id,
-        name: lubricentroData.fantasyName,
-        currentPlan: lubricentroData.subscriptionPlan,
-        estado: lubricentroData.estado
-      },
-      planes: {
-        standard: Object.keys(allPlansData.standardPlans).length,
-        dynamic: Object.keys(allPlansData.dynamicPlans).length,
-        total: allPlansData.totalCount,
-        allPlanIds: Object.keys(allPlansData.allPlans),
-        planNames: Object.values(allPlansData.allPlans).map(p => p.name)
-      }
-    });
+   
+    
     
     // Verificar que se obtuvieron datos válidos
     if (!lubricentroData) {
@@ -728,7 +701,7 @@ const loadData = async () => {
         const retryPlans = await getSubscriptionPlans();
         if (retryPlans && Object.keys(retryPlans).length > 0) {
           setDynamicPlans(retryPlans as Record<string, SubscriptionPlan>);
-          console.log('✅ Planes recargados exitosamente en segundo intento');
+    
         } else {
           throw new Error('No hay planes disponibles');
         }
@@ -744,7 +717,7 @@ const loadData = async () => {
     
     setLubricentro(lubricentroData);
     
-    console.log('✅ Carga de datos completada exitosamente');
+
     
   } catch (err) {
     console.error('❌ Error al cargar datos:', err);
@@ -801,18 +774,11 @@ const handleUpdateSubscription = async (
   try {
     setProcessing(true);
     setError(null);
-    
-    console.log('🚀 handleUpdateSubscription - Iniciando:', {
-      lubricentroId: lubricentro.id,
-      plan,
-      renewalType,
-      autoRenewal,
-      lubricentroName: lubricentro.fantasyName
-    });
+  
     
     // 🔧 PASO 1: Actualizar la suscripción (esto cambia el estado a 'activo')
     await updateSubscription(lubricentro.id, plan, renewalType, autoRenewal);
-    console.log('✅ Suscripción actualizada');
+  
     
     // 🔧 PASO 2: Registrar el pago automáticamente
     const planData = dynamicPlans[plan];
@@ -829,10 +795,7 @@ const handleUpdateSubscription = async (
       }
       
       if (paymentAmount > 0) {
-        console.log('💰 Registrando pago automático:', {
-          amount: paymentAmount,
-          description: paymentDescription
-        });
+    
         
         await recordPayment(
           lubricentro.id, 
@@ -840,13 +803,13 @@ const handleUpdateSubscription = async (
           'admin_update', 
           `admin_update_${Date.now()}`
         );
-        console.log('✅ Pago registrado');
+       
       }
     }
     
     // 🔧 PASO 3: Recargar datos para reflejar cambios
     await loadData();
-    console.log('✅ Datos recargados');
+   
     
     // 🔧 PASO 4: Cerrar modal y mostrar éxito
     setIsSubscriptionModalOpen(false);
@@ -870,23 +833,17 @@ const handleRecordPayment = async (amount: number, method: string, reference: st
     setProcessing(true);
     setError(null);
     
-    console.log('💰 handleRecordPayment - Registrando pago manual:', {
-      lubricentroId: lubricentro.id,
-      amount,
-      method,
-      reference,
-      currentPlan: lubricentro.subscriptionPlan
-    });
+
     
     await recordPayment(lubricentro.id, amount, method, reference);
-    console.log('✅ Pago manual registrado');
+
     
     await loadData();
     setIsPaymentModalOpen(false);
     setSuccess('Pago registrado correctamente');
     
   } catch (err: any) {
-    console.error('❌ Error al registrar el pago:', err);
+
     setError(`Error al registrar el pago: ${err.message}`);
   } finally {
     setProcessing(false);

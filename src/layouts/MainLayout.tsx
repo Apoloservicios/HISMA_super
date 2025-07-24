@@ -24,7 +24,9 @@ import {
   MagnifyingGlassIcon,
   CreditCardIcon,
   ShieldCheckIcon ,
-  TruckIcon 
+   TruckIcon,
+  ClockIcon,  // ✅ AGREGAR ClockIcon
+  PlusIcon    // ✅ AGREGAR PlusIcon
 } from '@heroicons/react/24/outline';
 
 // Componente de carga
@@ -111,40 +113,60 @@ const MainLayout: React.FC = () => {
   
   // Para usuarios que NO son superadmin (admin y user)
   items.push(
-    { 
-      text: 'Dashboard', 
-      icon: <HomeIcon className="w-5 h-5" />, 
-      path: '/dashboard',
-      divider: false
+  { 
+    text: 'Dashboard', 
+    icon: <HomeIcon className="w-5 h-5" />, 
+    path: '/dashboard',
+    divider: false
+  }
+);
+
+// ✅ CAMBIOS DE ACEITE - MENÚ EXPANDIDO
+items.push(
+  { 
+    text: 'Historial de Cambios', 
+    icon: <WrenchIcon className="w-5 h-5" />, 
+    path: '/cambios-aceite',
+    divider: false
+  },
+  { 
+    text: 'Servicios Pendientes', 
+    icon: <ClockIcon className="w-5 h-5" />, 
+    path: '/cambios-aceite/pendientes',
+    divider: false
+  },
+  { 
+    text: 'Precarga Rápida', 
+    icon: <PlusIcon className="w-5 h-5" />, 
+    path: '/cambios-aceite/precarga',
+    divider: false
+  }
+);
+
+items.push(
+  { 
+    text: 'Garantías', 
+    icon: <ShieldCheckIcon className="w-5 h-5" />, 
+    path: '/garantias',
+    divider: true // ✅ Agregar separador después de cambios de aceite
+  },
+  { 
+      text: 'Próximos Servicios', 
+      icon: <CalendarIcon className="w-5 h-5" />, 
+      path: '/proximos-servicios',
+      divider: true
     },
-    { 
-      text: 'Cambios de Aceite', 
-      icon: <WrenchIcon className="w-5 h-5" />, 
-      path: '/cambios-aceite',
-      divider: false
-    },
-    { 
-      text: 'Garantías', 
-      icon: <ShieldCheckIcon className="w-5 h-5" />, 
-      path: '/garantias',
-      divider: false
-    },
-  );
+);
   
   // Para admin - ✅ MENÚ EXPANDIDO CON REPORTES
   if (userProfile.role === 'admin') {
     items.push(
-      { 
-        text: 'Usuarios', 
-        icon: <UserGroupIcon className="w-5 h-5" />, 
-        path: '/usuarios',
-        divider: false
-      },
+     
       { 
         text: 'Reportes', 
         icon: <ChartBarIcon className="w-5 h-5" />, 
         path: '/reportes',
-        divider: false,
+        divider: true,
         // ✅ AGREGAR SUBMENÚ (Opcional - para implementación futura)
         hasSubmenu: true,
         submenuItems: [
@@ -175,18 +197,19 @@ const MainLayout: React.FC = () => {
   
   // Para todos los usuarios que no son superadmin (continuación)
   items.push(
-    { 
-      text: 'Próximos Servicios', 
-      icon: <CalendarIcon className="w-5 h-5" />, 
-      path: '/proximos-servicios',
-      divider: true
-    },
+    
     { 
       text: 'Mi Perfil', 
       icon: <UserIcon className="w-5 h-5" />, 
       path: '/perfil',
       divider: false
     },
+     { 
+        text: 'Usuarios', 
+        icon: <UserGroupIcon className="w-5 h-5" />, 
+        path: '/usuarios',
+        divider: false
+      },
     { 
       text: 'Soporte', 
       icon: <QuestionMarkCircleIcon className="w-5 h-5" />, 

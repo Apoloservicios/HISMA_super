@@ -159,7 +159,7 @@ export const createPlan = async (
       newValues: managedPlan
     });
 
-    console.log('Plan creado exitosamente:', planData.id);
+
   } catch (error) {
     console.error('Error al crear plan:', error);
     throw error;
@@ -442,7 +442,7 @@ export const togglePlanPublication = async (
       newValues: { isPublished }
     });
 
-    console.log(`Plan ${planId} ${isPublished ? 'publicado' : 'despublicado'} exitosamente`);
+    
   } catch (error) {
     console.error('Error al cambiar estado de publicación:', error);
     throw error;
@@ -466,7 +466,7 @@ export const updatePlanDisplayOrder = async (
       updatedBy: changedBy
     });
 
-    console.log(`Orden de visualización actualizado para plan ${planId}`);
+ 
   } catch (error) {
     console.error('Error al actualizar orden:', error);
     throw error;

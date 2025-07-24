@@ -77,24 +77,14 @@ const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('💰 RecordPaymentModal - Configurando precio automático', {
-      lubricentroName: lubricentro.fantasyName,
-      currentPlan: lubricentro.subscriptionPlan,
-      renewalType: lubricentro.subscriptionRenewalType,
-      availablePlans: Object.keys(dynamicPlans)
-    });
+  
 
     if (lubricentro.subscriptionPlan && dynamicPlans[lubricentro.subscriptionPlan]) {
       const plan = dynamicPlans[lubricentro.subscriptionPlan];
       const planPrice = lubricentro.subscriptionRenewalType === 'semiannual' 
         ? plan.price.semiannual 
         : plan.price.monthly;
-      
-      console.log('💰 Precio calculado:', {
-        planName: plan.name,
-        renewalType: lubricentro.subscriptionRenewalType,
-        price: planPrice
-      });
+     
       
       setAmount(planPrice);
     }
@@ -222,12 +212,7 @@ const UpdateSubscriptionModal: React.FC<UpdateSubscriptionModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
 useEffect(() => {
-  console.log('🔄 UpdateSubscriptionModal - Inicializando', {
-    lubricentroName: lubricentro.fantasyName,
-    currentPlan: lubricentro.subscriptionPlan,
-    currentRenewalType: lubricentro.subscriptionRenewalType,
-    availablePlans: Object.keys(dynamicPlans)
-  });
+ 
 
   if (lubricentro) {
     setPlan(lubricentro.subscriptionPlan || 'basic');
@@ -250,7 +235,7 @@ useEffect(() => {
   const handleSubmit = async () => {
     try {
       setError(null);
-      console.log('🚀 Enviando actualización:', { plan, renewalType, autoRenewal });
+     
       await onConfirm(plan, renewalType, autoRenewal);
     } catch (err: any) {
       setError(err.message || 'Error al actualizar la suscripción');
@@ -456,7 +441,7 @@ const LubricentroSubscriptionPanel: React.FC<LubricentroSubscriptionPanelProps> 
 
   const loadPlans = async () => {
     try {
-      console.log('📋 LubricentroSubscriptionPanel - Cargando planes...');
+     
       setLoadingPlans(true);
       setError(null);
       
@@ -465,11 +450,7 @@ const LubricentroSubscriptionPanel: React.FC<LubricentroSubscriptionPanelProps> 
       
       const plansData = await getSubscriptionPlans();
       
-      console.log('✅ Planes cargados:', Object.keys(plansData).map(key => ({
-        id: key,
-        name: plansData[key as SubscriptionPlanType].name,
-        price: plansData[key as SubscriptionPlanType].price
-      })));
+      
       
       setDynamicPlans(plansData);
       
@@ -488,12 +469,7 @@ const LubricentroSubscriptionPanel: React.FC<LubricentroSubscriptionPanelProps> 
     autoRenewal: boolean
   ) => {
     try {
-      console.log('🚀 Actualizando suscripción:', {
-        lubricentroId: lubricentro.id,
-        plan,
-        renewalType,
-        autoRenewal
-      });
+    
       
       setLoading(true);
       setError(null);
@@ -528,12 +504,7 @@ const LubricentroSubscriptionPanel: React.FC<LubricentroSubscriptionPanelProps> 
     reference: string
   ) => {
     try {
-      console.log('💳 Registrando pago:', {
-        lubricentroId: lubricentro.id,
-        amount,
-        method,
-        reference
-      });
+    
       
       setLoading(true);
       setError(null);

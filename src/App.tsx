@@ -61,6 +61,10 @@ import SuperAdminReportPage from './pages/admin/SuperAdminReportPage';
 
 import LubricentroSubscriptionPage from './pages/admin/LubricentroSubscriptionPage';
 
+import PendingOilChangesPage from './pages/oilchanges/PendingOilChangesPage';
+import CompleteOilChangePage from './pages/oilchanges/CompleteOilChangePage';
+import QuickOilChangeFormPage from './pages/oilchanges/QuickOilChangeFormPage';
+
 // Create a client for React Query
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -263,6 +267,33 @@ const App: React.FC = () => {
                   element={
                     <PrivateRoute>
                       <SupportPage />
+                    </PrivateRoute>
+                  } 
+                />
+
+                <Route 
+                  path="/cambios-aceite/pendientes" 
+                  element={
+                    <PrivateRoute>
+                      <PendingOilChangesPage />
+                    </PrivateRoute>
+                  } 
+                />
+
+                <Route 
+                  path="/cambios-aceite/completar/:id" 
+                  element={
+                    <PrivateRoute requiresActiveSubscription={true}>
+                      <CompleteOilChangePage />
+                    </PrivateRoute>
+                  } 
+                />
+
+                <Route 
+                  path="/cambios-aceite/precarga" 
+                  element={
+                    <PrivateRoute requiresActiveSubscription={true}>
+                      <QuickOilChangeFormPage />
                     </PrivateRoute>
                   } 
                 />

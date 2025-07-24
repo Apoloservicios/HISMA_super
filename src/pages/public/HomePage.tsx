@@ -62,21 +62,14 @@ const HomePage: React.FC = () => {
         // Cargar solo planes activos desde Firebase
         const activePlans = await getActivePlans();
         
-        console.log('🔍 Planes activos cargados:', activePlans.length);
-        console.log('📝 Planes activos:', activePlans.map(p => ({ 
-          id: p.id, 
-          name: p.name, 
-          publishOnHomepage: (p as any).publishOnHomepage,
-          isPublished: (p as any).isPublished 
-        })));
+      
         
         // ✅ FILTRAR PLANES PUBLICADOS (Compatible con ambas propiedades)
         const publishedPlans = activePlans.filter(plan => {
           const publishOnHomepage = (plan as any).publishOnHomepage;
           const isPublished = (plan as any).isPublished;
           
-          // Log para debugging
-          console.log(`📋 Plan ${plan.id}:`, { publishOnHomepage, isPublished });
+      
           
           // Retornar true si cualquiera es true
           return publishOnHomepage === true || isPublished === true;
@@ -101,10 +94,9 @@ const HomePage: React.FC = () => {
         
         setPlans(sortedPlans);
         
-        console.log(`✅ Se cargaron ${sortedPlans.length} planes publicados de ${activePlans.length} planes activos`);
         
       } catch (error) {
-        console.error('❌ Error al cargar planes:', error);
+       
         setErrorLoadingPlans(true);
         
         // ✅ PLANES DE FALLBACK CON publishOnHomepage = true
@@ -400,7 +392,7 @@ const HomePage: React.FC = () => {
     const structuredData = {
       "@context": "https://schema.org",
       "@type": "WebApplication",
-      "name": "Hisma - Sistema de Gestión para Lubricentros",
+      "name": "Hisma - Sistema de Gestión de cambios de aceite para Lubricentros",
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web Browser",
       "url": "https://hisma.com.ar",
@@ -465,7 +457,7 @@ const HomePage: React.FC = () => {
       {/* ✅ SEO OPTIMIZADO PARA ARGENTINA */}
       <Helmet>
         {/* Meta tags básicos optimizados */}
-        <title>Hisma - Sistema de Gestión para Lubricentros | Software en la Nube Argentina</title>
+        <title>Hisma - Sistema de Gestión de cambios de aceite para Lubricentros | Software en la Nube Argentina</title>
         <meta name="description" content="Sistema para lubricentros que permite administrar cambios de aceite de forma digital. Gestiona tu lubricentro en la nube con Hisma. Prueba gratis 7 días." />
         
         {/* Keywords específicas Argentina */}
@@ -488,12 +480,12 @@ const HomePage: React.FC = () => {
         <link rel="alternate" hrefLang="x-default" href="https://hisma.com.ar/" />
         
         {/* Open Graph optimizado */}
-        <meta property="og:title" content="Hisma - Sistema de Gestión para Lubricentros Argentina" />
+        <meta property="og:title" content="Hisma - Sistema de Gestión de cambios de aceite para Lubricentros Argentina" />
         <meta property="og:description" content="Administra los cambios de aceite de tu lubricentro de forma digital. Sistema completo para gestionar clientes, servicios y recordatorios. Prueba gratis." />
         <meta property="og:image" content="https://hisma.com.ar/og-image.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:image:alt" content="Hisma - Sistema de Gestión para Lubricentros Argentina" />
+        <meta property="og:image:alt" content="Hisma - Sistema de Gestión de cambios de aceite para Lubricentros Argentina" />
         <meta property="og:url" content="https://hisma.com.ar" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Hisma" />
@@ -501,7 +493,7 @@ const HomePage: React.FC = () => {
         
         {/* Twitter Cards */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Hisma - Sistema de Gestión para Lubricentros Argentina" />
+        <meta name="twitter:title" content="Hisma - Sistema de Gestión de cambios de aceite para Lubricentros Argentina" />
         <meta name="twitter:description" content="Administra los cambios de aceite de tu lubricentro de forma digital. Prueba gratis 7 días." />
         <meta name="twitter:image" content="https://hisma.com.ar/og-image.png" />
         
@@ -616,7 +608,7 @@ const HomePage: React.FC = () => {
                 <div className="flex items-center justify-between w-full md:w-auto">
                   <img
                     src={hismaLogo}
-                    alt="HISMA - Sistema de Gestión para Lubricentros Argentina"
+                    alt="HISMA - Sistema de Gestión de cambios de aceite para Lubricentros Argentina"
                     className="h-10 max-w-[150px] object-contain"
                   />
                 </div>
@@ -648,7 +640,7 @@ const HomePage: React.FC = () => {
           </div>
           <div className="relative max-w-7xl mx-auto py-16 sm:px-6 sm:py-24 lg:py-32 lg:px-8">
             <h1 className="text-center text-4xl font-extrabold tracking-tight sm:text-5xl lg:text-6xl">
-              <span className="block text-white">Sistema de Gestión para Lubricentros</span>
+              <span className="block text-white">Sistema de Gestión de cambios de aceite para Lubricentros</span>
               <span className="block text-primary-200">Simple y Digital</span>
             </h1>
             <p className="mt-6 max-w-lg mx-auto text-center text-xl text-white sm:max-w-3xl">
@@ -922,7 +914,7 @@ const HomePage: React.FC = () => {
             </div>
             
             <p className="mt-4 text-center text-base text-gray-400">
-              &copy; {new Date().getFullYear()} Hisma - Sistema de Gestión para Lubricentros. Todos los derechos reservados.
+              &copy; {new Date().getFullYear()} Hisma - Sistema de Gestión de cambios de aceite ara Lubricentros. Todos los derechos reservados.
             </p>
           </div>
         </footer>

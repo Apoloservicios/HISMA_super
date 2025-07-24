@@ -27,8 +27,13 @@ import {
   ShareIcon,
   EyeIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,ClockIcon  
 } from '@heroicons/react/24/outline';
+
+import { OilChangeStatusBadge } from '../../components/oilchange/OilChangeStatusButton';
+import OilChangeStatusButton from '../../components/oilchange/OilChangeStatusButton';
+import Tooltip from '../../components/ui/Tooltip';
+
 
 // Debounce function para la búsqueda
 const useDebounce = (value: string, delay: number) => {
@@ -436,13 +441,31 @@ const generatePDF = async (oilChangeId: string) => {
       title="Historial de Cambios de Aceite"
       subtitle="Gestión y consulta de cambios de aceite"
       action={
-        <Button
-          color="primary"
-          icon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => navigate('/cambios-aceite/nuevo')}
-        >
-          Nuevo Cambio
-        </Button>
+        <div className="flex space-x-2">
+            <Button
+              color="warning"
+              variant="outline"
+              icon={<ClockIcon className="h-5 w-5" />}
+              onClick={() => navigate('/cambios-aceite/pendientes')}
+            >
+              Ver Pendientes
+            </Button>
+            <Button
+              color="secondary"
+              variant="outline"
+              icon={<PlusIcon className="h-5 w-5" />}
+              onClick={() => navigate('/cambios-aceite/precarga')}
+            >
+              Precarga Rápida
+            </Button>
+            <Button
+              color="primary"
+              icon={<PlusIcon className="h-5 w-5" />}
+              onClick={() => navigate('/cambios-aceite/nuevo')}
+            >
+              Nuevo Cambio
+            </Button>
+        </div>
       }
     >
       {error && (
@@ -513,25 +536,28 @@ const generatePDF = async (oilChangeId: string) => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Nº Cambio
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      N° Cambio
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Fecha
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Cliente
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Vehículo
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Dominio
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Próximo Cambio
                     </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Acciones
                     </th>
                   </tr>
@@ -541,6 +567,9 @@ const generatePDF = async (oilChangeId: string) => {
                     <tr key={change.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {change.nroCambio}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <OilChangeStatusBadge status={change.estado} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(change.fecha)}
@@ -558,53 +587,85 @@ const generatePDF = async (oilChangeId: string) => {
                         {formatDate(change.fechaProximoCambio)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 flex">
-                        <Button
-                          size="sm"
-                          color="primary"
-                          variant="outline"
-                          onClick={() => navigate(`/cambios-aceite/${change.id}`)}
-                          title="Ver detalle"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          color="secondary"
-                          variant="outline"
-                          onClick={() => navigate(`/cambios-aceite/editar/${change.id}`)}
-                          title="Editar"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          color="success"
-                          variant="outline"
-                          onClick={() => navigate(`/cambios-aceite/nuevo?clone=${change.id}`)}
-                          title="Duplicar"
-                        >
-                          <DocumentDuplicateIcon className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          color="info"
-                          variant="outline"
-                          onClick={() => generatePDF(change.id)}
-                          title="Generar PDF"
-                          disabled={generatingPdf}
-                        >
-                          <PrinterIcon className="h-4 w-4" />
-                        </Button>
-                          
-                        <Button
-                          size="sm"
-                          color="warning"
-                          variant="outline"
-                          onClick={() => shareViaWhatsApp(change.id)}
-                          title="Compartir"
-                        >
-                          <ShareIcon className="h-4 w-4" />
-                        </Button>
+                        <Tooltip content="Ver detalles completos del cambio de aceite">
+                          <Button
+                            size="sm"
+                            color="primary"
+                            variant="outline"
+                            onClick={() => navigate(`/cambios-aceite/${change.id}`)}
+                          >
+                            <EyeIcon className="h-4 w-4" />
+                          </Button>
+                        </Tooltip>
+                        
+                        {/* Solo mostrar editar si no está enviado */}
+                        {change.estado !== 'enviado' && (
+                          <Tooltip content="Editar información del cambio de aceite">
+                            <Button
+                              size="sm"
+                              color="secondary"
+                              variant="outline"
+                              onClick={() => navigate(`/cambios-aceite/editar/${change.id}`)}
+                            >
+                              <PencilIcon className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        
+                        <Tooltip content="Duplicar este cambio para crear uno nuevo con los mismos datos del vehículo">
+                          <Button
+                            size="sm"
+                            color="success"
+                            variant="outline"
+                            onClick={() => navigate(`/cambios-aceite/nuevo?clone=${change.id}`)}
+                          >
+                            <DocumentDuplicateIcon className="h-4 w-4" />
+                          </Button>
+                        </Tooltip>
+                        
+                        {/* Solo mostrar PDF si está completo o enviado */}
+                        {(change.estado === 'completo' || change.estado === 'enviado') && (
+                          <Tooltip content="Generar y descargar PDF del comprobante">
+                            <Button
+                              size="sm"
+                              color="info"
+                              variant="outline"
+                              onClick={() => generatePDF(change.id)}
+                              disabled={generatingPdf}
+                            >
+                              <PrinterIcon className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        
+                        {/* Solo mostrar WhatsApp si está completo o enviado */}
+                        {(change.estado === 'completo' || change.estado === 'enviado') && (
+                          <Tooltip content="Compartir comprobante por WhatsApp">
+                            <Button
+                              size="sm"
+                              color="warning"
+                              variant="outline"
+                              onClick={() => shareViaWhatsApp(change.id)}
+                            >
+                              <ShareIcon className="h-4 w-4" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        
+                        {/* Botón para cambiar estado */}
+                        <Tooltip content={
+                          change.estado === 'pendiente' ? 'Marcar como completado - El servicio ha sido realizado' :
+                          change.estado === 'completo' ? 'Marcar como enviado - El comprobante ha sido entregado al cliente' :
+                          'No hay acciones de estado disponibles'
+                        }>
+                          <div>
+                            <OilChangeStatusButton 
+                              oilChange={change} 
+                              onStatusUpdated={loadInitialData}
+                              showLabel={false}
+                            />
+                          </div>
+                        </Tooltip>
                       </td>
                     </tr>
                   ))}

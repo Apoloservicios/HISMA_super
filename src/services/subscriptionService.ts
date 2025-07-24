@@ -139,12 +139,7 @@ export const updateSubscription = async (
   autoRenewal: boolean = true
 ): Promise<void> => {
   try {
-    console.log('🔄 updateSubscription - Iniciando actualización:', {
-      lubricentroId,
-      subscriptionPlan,
-      renewalType,
-      autoRenewal
-    });
+   
 
     // Obtener datos actuales del lubricentro
     const lubricentro = await getLubricentroById(lubricentroId);
@@ -161,17 +156,11 @@ export const updateSubscription = async (
     
     if (!planData) {
       console.error('❌ Plan no encontrado:', subscriptionPlan);
-      console.log('Planes disponibles:', Object.keys(allPlans));
+
       throw new Error(`Plan de suscripción "${subscriptionPlan}" no encontrado`);
     }
 
-    console.log('📋 Plan encontrado:', {
-      planId: subscriptionPlan,
-      planName: planData.name,
-      planType: planData.planType,
-      price: planData.price,
-      servicePrice: planData.servicePrice
-    });
+ 
 
     const now = new Date();
     let updateData: any = {
@@ -181,7 +170,7 @@ export const updateSubscription = async (
 
     // Si es un plan por servicios
     if (planData.planType === 'service') {
-      console.log('🔧 Configurando plan por servicios');
+
       
       const validityMonths = planData.validityMonths || 6; // Default 6 meses
       const expirationDate = new Date(now);
@@ -209,8 +198,7 @@ export const updateSubscription = async (
       };
       
     } else {
-      // Plan mensual/semestral tradicional
-      console.log('📅 Configurando plan mensual/semestral');
+
       
       const subscriptionEndDate = new Date(now);
       const billingCycleEndDate = new Date(now);
@@ -245,12 +233,12 @@ export const updateSubscription = async (
       };
     }
 
-    console.log('💾 Datos a actualizar:', updateData);
+
 
     // Actualizar en Firebase
     await updateLubricentro(lubricentroId, updateData);
     
-    console.log('✅ Suscripción actualizada exitosamente');
+
     
   } catch (error) {
     console.error('❌ Error al actualizar suscripción:', error);
@@ -267,12 +255,7 @@ export const recordPayment = async (
   reference: string
 ): Promise<void> => {
   try {
-    console.log('💰 recordPayment - Registrando pago:', {
-      lubricentroId,
-      amount,
-      method,
-      reference
-    });
+  
 
     // Obtener datos actuales del lubricentro
     const lubricentro = await getLubricentroById(lubricentroId);
@@ -310,12 +293,11 @@ export const recordPayment = async (
       updatedAt: new Date()
     };
 
-    console.log('📝 Registro de pago:', paymentRecord);
-    console.log('💾 Actualizando datos:', updateData);
+ 
 
     await updateLubricentro(lubricentroId, updateData);
     
-    console.log('✅ Pago registrado exitosamente');
+ 
     
   } catch (error) {
     console.error('❌ Error al registrar pago:', error);

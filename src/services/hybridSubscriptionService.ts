@@ -28,14 +28,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
  * Convierte un ManagedSubscriptionPlan a SubscriptionPlan para compatibilidad
  */
 const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionPlan => {
-  console.log('🔄 Convirtiendo plan gestionado:', {
-    id: managedPlan.id,
-    name: managedPlan.name,
-    planType: managedPlan.planType,
-    price: managedPlan.price,
-    servicePrice: managedPlan.servicePrice,
-    totalServices: managedPlan.totalServices
-  });
+ 
 
   // Para planes por servicios, necesitamos crear una estructura de precios compatible
   let priceStructure = managedPlan.price;
@@ -47,10 +40,7 @@ const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionP
       semiannual: managedPlan.servicePrice // Para planes por servicios, no hay diferencia semestral
     };
     
-    console.log('🔧 Plan por servicios convertido:', {
-      servicePrice: managedPlan.servicePrice,
-      convertedPrice: priceStructure
-    });
+
   }
 
   return {
@@ -121,32 +111,32 @@ const mapPlanIdToStandardType = (planId: string): SubscriptionPlanType | null =>
 
   // Buscar mapeo directo primero
   if (directMapping[planId]) {
-    console.log(`✅ Mapeo directo encontrado: ${planId} → ${directMapping[planId]}`);
+
     return directMapping[planId];
   }
 
   // Buscar en alias (case insensitive)
   const normalizedId = planId.toLowerCase().trim();
   if (aliasMapping[normalizedId]) {
-    console.log(`✅ Mapeo por alias encontrado: ${planId} → ${aliasMapping[normalizedId]}`);
+ 
     return aliasMapping[normalizedId];
   }
 
   // Buscar por patrones numéricos
   if (normalizedId.includes('50')) {
-    console.log(`✅ Mapeo por patrón (50): ${planId} → starter`);
+
     return 'starter';
   }
   if (normalizedId.includes('100')) {
-    console.log(`✅ Mapeo por patrón (100): ${planId} → basic`);
+
     return 'basic';
   }
   if (normalizedId.includes('150') || normalizedId.includes('premium')) {
-    console.log(`✅ Mapeo por patrón (150/premium): ${planId} → premium`);
+   
     return 'premium';
   }
   if (normalizedId.includes('unlimited') || normalizedId.includes('ilimitado') || normalizedId.includes('enterprise')) {
-    console.log(`✅ Mapeo por patrón (enterprise): ${planId} → enterprise`);
+  
     return 'enterprise';
   }
 
@@ -165,7 +155,7 @@ const createUniquePlanId = (originalId: string, mappedType: SubscriptionPlanType
   
   // Si existe, crear un ID único combinando el tipo con el ID original
   const uniqueId = `${mappedType}_${originalId.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-  console.log(`🔄 Creando ID único: ${originalId} → ${uniqueId} (evitando colisión con ${mappedType})`);
+
   return uniqueId;
 };
 
@@ -174,31 +164,22 @@ const createUniquePlanId = (originalId: string, mappedType: SubscriptionPlanType
  * Primero intenta cargar desde Firestore, si falla usa los planes estáticos
  */
 export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanType, SubscriptionPlan>> => {
-  console.log('📋 Iniciando carga de planes de suscripción...');
+  
   
   // Verificar cache
   const now = Date.now();
   if (plansCache && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('✅ Usando planes desde cache');
+
     return plansCache;
   }
 
   try {
-    console.log('🔍 Cargando planes dinámicos desde Firestore...');
+  
     
     // Intentar cargar planes dinámicos desde Firestore
     const managedPlans = await getActivePlans();
     
-    console.log('📦 Planes obtenidos de Firestore:', {
-      count: managedPlans.length,
-      plans: managedPlans.map(p => ({ 
-        id: p.id, 
-        name: p.name, 
-        price: p.price,
-        isActive: p.isActive,
-        isPublished: p.isPublished 
-      }))
-    });
+
     
     if (managedPlans.length > 0) {
       // 🔧 NUEVA ESTRATEGIA: Crear un mapa extendido que incluya TODOS los planes
@@ -206,7 +187,7 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
       
       // Primero, agregar todos los planes dinámicos con sus IDs originales
       managedPlans.forEach((managedPlan) => {
-        console.log(`🔄 Procesando plan: ${managedPlan.id} (${managedPlan.name})`);
+
         
         const convertedPlan = convertManagedPlan(managedPlan);
         
@@ -216,23 +197,20 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
         // También intentar mapear a tipo estándar (pero sin sobrescribir)
         const mappedType = mapPlanIdToStandardType(managedPlan.id);
         if (mappedType) {
-          console.log(`✅ Plan ${managedPlan.id} también mapeado a: ${mappedType}`);
+         
           
           // Solo mapear si no existe ya un plan con ese tipo estándar
           if (!allPlansMap[mappedType]) {
             allPlansMap[mappedType] = convertedPlan;
           } else {
-            console.log(`⚠️ Ya existe un plan ${mappedType}, manteniendo ambos separados`);
+           
           }
         } else {
           console.warn(`⚠️ Plan ${managedPlan.id} no pudo ser mapeado a un tipo estándar`);
         }
       });
       
-      console.log('🎯 Todos los planes procesados:', {
-        totalPlanes: Object.keys(allPlansMap).length,
-        planIds: Object.keys(allPlansMap)
-      });
+  
       
       // Asegurar que tengamos los 4 tipos estándar mínimos
       const finalPlans: Record<SubscriptionPlanType, SubscriptionPlan> = {
@@ -245,30 +223,21 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
       // 🔧 NUEVO: Agregar planes adicionales que no sean los tipos estándar
       Object.entries(allPlansMap).forEach(([planId, planData]) => {
         if (!['starter', 'basic', 'premium', 'enterprise'].includes(planId)) {
-          // Este es un plan adicional (como Plan50, P100, etc.)
-          console.log(`➕ Agregando plan adicional: ${planId}`);
+        
           
           // Usar type assertion para agregar planes dinámicos
           (finalPlans as any)[planId] = planData;
         }
       });
       
-      console.log('✅ Planes finales combinados:', {
-        total: Object.keys(finalPlans).length,
-        planes: Object.entries(finalPlans).map(([key, plan]) => ({
-          id: key,
-          name: plan.name,
-          price: plan.price,
-          type: plan.planType
-        }))
-      });
+    
       
       plansCache = finalPlans;
       cacheTimestamp = now;
       return finalPlans;
     }
     
-    console.log('⚠️ No hay planes dinámicos válidos, usando fallback estático');
+  
     
     // Si no hay planes dinámicos o están vacíos, usar fallback
     plansCache = { ...STATIC_PLANS };
@@ -276,7 +245,7 @@ export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanTyp
     return plansCache;
     
   } catch (error) {
-    console.error('❌ Error al cargar planes dinámicos, usando fallback estático:', error);
+   
     
     // Fallback a planes estáticos en caso de error
     plansCache = { ...STATIC_PLANS };
@@ -333,12 +302,12 @@ export const getAllDynamicPlans = async (): Promise<{
  */
 export const getSubscriptionPlan = async (planId: SubscriptionPlanType): Promise<SubscriptionPlan | null> => {
   try {
-    console.log(`🔍 Obteniendo plan específico: ${planId}`);
+ 
     const plans = await getSubscriptionPlans();
     const plan = plans[planId] || null;
     
     if (plan) {
-      console.log(`✅ Plan encontrado: ${plan.name} - $${plan.price.monthly}`);
+      
     } else {
       console.warn(`⚠️ Plan no encontrado: ${planId}`);
     }
@@ -416,7 +385,7 @@ export const getAvailablePlanIds = async (): Promise<SubscriptionPlanType[]> => 
  * Invalida el cache de planes (útil después de actualizaciones)
  */
 export const invalidatePlansCache = (): void => {
-  console.log('🗑️ Invalidando cache de planes');
+
   plansCache = null;
   cacheTimestamp = 0;
 };

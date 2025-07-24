@@ -5,6 +5,7 @@ import { SubscriptionPlanType } from './subscription';
 // Tipos de usuario
 export type UserRole = 'superadmin' | 'admin' | 'user';
 export type UserStatus = 'activo' | 'inactivo' | 'pendiente';
+export type OilChangeStatus = 'pendiente' | 'completo' | 'enviado';
 
 export interface User {
   id: string;
@@ -111,7 +112,18 @@ export interface OilChange {
   celular?: string;
   lubricentroNombre?: string;
   
-  // Datos del vehículo
+  // ✅ NUEVOS CAMPOS PARA ESTADOS
+  estado: OilChangeStatus;              // Estado actual del cambio
+  fechaCreacion: Date;                  // Cuando se creó el registro (precarga)
+  fechaCompletado?: Date;               // Cuando se completó el servicio
+  fechaEnviado?: Date;                  // Cuando se envió al cliente
+  usuarioCreacion: string;              // ID del usuario que precarGó
+  usuarioCompletado?: string;           // ID del usuario que completó
+  usuarioEnviado?: string;              // ID del usuario que envió
+  notasCompletado?: string;             // Notas adicionales al completar
+  notasEnviado?: string;                // Notas adicionales al enviar
+  
+  // Datos del vehículo (existentes)
   dominioVehiculo: string;
   marcaVehiculo: string;
   modeloVehiculo: string;
@@ -122,14 +134,14 @@ export interface OilChange {
   perioricidad_servicio: number;
   fechaProximoCambio: Date;
   
-  // Datos del servicio
+  // Datos del servicio (existentes)
   fechaServicio: Date;
   marcaAceite: string;
   tipoAceite: string;
   sae: string;
   cantidadAceite: number;
   
-  // Filtros y extras
+  // Filtros y extras (existentes)
   filtroAceite: boolean;
   filtroAceiteNota?: string;
   filtroAire: boolean;
@@ -149,14 +161,14 @@ export interface OilChange {
   engrase: boolean;
   engraseNota?: string;
   
-  // Observaciones generales
+  // Observaciones generales (existentes)
   observaciones?: string;
   
-  // Datos del operario
+  // Datos del operario (existentes)
   nombreOperario: string;
   operatorId: string;
   
-  // Metadata
+  // Metadata (existentes)
   createdAt: Date;
   updatedAt?: Date;
 }

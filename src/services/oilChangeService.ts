@@ -18,7 +18,7 @@ import {
   DocumentData
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { OilChange, OilChangeStats } from '../types';
+import { OilChange, OilChangeStats,OilChangeStatus } from '../types';
 import { incrementServiceCount } from './subscriptionService';
 import { getLubricentroById, updateLubricentro } from './lubricentroService';
 
@@ -27,15 +27,76 @@ const COLLECTION_NAME = 'cambiosAceite';
 // Convertir datos de Firestore a nuestro tipo OilChange
 const convertFirestoreOilChange = (doc: any): OilChange => {
   const data = doc.data();
+  
   return {
     id: doc.id,
-    ...data,
-    fecha: data.fecha?.toDate ? data.fecha.toDate() : new Date(data.fecha) || new Date(),
-    fechaServicio: data.fechaServicio?.toDate ? data.fechaServicio.toDate() : new Date(data.fechaServicio) || new Date(),
-    fechaProximoCambio: data.fechaProximoCambio?.toDate ? data.fechaProximoCambio.toDate() : new Date(data.fechaProximoCambio) || new Date(),
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt) || new Date(),
-    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : data.updatedAt ? new Date(data.updatedAt) : undefined,
-  } as OilChange;
+    lubricentroId: data.lubricentroId,
+    fecha: convertFirestoreDate(data.fecha),
+    nroCambio: data.nroCambio,
+    nombreCliente: data.nombreCliente,
+    celular: data.celular,
+    lubricentroNombre: data.lubricentroNombre,
+    
+    // ✅ NUEVOS CAMPOS DE ESTADO
+    estado: data.estado || 'completo', // Por defecto completo para registros existentes
+    fechaCreacion: convertFirestoreDate(data.fechaCreacion) || convertFirestoreDate(data.fecha),
+    fechaCompletado: data.fechaCompletado ? convertFirestoreDate(data.fechaCompletado) : undefined,
+    fechaEnviado: data.fechaEnviado ? convertFirestoreDate(data.fechaEnviado) : undefined,
+    usuarioCreacion: data.usuarioCreacion || data.operatorId,
+    usuarioCompletado: data.usuarioCompletado,
+    usuarioEnviado: data.usuarioEnviado,
+    notasCompletado: data.notasCompletado,
+    notasEnviado: data.notasEnviado,
+    
+    // Datos del vehículo (existentes)
+    dominioVehiculo: data.dominioVehiculo,
+    marcaVehiculo: data.marcaVehiculo,
+    modeloVehiculo: data.modeloVehiculo,
+    tipoVehiculo: data.tipoVehiculo,
+    añoVehiculo: data.añoVehiculo,
+    kmActuales: data.kmActuales,
+    kmProximo: data.kmProximo,
+    perioricidad_servicio: data.perioricidad_servicio,
+    fechaProximoCambio: convertFirestoreDate(data.fechaProximoCambio),
+    
+    // Datos del servicio (existentes)
+    fechaServicio: convertFirestoreDate(data.fechaServicio),
+    marcaAceite: data.marcaAceite || '',
+    tipoAceite: data.tipoAceite || '',
+    sae: data.sae || '',
+    cantidadAceite: data.cantidadAceite || 0,
+    
+    // Filtros y extras (existentes)
+    filtroAceite: data.filtroAceite || false,
+    filtroAceiteNota: data.filtroAceiteNota || '',
+    filtroAire: data.filtroAire || false,
+    filtroAireNota: data.filtroAireNota || '',
+    filtroHabitaculo: data.filtroHabitaculo || false,
+    filtroHabitaculoNota: data.filtroHabitaculoNota || '',
+    filtroCombustible: data.filtroCombustible || false,
+    filtroCombustibleNota: data.filtroCombustibleNota || '',
+    aditivo: data.aditivo || false,
+    aditivoNota: data.aditivoNota || '',
+    refrigerante: data.refrigerante || false,
+    refrigeranteNota: data.refrigeranteNota || '',
+    diferencial: data.diferencial || false,
+    diferencialNota: data.diferencialNota || '',
+    caja: data.caja || false,
+    cajaNota: data.cajaNota || '',
+    engrase: data.engrase || false,
+    engraseNota: data.engraseNota || '',
+    
+    // Observaciones generales (existentes)
+    observaciones: data.observaciones || '',
+    
+    // Datos del operario (existentes)
+    nombreOperario: data.nombreOperario,
+    operatorId: data.operatorId,
+    
+    // Metadata (existentes)
+    createdAt: convertFirestoreDate(data.createdAt),
+    updatedAt: data.updatedAt ? convertFirestoreDate(data.updatedAt) : undefined
+  };
 };
 
 // Función auxiliar para asegurar que una fecha sea un objeto Date
@@ -289,101 +350,44 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
 // ✅ FUNCIÓN CORREGIDA: Crear cambio de aceite sin errores de Firebase
 export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>): Promise<string> => {
   try {
-    
-    // Validar si es duplicación
-    const isDuplication = data.nroCambio && data.nroCambio.includes('-');
-    if (isDuplication) {
-      const validationErrors = validateDataForCloning(data);
-      if (validationErrors.length > 0) {
-        throw new Error(`Errores de validación: ${validationErrors.join(', ')}`);
-      }
-    }
-    
     // Verificar lubricentro
     const lubricentro = await getLubricentroById(data.lubricentroId);
     if (!lubricentro) {
       throw new Error('No se encontró el lubricentro');
     }
 
-    // Verificar estado del lubricentro
-    if (lubricentro.estado === 'inactivo') {
-      throw new Error('El lubricentro no tiene una suscripción activa.');
-    }
-
-    // Verificar período de prueba
-    if (lubricentro.estado === 'trial' && lubricentro.trialEndDate) {
-      const now = new Date();
-      const trialEnd = new Date(lubricentro.trialEndDate);
-      
-      if (trialEnd < now) {
-        throw new Error('El período de prueba ha expirado.');
-      }
-    }
-
-    // Verificar límites de prueba
-    if (lubricentro.estado === 'trial') {
-      const trialServiceLimit = 10;
-      const currentMonth = new Date().toISOString().slice(0, 7);
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      
-      if (currentServices >= trialServiceLimit) {
-        throw new Error(`Has alcanzado el límite de ${trialServiceLimit} servicios durante el período de prueba.`);
-      }
-      
-      // Actualizar contador
-      await updateLubricentro(data.lubricentroId, {
-        servicesUsedThisMonth: currentServices + 1,
-        servicesUsedHistory: {
-          ...(lubricentro.servicesUsedHistory || {}),
-          [currentMonth]: ((lubricentro.servicesUsedHistory || {})[currentMonth] || 0) + 1
-        }
-      });
-    } else {
-      // Para lubricentros activos
-      const canCreateService = await incrementServiceCount(data.lubricentroId);
-      if (!canCreateService) {
-        throw new Error('Has alcanzado el límite mensual de servicios.');
-      }
+    // Generar número correlativo si no existe
+    const nroCambio = data.nroCambio || await getNextOilChangeNumber(data.lubricentroId, lubricentro.ticketPrefix);
+    
+    // Calcular fechaProximoCambio si no viene definida
+    let fechaProximoCambio = data.fechaProximoCambio;
+    if (!fechaProximoCambio) {
+      const fecha = ensureDateObject(data.fechaServicio);
+      const mesesAgregar = data.perioricidad_servicio || 6;
+      fechaProximoCambio = new Date(fecha);
+      fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + mesesAgregar);
     }
     
-    // ✅ CORRECCIÓN CRÍTICA: Preparar datos limpios para Firebase
-    const dominioVehiculo = data.dominioVehiculo.toUpperCase();
-    const fechaServicio = ensureDateObject(data.fechaServicio);
-    const fechaProximoCambio = new Date(fechaServicio);
-    fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + data.perioricidad_servicio);
-    
-    // Calcular kmProximo si es inválido
-    let kmProximo = data.kmProximo;
-    if (!kmProximo || kmProximo <= data.kmActuales) {
-      kmProximo = data.kmActuales + 10000;
-    }
-    
-    // ✅ PREPARAR DATOS SEGUROS PARA FIREBASE
     const baseData = {
-      lubricentroId: data.lubricentroId,
-      lubricentroNombre: data.lubricentroNombre || '',
-      fecha: new Date(),
-      fechaServicio: fechaServicio,
-      nroCambio: data.nroCambio,
-      nombreCliente: data.nombreCliente,
-      celular: data.celular || '',
+      ...data,
+      nroCambio,
       
-      // Datos del vehículo
-      dominioVehiculo: dominioVehiculo,
-      marcaVehiculo: data.marcaVehiculo,
-      modeloVehiculo: data.modeloVehiculo,
-      tipoVehiculo: data.tipoVehiculo,
-      añoVehiculo: data.añoVehiculo || null,
-      kmActuales: data.kmActuales,
-      kmProximo: kmProximo,
-      perioricidad_servicio: data.perioricidad_servicio,
-      fechaProximoCambio: fechaProximoCambio,
+      // ✅ CAMPOS DE ESTADO - Si no vienen definidos, crear como completo
+      estado: data.estado || 'completo' as OilChangeStatus,
+      fechaCreacion: data.fechaCreacion || new Date(),
+      usuarioCreacion: data.usuarioCreacion || data.operatorId,
       
-      // Datos del aceite
-      marcaAceite: data.marcaAceite,
-      tipoAceite: data.tipoAceite,
-      sae: data.sae,
-      cantidadAceite: data.cantidadAceite,
+      // Si se está creando como completo, agregar fechas correspondientes
+      fechaCompletado: (data.estado === 'completo' || !data.estado) ? new Date() : undefined,
+      usuarioCompletado: (data.estado === 'completo' || !data.estado) ? data.operatorId : undefined,
+      
+      dominioVehiculo: data.dominioVehiculo.toUpperCase(),
+      fecha: ensureDateObject(data.fecha),
+      fechaServicio: ensureDateObject(data.fechaServicio),
+      fechaProximoCambio: ensureDateObject(fechaProximoCambio), // ✅ USAR LA CALCULADA
+      
+      // Calcular kmProximo si no viene definido
+      kmProximo: data.kmProximo || (data.kmActuales + (data.perioricidad_servicio || 6) * 1500),
       
       // Filtros y servicios (usar false como default para booleanos)
       filtroAceite: data.filtroAceite || false,
@@ -417,9 +421,7 @@ export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>)
     // ✅ LIMPIAR DATOS ANTES DE ENVIAR A FIREBASE
     const cleanedData = cleanDataForFirebase(baseData);
     
-    
     const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
-    
     
     return docRef.id;
   } catch (error) {
@@ -629,3 +631,265 @@ export const getOilChangesByOperator = async (
     throw error;
   }
 };
+
+// ✅ OBTENER CAMBIOS PENDIENTES (para la sección de pendientes)
+export const getPendingOilChanges = async (lubricentroId: string): Promise<OilChange[]> => {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('lubricentroId', '==', lubricentroId),
+      where('estado', '==', 'pendiente'),
+      orderBy('fechaCreacion', 'asc') // Ordenar por orden de creación (como turnos)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+  } catch (error) {
+    console.error('Error al obtener cambios pendientes:', error);
+    throw error;
+  }
+};
+
+// ✅ CAMBIAR ESTADO DE UN CAMBIO DE ACEITE
+export const updateOilChangeStatus = async (
+  id: string, 
+  newStatus: OilChangeStatus, 
+  userId: string,
+  notes?: string
+): Promise<void> => {
+  try {
+    const docRef = doc(db, COLLECTION_NAME, id);
+    const now = new Date();
+    
+    const updateData: any = {
+      estado: newStatus,
+      updatedAt: serverTimestamp()
+    };
+    
+    // Agregar campos específicos según el estado
+    switch (newStatus) {
+      case 'completo':
+        updateData.fechaCompletado = now;
+        updateData.usuarioCompletado = userId;
+        if (notes) updateData.notasCompletado = notes;
+        break;
+        
+      case 'enviado':
+        updateData.fechaEnviado = now;
+        updateData.usuarioEnviado = userId;
+        if (notes) updateData.notasEnviado = notes;
+        break;
+    }
+    
+    await updateDoc(docRef, updateData);
+  } catch (error) {
+    console.error('Error al actualizar estado del cambio de aceite:', error);
+    throw error;
+  }
+};
+
+// ✅ CREAR CAMBIO PRECARGADO (PENDIENTE) - Versión simplificada para mostrador
+    export const createPendingOilChange = async (data: {
+      lubricentroId: string;
+      nombreCliente: string;
+      celular?: string;
+      dominioVehiculo: string;
+      marcaVehiculo: string;
+      modeloVehiculo: string;
+      tipoVehiculo: string;
+      añoVehiculo?: number;
+      kmActuales: number;
+      observaciones?: string;
+      usuarioCreacion: string;
+      operatorName: string;
+    }): Promise<string> => {
+      try {
+        // Obtener datos del lubricentro primero
+        const lubricentroData = await getLubricentroById(data.lubricentroId);
+        if (!lubricentroData) {
+          throw new Error('No se encontró el lubricentro');
+        }
+
+        // ✅ CORREGIR: Agregar el segundo parámetro (prefix)
+        const nroCambio = await getNextOilChangeNumber(data.lubricentroId, lubricentroData.ticketPrefix);
+        
+        const baseData = {
+          ...data,
+          nroCambio,
+          estado: 'pendiente' as OilChangeStatus,
+          fechaCreacion: new Date(),
+          fecha: new Date(), // Fecha de registro
+          fechaServicio: new Date(), // Se actualizará cuando se complete
+          
+          // Valores por defecto que se completarán después
+          perioricidad_servicio: 6, // 6 meses por defecto
+          kmProximo: data.kmActuales + 10000, // +10k km por defecto
+          fechaProximoCambio: new Date(Date.now() + (6 * 30 * 24 * 60 * 60 * 1000)), // +6 meses
+          
+          // Datos del aceite - valores por defecto que se completarán
+          marcaAceite: '',
+          tipoAceite: '',
+          sae: '',
+          cantidadAceite: 0,
+          
+          // Servicios adicionales - todos false inicialmente
+          filtroAceite: false,
+          filtroAire: false,
+          filtroHabitaculo: false,
+          filtroCombustible: false,
+          aditivo: false,
+          refrigerante: false,
+          diferencial: false,
+          caja: false,
+          engrase: false,
+          
+          // Operario
+          nombreOperario: data.operatorName,
+          operatorId: data.usuarioCreacion,
+          
+          // Timestamps
+          createdAt: serverTimestamp()
+        };
+        
+        const cleanedData = cleanDataForFirebase(baseData);
+        const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
+        
+        return docRef.id;
+      } catch (error) {
+        console.error('Error al crear cambio pendiente:', error);
+        throw error;
+      }
+    };
+
+// ✅ COMPLETAR CAMBIO DE ACEITE (pasar de pendiente a completo)
+export const completeOilChange = async (
+  id: string,
+  completionData: {
+    fechaServicio: Date;
+    marcaAceite: string;
+    tipoAceite: string;
+    sae: string;
+    cantidadAceite: number;
+    perioricidad_servicio: number;
+    
+    // Servicios adicionales
+    filtroAceite?: boolean;
+    filtroAceiteNota?: string;
+    filtroAire?: boolean;
+    filtroAireNota?: string;
+    filtroHabitaculo?: boolean;
+    filtroHabitaculoNota?: string;
+    filtroCombustible?: boolean;
+    filtroCombustibleNota?: string;
+    aditivo?: boolean;
+    aditivoNota?: string;
+    refrigerante?: boolean;
+    refrigeranteNota?: string;
+    diferencial?: boolean;
+    diferencialNota?: string;
+    caja?: boolean;
+    cajaNota?: string;
+    engrase?: boolean;
+    engraseNota?: string;
+    
+    observaciones?: string;
+    notasCompletado?: string;
+    usuarioCompletado: string;
+  }
+): Promise<void> => {
+  try {
+    const docRef = doc(db, COLLECTION_NAME, id);
+    
+    // Calcular fecha próximo cambio
+    const fechaProximoCambio = new Date(completionData.fechaServicio);
+    fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + completionData.perioricidad_servicio);
+    
+    // Obtener datos actuales para calcular km próximo
+    const currentDoc = await getDoc(docRef);
+    if (!currentDoc.exists()) {
+      throw new Error('El cambio de aceite no existe');
+    }
+    
+    const currentData = currentDoc.data();
+    const kmProximo = currentData.kmActuales + (completionData.perioricidad_servicio * 1500); // Aproximado 1500km/mes
+    
+    const updateData = {
+      ...completionData,
+      estado: 'completo' as OilChangeStatus,
+      fechaCompletado: new Date(),
+      kmProximo,
+      fechaProximoCambio,
+      updatedAt: serverTimestamp()
+    };
+    
+    const cleanedData = cleanDataForFirebase(updateData);
+    await updateDoc(docRef, cleanedData);
+  } catch (error) {
+    console.error('Error al completar cambio de aceite:', error);
+    throw error;
+  }
+};
+
+// ✅ OBTENER CAMBIOS POR ESTADO
+export const getOilChangesByStatus = async (
+  lubricentroId: string,
+  status: OilChangeStatus,
+  limitCount: number = 50
+): Promise<OilChange[]> => {
+  try {
+      const q = query(
+      collection(db, COLLECTION_NAME),
+      where('lubricentroId', '==', lubricentroId),
+      where('estado', '==', status),
+      orderBy('fechaCreacion', 'desc'),
+      limit(limitCount)  // ← MOVER esta línea DENTRO del query (línea 845 debe ir aquí)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+  } catch (error) {
+    console.error(`Error al obtener cambios con estado ${status}:`, error);
+    throw error;
+  }
+};
+
+// ✅ ESTADÍSTICAS DE ESTADOS
+export const getOilChangeStatsWithStatus = async (lubricentroId: string) => {
+  try {
+    const [pendientes, completos, enviados] = await Promise.all([
+      getOilChangesByStatus(lubricentroId, 'pendiente', 1000),
+      getOilChangesByStatus(lubricentroId, 'completo', 1000),
+      getOilChangesByStatus(lubricentroId, 'enviado', 1000)
+    ]);
+    
+    return {
+      pendientes: pendientes.length,
+      completos: completos.length,
+      enviados: enviados.length,
+      total: pendientes.length + completos.length + enviados.length
+    };
+  } catch (error) {
+    console.error('Error al obtener estadísticas de estados:', error);
+    throw error;
+  }
+};
+// Función para convertir fechas de Firestore
+const convertFirestoreDate = (date: any): Date => {
+  if (!date) return new Date();
+  
+  if (date instanceof Date) return date;
+  
+  if (typeof date === 'string') return new Date(date);
+  
+  if (date.toDate && typeof date.toDate === 'function') {
+    try {
+      return date.toDate();
+    } catch (e) {
+      console.warn('Error al convertir Timestamp a Date:', e);
+      return new Date();
+    }
+  }
+  
+  return new Date();
+};
+

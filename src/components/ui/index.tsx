@@ -698,3 +698,15 @@ export const Textarea: React.FC<TextareaProps> = ({
 };
 
 export { Tabs, Tab };
+
+// Tooltip component
+export interface TooltipProps {
+  content: string;
+  children: React.ReactNode;
+  position?: 'top' | 'bottom' | 'left' | 'right';
+  delay?: number;
+  className?: string;
+}
+
+
+export { default as Tooltip } from './Tooltip';
