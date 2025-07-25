@@ -1,4 +1,4 @@
-// src/pages/superadmin/SuperAdminServiceDetailPage.tsx
+// src/pages/superadmin/SuperAdminServiceDetailPage.tsx - VERSIÓN SIMPLIFICADA
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
@@ -13,12 +13,7 @@ import {
   ArrowLeftIcon,
   PencilIcon,
   DocumentTextIcon,
-  PrinterIcon,
-  BuildingOfficeIcon,
-  UserIcon,
-  TruckIcon,
-  CalendarIcon,
-  ClockIcon
+  PrinterIcon
 } from '@heroicons/react/24/outline';
 import { formatDate, formatDateTime } from '../../services/reportService/utils';
 import { OilChange } from '../../types';
@@ -85,8 +80,8 @@ const SuperAdminServiceDetailPage: React.FC = () => {
 
   const handleEditService = () => {
     if (data?.service) {
-      // Redirigir al contexto del lubricentro para editar
-      navigate(`/superadmin/lubricentros/${data.service.lubricentroId}/servicios/${data.service.id}/editar`);
+      // Usar la ruta estándar de edición
+      navigate(`/cambios-aceite/editar/${data.service.id}`);
     }
   };
 
@@ -122,7 +117,6 @@ const SuperAdminServiceDetailPage: React.FC = () => {
                 {error || 'Servicio no encontrado'}
               </h3>
               <Button 
-                color="primary" 
                 onClick={handleGoBack}
                 className="mt-4"
               >
@@ -175,7 +169,7 @@ const SuperAdminServiceDetailPage: React.FC = () => {
           {/* Datos del servicio */}
           <Card>
             <CardHeader title="Información del Servicio" />
-            <CardBody className="space-y-4">
+            <CardBody>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500">Número de Cambio</p>
@@ -204,7 +198,7 @@ const SuperAdminServiceDetailPage: React.FC = () => {
               </div>
               
               {service.observaciones && (
-                <div>
+                <div className="mt-4">
                   <p className="text-sm text-gray-500">Observaciones</p>
                   <p className="text-gray-900">{service.observaciones}</p>
                 </div>
@@ -215,7 +209,7 @@ const SuperAdminServiceDetailPage: React.FC = () => {
           {/* Datos del cliente y vehículo */}
           <Card>
             <CardHeader title="Cliente y Vehículo" />
-            <CardBody className="space-y-4">
+            <CardBody>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500">Cliente</p>
@@ -250,8 +244,8 @@ const SuperAdminServiceDetailPage: React.FC = () => {
           {/* Datos del aceite y servicios */}
           <Card>
             <CardHeader title="Aceite y Servicios Realizados" />
-            <CardBody className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <CardBody>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-sm text-gray-500">Marca de Aceite</p>
                   <p className="font-semibold">{service.marcaAceite}</p>
@@ -332,9 +326,9 @@ const SuperAdminServiceDetailPage: React.FC = () => {
           {/* Lubricentro */}
           <Card>
             <CardHeader title="Lubricentro" />
-            <CardBody className="space-y-3">
+            <CardBody>
               {lubricentro ? (
-                <>
+                <div className="space-y-3">
                   <div>
                     <p className="text-sm text-gray-500">Nombre</p>
                     <p className="font-semibold">{lubricentro.fantasyName}</p>
@@ -355,7 +349,7 @@ const SuperAdminServiceDetailPage: React.FC = () => {
                   >
                     Ver Lubricentro
                   </Button>
-                </>
+                </div>
               ) : (
                 <p className="text-gray-500">Información no disponible</p>
               )}
@@ -365,42 +359,46 @@ const SuperAdminServiceDetailPage: React.FC = () => {
           {/* Operador */}
           <Card>
             <CardHeader title="Operador" />
-            <CardBody className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Nombre</p>
-                <p className="font-semibold">{service.nombreOperario}</p>
+            <CardBody>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-gray-500">Nombre</p>
+                  <p className="font-semibold">{service.nombreOperario}</p>
+                </div>
+                {operator && (
+                  <>
+                    <div>
+                      <p className="text-sm text-gray-500">Email</p>
+                      <p className="text-gray-900">{operator.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Rol</p>
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {operator.role === 'admin' ? 'Administrador' : 'Empleado'}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
-              {operator && (
-                <>
-                  <div>
-                    <p className="text-sm text-gray-500">Email</p>
-                    <p className="text-gray-900">{operator.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Rol</p>
-                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                      {operator.role === 'admin' ? 'Administrador' : 'Empleado'}
-                    </span>
-                  </div>
-                </>
-              )}
             </CardBody>
           </Card>
 
           {/* Timestamps */}
           <Card>
             <CardHeader title="Historial" />
-            <CardBody className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Creado</p>
-                <p className="text-gray-900">{formatDateTime(service.fechaCreacion)}</p>
-              </div>
-              {service.fechaCompletado && (
+            <CardBody>
+              <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-gray-500">Completado</p>
-                  <p className="text-gray-900">{formatDateTime(service.fechaCompletado)}</p>
+                  <p className="text-sm text-gray-500">Creado</p>
+                  <p className="text-gray-900">{formatDateTime(service.fechaCreacion)}</p>
                 </div>
-              )}
+                {service.fechaCompletado && (
+                  <div>
+                    <p className="text-sm text-gray-500">Completado</p>
+                    <p className="text-gray-900">{formatDateTime(service.fechaCompletado)}</p>
+                  </div>
+                )}
+              </div>
             </CardBody>
           </Card>
         </div>

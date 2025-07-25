@@ -115,97 +115,161 @@ const OilChangeFormPage: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      let lubricentroData: any = null;
+      let targetLubricentroId: string = '';
+
+      // CASO 1: Estamos editando un servicio existente
+      if (isEditing && id) {
+        console.log('🔄 Cargando servicio para editar:', id);
+        const oilChangeData = await getOilChangeById(id);
+        
+        if (!oilChangeData) {
+          setError('No se encontró el servicio solicitado');
+          return;
+        }
+
+        // Verificar permisos: superadmin puede editar cualquier servicio
+        if (userProfile?.role !== 'superadmin' && oilChangeData.lubricentroId !== userProfile?.lubricentroId) {
+          setError('No tiene permisos para editar este servicio');
+          return;
+        }
+
+        // Obtener datos del lubricentro del servicio
+        targetLubricentroId = oilChangeData.lubricentroId;
+        lubricentroData = await getLubricentroById(targetLubricentroId);
+        
+        if (!lubricentroData) {
+          setError('No se encontró información del lubricentro del servicio');
+          return;
+        }
+
+        // Cargar todos los datos del servicio
+        setFormData({
+          ...oilChangeData,
+          fecha: new Date(oilChangeData.fecha),
+          fechaServicio: new Date(oilChangeData.fechaServicio),
+          fechaProximoCambio: new Date(oilChangeData.fechaProximoCambio)
+        });
+
+        setLubricentro(lubricentroData);
+        console.log('✅ Servicio cargado correctamente para edición');
+        return;
+      }
+
+      // CASO 2: Estamos clonando un servicio
+      if (isCloning && cloneId) {
+        const oilChangeData = await getOilChangeById(cloneId);
+        
+        if (!oilChangeData) {
+          setError('No se encontró el servicio a clonar');
+          return;
+        }
+
+        // Para clonación, usar el lubricentro del usuario actual
+        if (!userProfile?.lubricentroId) {
+          setError('No se encontró información del lubricentro para crear el nuevo servicio');
+          return;
+        }
+
+        targetLubricentroId = userProfile.lubricentroId;
+        lubricentroData = await getLubricentroById(targetLubricentroId);
+        
+        const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
+        const today = new Date();
+        const nextChangeDate = calculateNextChangeDate(today, oilChangeData.perioricidad_servicio);
+        
+        setFormData({
+          lubricentroId: targetLubricentroId,
+          lubricentroNombre: lubricentroData.fantasyName,
+          nroCambio: nextNumber,
+          fecha: today,
+          fechaServicio: today,
+          fechaProximoCambio: nextChangeDate,
+          nombreCliente: oilChangeData.nombreCliente,
+          celular: oilChangeData.celular,
+          dominioVehiculo: oilChangeData.dominioVehiculo,
+          marcaVehiculo: oilChangeData.marcaVehiculo,
+          modeloVehiculo: oilChangeData.modeloVehiculo,
+          tipoVehiculo: oilChangeData.tipoVehiculo,
+          añoVehiculo: oilChangeData.añoVehiculo,
+          kmActuales: 0,
+          kmProximo: 0,
+          perioricidad_servicio: oilChangeData.perioricidad_servicio,
+          marcaAceite: oilChangeData.marcaAceite,
+          tipoAceite: oilChangeData.tipoAceite,
+          sae: oilChangeData.sae,
+          cantidadAceite: oilChangeData.cantidadAceite,
+          filtroAceite: oilChangeData.filtroAceite,
+          filtroAceiteNota: '',
+          filtroAire: oilChangeData.filtroAire,
+          filtroAireNota: '',
+          filtroHabitaculo: oilChangeData.filtroHabitaculo,
+          filtroHabitaculoNota: '',
+          filtroCombustible: oilChangeData.filtroCombustible,
+          filtroCombustibleNota: '',
+          aditivo: oilChangeData.aditivo,
+          aditivoNota: '',
+          refrigerante: oilChangeData.refrigerante,
+          refrigeranteNota: '',
+          diferencial: oilChangeData.diferencial,
+          diferencialNota: '',
+          caja: oilChangeData.caja,
+          cajaNota: '',
+          engrase: oilChangeData.engrase,
+          engraseNota: '',
+          observaciones: '',
+          nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
+          operatorId: userProfile?.id || '',
+        });
+
+        setLubricentro(lubricentroData);
+        return;
+      }
+
+      // CASO 3: Creando un nuevo servicio
       if (!userProfile?.lubricentroId) {
+        setError('No se encontró información del lubricentro para crear un nuevo servicio');
+        return;
+      }
+
+      targetLubricentroId = userProfile.lubricentroId;
+      lubricentroData = await getLubricentroById(targetLubricentroId);
+      
+      if (!lubricentroData) {
         setError('No se encontró información del lubricentro');
         return;
       }
+
+      const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
+      const today = new Date();
+      const nextChangeDate = calculateNextChangeDate(today, 3);
       
-      setLoading(true);
-      try {
-        const lubricentroData = await getLubricentroById(userProfile.lubricentroId);
-        setLubricentro(lubricentroData);
-        
-        if (isEditing && id) {
-          const oilChangeData = await getOilChangeById(id);
-          setFormData({
-            ...oilChangeData,
-            fecha: new Date(oilChangeData.fecha),
-            fechaServicio: new Date(oilChangeData.fechaServicio),
-            fechaProximoCambio: new Date(oilChangeData.fechaProximoCambio)
-          });
-        } else if (isCloning && cloneId) {
-          const oilChangeData = await getOilChangeById(cloneId);
-          const nextNumber = await getNextOilChangeNumber(userProfile.lubricentroId, lubricentroData.ticketPrefix);
-          const today = new Date();
-          const nextChangeDate = calculateNextChangeDate(today, oilChangeData.perioricidad_servicio);
-          
-          setFormData({
-            lubricentroId: userProfile.lubricentroId,
-            lubricentroNombre: lubricentroData.fantasyName,
-            id: undefined,
-            nroCambio: nextNumber,
-            fecha: today,
-            fechaServicio: today,
-            fechaProximoCambio: nextChangeDate,
-            nombreCliente: oilChangeData.nombreCliente,
-            celular: oilChangeData.celular,
-            dominioVehiculo: oilChangeData.dominioVehiculo,
-            marcaVehiculo: oilChangeData.marcaVehiculo,
-            modeloVehiculo: oilChangeData.modeloVehiculo,
-            tipoVehiculo: oilChangeData.tipoVehiculo,
-            añoVehiculo: oilChangeData.añoVehiculo,
-            kmActuales: 0,
-            kmProximo: 0,
-            perioricidad_servicio: oilChangeData.perioricidad_servicio,
-            marcaAceite: oilChangeData.marcaAceite,
-            tipoAceite: oilChangeData.tipoAceite,
-            sae: oilChangeData.sae,
-            cantidadAceite: oilChangeData.cantidadAceite,
-            filtroAceite: oilChangeData.filtroAceite,
-            filtroAceiteNota: '',
-            filtroAire: oilChangeData.filtroAire,
-            filtroAireNota: '',
-            filtroHabitaculo: oilChangeData.filtroHabitaculo,
-            filtroHabitaculoNota: '',
-            filtroCombustible: oilChangeData.filtroCombustible,
-            filtroCombustibleNota: '',
-            aditivo: oilChangeData.aditivo,
-            aditivoNota: '',
-            refrigerante: oilChangeData.refrigerante,
-            refrigeranteNota: '',
-            diferencial: oilChangeData.diferencial,
-            diferencialNota: '',
-            caja: oilChangeData.caja,
-            cajaNota: '',
-            engrase: oilChangeData.engrase,
-            engraseNota: '',
-            observaciones: '',
-            nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
-            operatorId: userProfile?.id || '',
-          });
-        } else {
-          const nextNumber = await getNextOilChangeNumber(userProfile.lubricentroId, lubricentroData.ticketPrefix);
-          const today = new Date();
-          const nextChangeDate = calculateNextChangeDate(today, 3);
-          
-          setFormData(prev => ({
-            ...prev,
-            lubricentroNombre: lubricentroData.fantasyName,
-            nroCambio: nextNumber,
-            fechaProximoCambio: nextChangeDate,
-          }));
-        }
-      } catch (err) {
-        console.error('Error al cargar datos:', err);
-        setError('Error al cargar los datos. Por favor, intente nuevamente.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, [userProfile?.lubricentroId, id, cloneId, isEditing, isCloning, userProfile?.nombre, userProfile?.apellido, userProfile?.id]);
+      setFormData(prev => ({
+        ...prev,
+        lubricentroId: targetLubricentroId,
+        lubricentroNombre: lubricentroData.fantasyName,
+        nroCambio: nextNumber,
+        fechaProximoCambio: nextChangeDate,
+        nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
+        operatorId: userProfile?.id || '',
+      }));
+
+      setLubricentro(lubricentroData);
+      
+    } catch (err) {
+      console.error('❌ Error al cargar datos:', err);
+      setError('Error al cargar los datos. Por favor, intente nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchData();
+}, [userProfile?.lubricentroId, id, cloneId, isEditing, isCloning, userProfile?.nombre, userProfile?.apellido, userProfile?.id]);
+
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

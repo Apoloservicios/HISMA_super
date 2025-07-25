@@ -225,10 +225,10 @@ const SuperAdminServicesPage: React.FC = () => {
     navigate(`/superadmin/servicios/${serviceId}`);
   };
 
-  // Editar servicio (navegar al lubricentro específico)
+  // Editar servicio (usar la ruta estándar de edición)
   const editService = (service: OilChange) => {
-    // Redirigir al contexto del lubricentro para editar
-    navigate(`/superadmin/lubricentros/${service.lubricentroId}/servicios/${service.id}/editar`);
+    // Usar la ruta estándar de edición que ya existe
+    navigate(`/cambios-aceite/editar/${service.id}`);
   };
 
   if (loading) {
