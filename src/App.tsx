@@ -65,6 +65,9 @@ import PendingOilChangesPage from './pages/oilchanges/PendingOilChangesPage';
 import CompleteOilChangePage from './pages/oilchanges/CompleteOilChangePage';
 import QuickOilChangeFormPage from './pages/oilchanges/QuickOilChangeFormPage';
 
+import SuperAdminServicesPage from './pages/superadmin/SuperAdminServicesPage';
+import SuperAdminServiceDetailPage from './pages/superadmin/SuperAdminServiceDetailPage';
+
 // Create a client for React Query
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -121,6 +124,36 @@ const App: React.FC = () => {
                     </PrivateRoute>
                   } 
                 />
+
+                {/* Rutas de gestión global de servicios para superadmin */}
+                  <Route 
+                    path="/superadmin/servicios" 
+                    element={
+                      <PrivateRoute requiredRoles={['superadmin']}>
+                        <SuperAdminServicesPage />
+                      </PrivateRoute>
+                    } 
+                  />
+
+                  <Route 
+                    path="/superadmin/servicios/:serviceId" 
+                    element={
+                      <PrivateRoute requiredRoles={['superadmin']}>
+                        <SuperAdminServiceDetailPage />
+                      </PrivateRoute>
+                    } 
+                  />
+
+                  {/* Ruta para editar servicios desde el contexto del lubricentro */}
+                  <Route 
+                    path="/superadmin/lubricentros/:lubricentroId/servicios/:serviceId/editar" 
+                    element={
+                      <PrivateRoute requiredRoles={['superadmin']}>
+                        {/* Aquí podrías usar el OilChangeFormPage existente o crear uno específico */}
+                        <OilChangeFormPage />
+                      </PrivateRoute>
+                    } 
+                  />
                 
                 {/* Rutas de cambios de aceite */}
                 <Route 

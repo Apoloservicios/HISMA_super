@@ -36,7 +36,8 @@ import {
   UserGroupIcon,
   CreditCardIcon,
   CalendarDaysIcon,
-  WrenchIcon
+  WrenchIcon,
+  WrenchScrewdriverIcon 
 } from '@heroicons/react/24/outline';
 
 // Función utilitaria para validar planes
@@ -1024,17 +1025,55 @@ const SuperAdminDashboard: React.FC = () => {
       )}
       
       {/* Administrative Actions */}
-      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        <Button color="primary" size="lg" fullWidth icon={<BuildingOfficeIcon className="h-5 w-5" />} onClick={() => navigate('/superadmin/lubricentros')}>
+      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <Button 
+          color="primary" 
+          size="lg" 
+          fullWidth 
+          icon={<BuildingOfficeIcon className="h-5 w-5" />} 
+          onClick={() => navigate('/superadmin/lubricentros')}
+        >
           Gestión de Lubricentros
         </Button>
-        <Button color="secondary" size="lg" fullWidth icon={<UserGroupIcon className="h-5 w-5" />} onClick={() => navigate('/usuarios')}>
+        
+        {/* NUEVO BOTÓN */}
+        <Button 
+          color="secondary" 
+          size="lg" 
+          fullWidth 
+          icon={<WrenchScrewdriverIcon className="h-5 w-5" />} 
+          onClick={() => navigate('/superadmin/servicios')}
+        >
+          Todos los Servicios
+        </Button>
+        
+        <Button 
+          color="secondary" 
+          size="lg" 
+          fullWidth 
+          icon={<UserGroupIcon className="h-5 w-5" />} 
+          onClick={() => navigate('/usuarios')}
+        >
           Gestionar Usuarios
         </Button>
-        <Button color="success" size="lg" fullWidth icon={<ChartBarIcon className="h-5 w-5" />} onClick={() => navigate('/superadmin/reportes')}>
+        
+        <Button 
+          color="success" 
+          size="lg" 
+          fullWidth 
+          icon={<ChartBarIcon className="h-5 w-5" />} 
+          onClick={() => navigate('/superadmin/reportes')}
+        >
           Estadísticas Globales
         </Button>
-        <Button color="info" size="lg" fullWidth icon={<CreditCardIcon className="h-5 w-5" />} onClick={() => navigate('/superadmin/lubricentros')}>
+        
+        <Button 
+          color="info" 
+          size="lg" 
+          fullWidth 
+          icon={<CreditCardIcon className="h-5 w-5" />} 
+          onClick={() => navigate('/superadmin/lubricentros')}
+        >
           Planes y Suscripciones
         </Button>
       </div>

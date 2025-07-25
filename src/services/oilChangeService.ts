@@ -22,6 +22,7 @@ import { OilChange, OilChangeStats,OilChangeStatus } from '../types';
 import { incrementServiceCount } from './subscriptionService';
 import { getLubricentroById, updateLubricentro } from './lubricentroService';
 
+
 const COLLECTION_NAME = 'cambiosAceite';
 
 // Convertir datos de Firestore a nuestro tipo OilChange
@@ -893,3 +894,304 @@ const convertFirestoreDate = (date: any): Date => {
   return new Date();
 };
 
+
+// Agregar estas funciones al archivo src/services/oilChangeService.ts
+
+
+/**
+ * Obtener TODOS los cambios de aceite del sistema (solo para superadmin)
+ * Esta función permite al superadmin ver servicios de todos los lubricentros
+ */
+export const getAllOilChangesForSuperAdmin = async (): Promise<OilChange[]> => {
+  try {
+    
+    
+    // Query sin filtro de lubricentroId para obtener TODOS los registros
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      orderBy('fechaServicio', 'desc'),
+      limit(1000) // Limitar a 1000 registros para evitar problemas de rendimiento
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    const allServices = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    
+    
+    
+    return allServices;
+  } catch (error) {
+     console.error('❌ Error al obtener todos los servicios:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtener servicios con información del lubricentro incluida
+ * Útil para el dashboard del superadmin
+ */
+export const getOilChangesWithLubricentroInfo = async (limitCount?: number): Promise<Array<OilChange & { lubricentroName: string }>> => {
+  try {
+   
+    
+    const q = query(
+      collection(db, 'cambiosAceite'),
+      orderBy('fechaServicio', 'desc'),
+      ...(limitCount ? [limit(limitCount)] : [])
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const services = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as OilChange));
+    
+    // Obtener información de todos los lubricentros únicos
+    const uniqueLubricentroIds = [...new Set(services.map(s => s.lubricentroId))];
+    
+    const lubricentrosMap = new Map<string, string>();
+    
+    for (const lubricentroId of uniqueLubricentroIds) {
+      try {
+        const lubricentro = await getLubricentroById(lubricentroId);
+        if (lubricentro) {
+          lubricentrosMap.set(lubricentroId, lubricentro.fantasyName);
+        }
+      } catch (error) {
+        console.warn(`No se pudo obtener información del lubricentro ${lubricentroId}`);
+        lubricentrosMap.set(lubricentroId, 'Lubricentro no encontrado');
+      }
+    }
+    
+    // Combinar la información
+    const servicesWithLubricentroInfo = services.map(service => ({
+      ...service,
+      lubricentroName: lubricentrosMap.get(service.lubricentroId) || 'No disponible'
+    }));
+    
+   
+    
+    return servicesWithLubricentroInfo;
+  } catch (error) {
+    console.error('❌ Error al obtener servicios con información de lubricentro:', error);
+    throw error;
+  }
+};
+
+/**
+ * Búsqueda avanzada de servicios para superadmin
+ */
+export const searchOilChangesForSuperAdmin = async (searchParams: {
+  searchTerm?: string;
+  lubricentroId?: string;
+  estado?: OilChangeStatus;
+  startDate?: Date;
+  endDate?: Date;
+  clientName?: string;
+  vehicleDomain?: string;
+}): Promise<OilChange[]> => {
+  try {
+    
+    
+    let q = query(collection(db, 'cambiosAceite'));
+    
+    // Filtro por lubricentro si se especifica
+    if (searchParams.lubricentroId) {
+      q = query(q, where('lubricentroId', '==', searchParams.lubricentroId));
+    }
+    
+    // Filtro por estado si se especifica
+    if (searchParams.estado) {
+      q = query(q, where('estado', '==', searchParams.estado));
+    }
+    
+    // Filtro por rango de fechas
+    if (searchParams.startDate) {
+      q = query(q, where('fechaServicio', '>=', Timestamp.fromDate(searchParams.startDate)));
+    }
+    
+    if (searchParams.endDate) {
+      q = query(q, where('fechaServicio', '<=', Timestamp.fromDate(searchParams.endDate)));
+    }
+    
+    // Filtro por dominio del vehículo (búsqueda exacta)
+    if (searchParams.vehicleDomain) {
+      q = query(q, where('dominioVehiculo', '==', searchParams.vehicleDomain.toUpperCase()));
+    }
+    
+    // Ordenar por fecha
+    q = query(q, orderBy('fechaServicio', 'desc'));
+    
+    const querySnapshot = await getDocs(q);
+    let results = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as OilChange));
+    
+    // Filtros adicionales que no se pueden hacer directamente en Firestore
+    if (searchParams.searchTerm) {
+      const searchLower = searchParams.searchTerm.toLowerCase();
+      results = results.filter(service =>
+        service.nombreCliente?.toLowerCase().includes(searchLower) ||
+        service.dominioVehiculo?.toLowerCase().includes(searchLower) ||
+        service.marcaVehiculo?.toLowerCase().includes(searchLower) ||
+        service.modeloVehiculo?.toLowerCase().includes(searchLower) ||
+        service.nroCambio?.toString().includes(searchLower)
+      );
+    }
+    
+    if (searchParams.clientName) {
+      const clientNameLower = searchParams.clientName.toLowerCase();
+      results = results.filter(service =>
+        service.nombreCliente?.toLowerCase().includes(clientNameLower)
+      );
+    }
+    
+   
+    
+    return results;
+  } catch (error) {
+    console.error('❌ Error en búsqueda avanzada de servicios:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtener estadísticas globales para superadmin
+ */
+export const getGlobalOilChangeStats = async (): Promise<{
+  totalServices: number;
+  servicesThisMonth: number;
+  servicesLastMonth: number;
+  pendingServices: number;
+  topLubricentros: Array<{ lubricentroId: string; lubricentroName: string; serviceCount: number }>;
+  recentActivity: OilChange[];
+}> => {
+  try {
+
+    
+    // Obtener todos los servicios del último año para cálculos
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const q = query(
+      collection(db, 'cambiosAceite'),
+      where('fechaServicio', '>=', Timestamp.fromDate(oneYearAgo)),
+      orderBy('fechaServicio', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const allServices = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as OilChange));
+    
+    // Calcular estadísticas
+    const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    
+    const servicesThisMonth = allServices.filter(service => {
+      const serviceDate = new Date(service.fechaServicio);
+      return serviceDate >= currentMonthStart;
+    }).length;
+    
+    const servicesLastMonth = allServices.filter(service => {
+      const serviceDate = new Date(service.fechaServicio);
+      return serviceDate >= lastMonthStart && serviceDate <= lastMonthEnd;
+    }).length;
+    
+    const pendingServices = allServices.filter(service => service.estado === 'pendiente').length;
+    
+    // Top lubricentros por cantidad de servicios
+    const lubricentroStats = new Map<string, number>();
+    allServices.forEach(service => {
+      const count = lubricentroStats.get(service.lubricentroId) || 0;
+      lubricentroStats.set(service.lubricentroId, count + 1);
+    });
+    
+    // Obtener nombres de lubricentros para el top
+    const topLubricentroIds = Array.from(lubricentroStats.entries())
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([id]) => id);
+    
+    const topLubricentros = [];
+    for (const lubricentroId of topLubricentroIds) {
+      try {
+        const lubricentro = await getLubricentroById(lubricentroId);
+        topLubricentros.push({
+          lubricentroId,
+          lubricentroName: lubricentro?.fantasyName || 'No disponible',
+          serviceCount: lubricentroStats.get(lubricentroId) || 0
+        });
+      } catch (error) {
+        console.warn(`No se pudo obtener información del lubricentro ${lubricentroId}`);
+        topLubricentros.push({
+          lubricentroId,
+          lubricentroName: 'Lubricentro no encontrado',
+          serviceCount: lubricentroStats.get(lubricentroId) || 0
+        });
+      }
+    }
+    
+    // Actividad reciente (últimos 10 servicios)
+    const recentActivity = allServices.slice(0, 10);
+    
+    const stats = {
+      totalServices: allServices.length,
+      servicesThisMonth,
+      servicesLastMonth,
+      pendingServices,
+      topLubricentros,
+      recentActivity
+    };
+    
+
+    
+    return stats;
+  } catch (error) {
+    console.error('❌ Error al calcular estadísticas globales:', error);
+    throw error;
+  }
+};
+
+/**
+ * Obtener servicios por rango de fechas para reportes
+ */
+export const getOilChangesByDateRange = async (
+  startDate: Date,
+  endDate: Date,
+  lubricentroId?: string
+): Promise<OilChange[]> => {
+  try {
+ 
+    
+    let q = query(
+      collection(db, 'cambiosAceite'),
+      where('fechaServicio', '>=', Timestamp.fromDate(startDate)),
+      where('fechaServicio', '<=', Timestamp.fromDate(endDate))
+    );
+    
+    // Filtro opcional por lubricentro
+    if (lubricentroId) {
+      q = query(q, where('lubricentroId', '==', lubricentroId));
+    }
+    
+    q = query(q, orderBy('fechaServicio', 'desc'));
+    
+    const querySnapshot = await getDocs(q);
+    const results = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    } as OilChange));
+    
+
+    
+    return results;
+  } catch (error) {
+    console.error('❌ Error al obtener servicios por rango de fechas:', error);
+    throw error;
+  }
+};

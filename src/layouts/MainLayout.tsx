@@ -26,7 +26,8 @@ import {
   ShieldCheckIcon ,
    TruckIcon,
   ClockIcon,  // ✅ AGREGAR ClockIcon
-  PlusIcon    // ✅ AGREGAR PlusIcon
+  PlusIcon,    // ✅ AGREGAR PlusIcon
+  WrenchScrewdriverIcon
 } from '@heroicons/react/24/outline';
 
 // Componente de carga
@@ -76,40 +77,46 @@ const MainLayout: React.FC = () => {
   const items = [];
   
   // Para superadmin, mostrar menú limitado
-  if (userProfile.role === 'superadmin') {
-    return [
-      { 
-        text: 'Dashboard', 
-        icon: <HomeIcon className="w-5 h-5" />, 
-        path: '/dashboard',
-        divider: false
-      },
-      { 
-        text: 'Gestión de Lubricentros', 
-        icon: <BuildingOfficeIcon className="w-5 h-5" />, 
-        path: '/superadmin/lubricentros',
-        divider: false
-      },
-      { 
-        text: 'Gestión de Planes', 
-        icon: <CreditCardIcon className="w-5 h-5" />, 
-        path: '/superadmin/planes',
-        divider: false
-      },
-      { 
-        text: 'Estadísticas Globales', 
-        icon: <ChartBarIcon className="w-5 h-5" />, 
-        path: '/superadmin/reportes',
-        divider: true
-      },
-      { 
-        text: 'Mi Perfil', 
-        icon: <UserIcon className="w-5 h-5" />, 
-        path: '/perfil',
-        divider: false
-      }
-    ];
-  }
+ if (userProfile.role === 'superadmin') {
+  return [
+    { 
+      text: 'Dashboard', 
+      icon: <HomeIcon className="w-5 h-5" />, 
+      path: '/dashboard',
+      divider: false
+    },
+    { 
+      text: 'Gestión de Lubricentros', 
+      icon: <BuildingOfficeIcon className="w-5 h-5" />, 
+      path: '/superadmin/lubricentros',
+      divider: false
+    },
+    { 
+      text: 'Todos los Servicios', 
+      icon: <WrenchScrewdriverIcon className="w-5 h-5" />, 
+      path: '/superadmin/servicios',
+      divider: false
+    },
+    { 
+      text: 'Gestión de Planes', 
+      icon: <CreditCardIcon className="w-5 h-5" />, 
+      path: '/superadmin/planes',
+      divider: false
+    },
+    { 
+      text: 'Estadísticas Globales', 
+      icon: <ChartBarIcon className="w-5 h-5" />, 
+      path: '/superadmin/reportes',
+      divider: true
+    },
+    { 
+      text: 'Mi Perfil', 
+      icon: <UserIcon className="w-5 h-5" />, 
+      path: '/perfil',
+      divider: false
+    }
+  ];
+}
   
   // Para usuarios que NO son superadmin (admin y user)
   items.push(
