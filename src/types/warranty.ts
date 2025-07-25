@@ -115,6 +115,7 @@ export interface CreateWarrantyData {
   garantiaKilometros?: number;
   observaciones?: string;
   condicionesEspeciales?: string;
+  fechaVenta?: Date; 
 }
 
 // Para filtros y búsquedas

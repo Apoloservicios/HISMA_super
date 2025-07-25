@@ -272,57 +272,67 @@ const OilChangeFormPage: React.FC = () => {
 
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+  const { name, value } = e.target;
+  
+  if (validationErrors[name]) {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[name];
+      return newErrors;
+    });
+  }
+  
+  setFormData(prev => {
+    if (name === 'kmActuales') {
+      const kmValue = parseInt(value, 10) || 0;
+      return { 
+        ...prev, 
+        [name]: kmValue, 
+        kmProximo: kmValue > 0 ? kmValue + 10000 : 0
+      };
+    } 
     
-    if (validationErrors[name]) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
+    if (name === 'dominioVehiculo') {
+      return { ...prev, [name]: value.toUpperCase() };
     }
     
-    setFormData(prev => {
-      if (name === 'kmActuales') {
-        const kmValue = parseInt(value, 10) || 0;
-        return { 
-          ...prev, 
-          [name]: kmValue, 
-          kmProximo: kmValue > 0 ? kmValue + 10000 : 0
-        };
-      } 
+    if (name === 'perioricidad_servicio') {
+      const meses = parseInt(value, 10) || 3;
+      const serviceDate = prev.fechaServicio || new Date();
+      const nextDate = calculateNextChangeDate(serviceDate, meses);
       
-      if (name === 'dominioVehiculo') {
-        return { ...prev, [name]: value.toUpperCase() };
-      }
+      return { 
+        ...prev, 
+        [name]: meses, 
+        fechaProximoCambio: nextDate 
+      };
+    }
+    
+    // ✅ CORRECCIÓN PARA FECHAS - Aquí está el cambio principal
+    if (name === 'fechaServicio') {
+      // En lugar de: const newServiceDate = new Date(value);
+      // Usamos esto para evitar problemas de timezone:
+      const newServiceDate = value ? new Date(value + 'T12:00:00') : new Date();
       
-      if (name === 'perioricidad_servicio') {
-        const meses = parseInt(value, 10) || 3;
-        const serviceDate = prev.fechaServicio || new Date();
-        const nextDate = calculateNextChangeDate(serviceDate, meses);
-        
-        return { 
-          ...prev, 
-          [name]: meses, 
-          fechaProximoCambio: nextDate 
-        };
-      }
+      const periodicity = prev.perioricidad_servicio || 3;
+      const nextDate = calculateNextChangeDate(newServiceDate, periodicity);
       
-      if (name === 'fechaServicio') {
-        const newServiceDate = new Date(value);
-        const periodicity = prev.perioricidad_servicio || 3;
-        const nextDate = calculateNextChangeDate(newServiceDate, periodicity);
-        
-        return {
-          ...prev,
-          [name]: newServiceDate,
-          fechaProximoCambio: nextDate
-        };
-      }
-      
-      return { ...prev, [name]: value };
-    });
-  };
+      return {
+        ...prev,
+        [name]: newServiceDate,
+        fechaProximoCambio: nextDate
+      };
+    }
+    
+    // ✅ AGREGAR MANEJO PARA OTROS CAMPOS DE FECHA (si los hay)
+    if (name === 'fecha' || name === 'fechaProximoCambio') {
+      const newDate = value ? new Date(value + 'T12:00:00') : new Date();
+      return { ...prev, [name]: newDate };
+    }
+    
+    return { ...prev, [name]: value };
+  });
+};
   
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
@@ -497,14 +507,24 @@ const OilChangeFormPage: React.FC = () => {
     }
   };
   
-  const formatDateForInput = (date: Date | undefined): string => {
-    if (!date) return '';
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
+    // ✅ FUNCIÓN CORREGIDA: Formatear fecha para input sin problemas de timezone
+    const formatDateForInput = (date: Date | undefined): string => {
+      if (!date) return '';
+      
+      // Crear una nueva fecha asegurándonos de usar la zona horaria local
+      const d = new Date(date);
+      
+      // Ajustar por la zona horaria para evitar el problema del día anterior
+      const offsetMinutes = d.getTimezoneOffset();
+      const adjustedDate = new Date(d.getTime() - (offsetMinutes * 60000));
+      
+      // Formatear como YYYY-MM-DD
+      const year = adjustedDate.getFullYear();
+      const month = String(adjustedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(adjustedDate.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
+    };
   
   const formatDateForDisplay = (date: Date | undefined): string => {
     if (!date) return 'No especificada';

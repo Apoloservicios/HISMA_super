@@ -25,6 +25,8 @@ interface WarrantyFormData {
   garantiaKilometros: string;
   observaciones: string;
   condicionesEspeciales: string;
+  fechaVenta: Date;
+  
 }
 
 const WarrantyFormPage: React.FC = () => {
@@ -53,7 +55,8 @@ const WarrantyFormPage: React.FC = () => {
     garantiaMeses: '12',
     garantiaKilometros: '',
     observaciones: '',
-    condicionesEspeciales: ''
+    condicionesEspeciales: '',
+    fechaVenta: new Date() // ✅ AGREGAR ESTE CAMPO CON FECHA ACTUAL POR DEFECTO
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -113,28 +116,36 @@ const WarrantyFormPage: React.FC = () => {
           return;
         }
 
-        // Convertir los datos de la garantía al formato del formulario
-        setFormData({
-          categoria: warranty.categoria,
-          marca: warranty.marca,
-          modelo: warranty.modelo,
-          numeroSerie: warranty.numeroSerie || '',
-          descripcion: warranty.descripcion,
-          precio: warranty.precio.toString(),
-          facturaNumero: warranty.facturaNumero || '',
-          clienteNombre: warranty.clienteNombre,
-          clienteTelefono: warranty.clienteTelefono || '',
-          clienteEmail: warranty.clienteEmail || '',
-          vehiculoDominio: warranty.vehiculoDominio || '',
-          vehiculoMarca: warranty.vehiculoMarca || '',
-          vehiculoModelo: warranty.vehiculoModelo || '',
-          kilometrajeVenta: warranty.kilometrajeVenta?.toString() || '',
-          tipoGarantia: warranty.tipoGarantia,
-          garantiaMeses: warranty.garantiaMeses?.toString() || '',
-          garantiaKilometros: warranty.garantiaKilometros?.toString() || '',
-          observaciones: warranty.observaciones || '',
-          condicionesEspeciales: warranty.condicionesEspeciales || ''
-        });
+            // Función helper para convertir Timestamp a Date
+      const toDate = (timestamp: any): Date => {
+        if (timestamp instanceof Date) return timestamp;
+        if (timestamp?.toDate) return timestamp.toDate();
+        return new Date(timestamp);
+      };
+
+      // Convertir los datos de la garantía al formato del formulario
+      setFormData({
+        categoria: warranty.categoria,
+        marca: warranty.marca,
+        modelo: warranty.modelo,
+        numeroSerie: warranty.numeroSerie || '',
+        descripcion: warranty.descripcion,
+        precio: warranty.precio.toString(),
+        facturaNumero: warranty.facturaNumero || '',
+        clienteNombre: warranty.clienteNombre,
+        clienteTelefono: warranty.clienteTelefono || '',
+        clienteEmail: warranty.clienteEmail || '',
+        vehiculoDominio: warranty.vehiculoDominio || '',
+        vehiculoMarca: warranty.vehiculoMarca || '',
+        vehiculoModelo: warranty.vehiculoModelo || '',
+        kilometrajeVenta: warranty.kilometrajeVenta?.toString() || '',
+        tipoGarantia: warranty.tipoGarantia,
+        garantiaMeses: warranty.garantiaMeses?.toString() || '',
+        garantiaKilometros: warranty.garantiaKilometros?.toString() || '',
+        observaciones: warranty.observaciones || '',
+        condicionesEspeciales: warranty.condicionesEspeciales || '',
+        fechaVenta: toDate(warranty.fechaVenta) // ✅ AGREGAR ESTA LÍNEA
+      });
 
       } catch (err: any) {
         console.error('Error al cargar garantía:', err);
@@ -149,10 +160,11 @@ const WarrantyFormPage: React.FC = () => {
     loadWarrantyData();
   }, [id, isEditing, userProfile]);
 
-  // Calcular fecha de vencimiento
+    // ✅ 3. MODIFICAR EL CÁLCULO DE VENCIMIENTO:
   useEffect(() => {
     const calcularVencimiento = () => {
-      const fechaVenta = new Date();
+      // ✅ USAR LA FECHA DE VENTA DEL FORMULARIO EN LUGAR DE new Date()
+      const fechaVenta = formData.fechaVenta || new Date();
       let nuevaFecha = new Date(fechaVenta);
 
       if (formData.tipoGarantia === 'meses' && formData.garantiaMeses) {
@@ -166,21 +178,40 @@ const WarrantyFormPage: React.FC = () => {
     };
 
     calcularVencimiento();
-  }, [formData.tipoGarantia, formData.garantiaMeses]);
+  }, [formData.tipoGarantia, formData.garantiaMeses, formData.fechaVenta]); // ✅ AGREGAR fechaVenta A LAS DEPENDENCIAS
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Limpiar error si existe
-    if (errors[name]) {
-      setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
-    }
-  };
+  // ✅ 4. FUNCIÓN AUXILIAR PARA FORMATEAR FECHA PARA INPUT:
+const formatDateForInput = (date: Date | undefined): string => {
+  if (!date) return '';
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+
+    // ✅ 2. MODIFICAR EL handleInputChange para manejar fechas:
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+      const { name, value, type } = e.target;
+      
+      // Manejar campos de fecha específicamente
+      if (type === 'date' && value) {
+        const fecha = new Date(value + 'T12:00:00'); // Evitar problemas de timezone
+        setFormData(prev => ({ ...prev, [name]: fecha }));
+      } else {
+        setFormData(prev => ({ ...prev, [name]: value }));
+      }
+      
+      // Limpiar error si existe
+      if (errors[name]) {
+        setErrors(prev => {
+          const newErrors = { ...prev };
+          delete newErrors[name];
+          return newErrors;
+        });
+      }
+    };
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -257,7 +288,8 @@ const WarrantyFormPage: React.FC = () => {
         garantiaMeses: formData.garantiaMeses ? parseInt(formData.garantiaMeses) : undefined,
         garantiaKilometros: formData.garantiaKilometros ? parseInt(formData.garantiaKilometros) : undefined,
         observaciones: formData.observaciones.trim() || undefined,
-        condicionesEspeciales: formData.condicionesEspeciales.trim() || undefined
+        condicionesEspeciales: formData.condicionesEspeciales.trim() || undefined,
+        fechaVenta: formData.fechaVenta // ✅ AGREGAR ESTE CAMPO
       };
 
       if (isEditing && id) {
@@ -454,6 +486,24 @@ const WarrantyFormPage: React.FC = () => {
                       placeholder="Número de serie o código"
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
+                  </div>
+
+                    {/* Fecha de Venta */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Fecha de Venta *
+                    </label>
+                    <input
+                      type="date"
+                      name="fechaVenta"
+                      value={formatDateForInput(formData.fechaVenta)}
+                      onChange={handleInputChange}
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      required
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Fecha en que se realizó la venta del producto
+                    </p>
                   </div>
 
                   {/* Precio */}

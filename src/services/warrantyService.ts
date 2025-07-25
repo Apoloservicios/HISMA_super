@@ -59,8 +59,8 @@ export const createWarranty = async (
   vendedorNombre: string
 ): Promise<string> => {
   try {
-    // Calcular fecha de vencimiento
-    const fechaVenta = new Date();
+    // ✅ USAR LA FECHA DE VENTA DEL PARÁMETRO O LA ACTUAL COMO FALLBACK
+    const fechaVenta = data.fechaVenta || new Date();
     const fechaVencimiento = new Date(fechaVenta);
     
     if (data.tipoGarantia === 'meses' || data.tipoGarantia === 'mixta') {
@@ -68,15 +68,13 @@ export const createWarranty = async (
         fechaVencimiento.setMonth(fechaVencimiento.getMonth() + data.garantiaMeses);
       }
     }
-    
-    // ✅ CORRECCIÓN: Filtrar campos undefined y manejar campos opcionales
-    const warrantyData: any = {
+      const warrantyData: any = {
       lubricentroId,
       categoria: data.categoria,
       marca: data.marca,
       modelo: data.modelo,
       descripcion: data.descripcion,
-      fechaVenta: Timestamp.fromDate(fechaVenta),
+      fechaVenta: Timestamp.fromDate(fechaVenta), // ✅ USAR LA FECHA CORRECTA
       precio: data.precio,
       vendedorId,
       vendedorNombre,

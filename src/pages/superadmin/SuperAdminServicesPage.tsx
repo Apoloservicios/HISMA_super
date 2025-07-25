@@ -20,7 +20,7 @@ import {
   ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import { formatDate } from '../../services/reportService/utils';
-import { OilChange } from '../../types';
+import { OilChange, OilChangeStatus  } from '../../types';
 import { 
   getAllOilChangesForSuperAdmin 
 } from '../../services/oilChangeService';
@@ -34,6 +34,33 @@ interface FilterOptions {
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }
+
+
+// Función helper para obtener configuración del estado
+const getStatusConfig = (estado: OilChangeStatus) => {
+  switch (estado) {
+    case 'pendiente':
+      return {
+        label: 'Pendiente',
+        className: 'bg-yellow-100 text-yellow-800'
+      };
+    case 'completo':
+      return {
+        label: 'Completo',
+        className: 'bg-blue-100 text-blue-800'
+      };
+    case 'enviado':
+      return {
+        label: 'Enviado',
+        className: 'bg-green-100 text-green-800'
+      };
+    default:
+      return {
+        label: 'Desconocido',
+        className: 'bg-gray-100 text-gray-800'
+      };
+  }
+};
 
 const SuperAdminServicesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -314,15 +341,16 @@ const SuperAdminServicesPage: React.FC = () => {
                 {/* Filtro por estado */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                  <select
+                    <select
                     value={filters.estado}
                     onChange={(e) => handleFilterChange('estado', e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
+                    >
                     <option value="">Todos los estados</option>
-                    <option value="completo">Completo</option>
                     <option value="pendiente">Pendiente</option>
-                  </select>
+                    <option value="completo">Completo</option>
+                    <option value="enviado">Enviado</option> {/* ✅ AGREGAR ESTA LÍNEA */}
+                    </select>
                 </div>
 
                 {/* Filtro por fecha */}
@@ -427,15 +455,16 @@ const SuperAdminServicesPage: React.FC = () => {
                       {formatDate(service.fechaServicio)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          service.estado === 'completo' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-yellow-100 text-yellow-800'
-                        }`}
-                      >
-                        {service.estado === 'completo' ? 'Completo' : 'Pendiente'}
-                      </span>
+                    {(() => {
+                        const statusConfig = getStatusConfig(service.estado);
+                        return (
+                        <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusConfig.className}`}
+                        >
+                            {statusConfig.label}
+                        </span>
+                        );
+                    })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
