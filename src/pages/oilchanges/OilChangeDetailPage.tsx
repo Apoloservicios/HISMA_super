@@ -189,6 +189,7 @@ const shareViaWhatsApp = () => {
           Compartir
         </Button>
       </div>
+      
     }
     >
       {error && (

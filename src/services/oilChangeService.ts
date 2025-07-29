@@ -212,11 +212,13 @@ export const getOilChangeByNumber = async (lubricentroId: string, nroCambio: str
   }
 };
 
-// Obtener cambios de aceite paginados por lubricentro
+
 export const getOilChangesByLubricentro = async (
   lubricentroId: string,
   pageSize: number = 20,
-  lastVisible?: QueryDocumentSnapshot<DocumentData>
+  lastVisible?: QueryDocumentSnapshot<DocumentData>,
+  sortBy: 'nroCambio' | 'fechaServicio' | 'createdAt' = 'nroCambio',
+  sortOrder: 'asc' | 'desc' = 'desc'
 ): Promise<{
   oilChanges: OilChange[],
   lastVisible: QueryDocumentSnapshot<DocumentData> | null
@@ -224,11 +226,16 @@ export const getOilChangesByLubricentro = async (
   try {
     let q;
     
+    // Para ordenamiento por número de cambio, usamos createdAt como campo base
+    // y luego ordenamos en el cliente
+    const orderField = sortBy === 'nroCambio' ? 'createdAt' : 
+                      sortBy === 'fechaServicio' ? 'fechaServicio' : 'createdAt';
+    
     if (lastVisible) {
       q = query(
         collection(db, COLLECTION_NAME),
         where('lubricentroId', '==', lubricentroId),
-        orderBy('createdAt', 'desc'),
+        orderBy(orderField, 'desc'), // Siempre desc para mantener consistencia con paginación
         startAfter(lastVisible),
         limit(pageSize)
       );
@@ -236,14 +243,30 @@ export const getOilChangesByLubricentro = async (
       q = query(
         collection(db, COLLECTION_NAME),
         where('lubricentroId', '==', lubricentroId),
-        orderBy('createdAt', 'desc'),
+        orderBy(orderField, 'desc'), // Siempre desc para mantener consistencia con paginación
         limit(pageSize)
       );
     }
     
     const querySnapshot = await getDocs(q);
     
-    const oilChanges = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    let oilChanges = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    
+    // Ordenamiento adicional en cliente si es necesario
+    if (sortBy === 'nroCambio') {
+      oilChanges = oilChanges.sort((a, b) => {
+        // Extraer número del formato "AP-00005"
+        const getNumber = (nroCambio: string) => {
+          const parts = nroCambio.split('-');
+          return parts.length === 2 ? parseInt(parts[1]) : 0;
+        };
+        
+        const numA = getNumber(a.nroCambio);
+        const numB = getNumber(b.nroCambio);
+        
+        return sortOrder === 'desc' ? numB - numA : numA - numB;
+      });
+    }
     
     const newLastVisible = querySnapshot.docs.length > 0 
       ? querySnapshot.docs[querySnapshot.docs.length - 1] 
@@ -1241,6 +1264,46 @@ export const getOilChangesByDateRange = async (
     return results;
   } catch (error) {
     console.error('❌ Error al obtener servicios por rango de fechas:', error);
+    throw error;
+  }
+};
+
+// También agrega esta función al final del archivo para corregir datos inconsistentes
+export const fixCreatedAtFields = async (lubricentroId: string) => {
+  try {
+    console.log('🔧 Iniciando corrección de campos createdAt...');
+    
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('lubricentroId', '==', lubricentroId)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    let fixedCount = 0;
+    
+    // Procesar documentos uno por uno para evitar problemas con batch
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      
+      // Si createdAt tiene formato inconsistente o no existe
+      if (!data.createdAt || (typeof data.createdAt === 'object' && data.createdAt.methodName)) {
+        // Usar fechaServicio como createdAt si no hay otro valor válido
+        const fallbackDate = data.fechaServicio || data.fecha || new Date();
+        
+        await updateDoc(docSnap.ref, {
+          createdAt: fallbackDate,
+          updatedAt: serverTimestamp()
+        });
+        
+        fixedCount++;
+      }
+    }
+    
+    console.log(`✅ Se corrigieron ${fixedCount} registros`);
+    return fixedCount;
+  } catch (error) {
+    console.error('❌ Error al corregir campos createdAt:', error);
     throw error;
   }
 };

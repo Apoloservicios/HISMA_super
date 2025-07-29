@@ -5,9 +5,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { PageContainer, Card, CardHeader, CardBody, Button, Alert, Spinner } from '../../components/ui';
-import { getOilChangesByLubricentro, searchOilChanges, getOilChangeById } from '../../services/oilChangeService';
+import { getOilChangesByLubricentro, searchOilChanges, getOilChangeById, fixCreatedAtFields } from '../../services/oilChangeService';
 import { getLubricentroById } from '../../services/lubricentroService';
 import { OilChange, Lubricentro } from '../../types';
+import { SortableOilChangeTable } from '../../components/tables/SortableOilChangeTable';
 
 import EnhancedPrintComponent from '../../components/print/EnhancedPrintComponent';
 import  enhancedPdfService  from '../../services/enhancedPdfService';
@@ -27,7 +28,8 @@ import {
   ShareIcon,
   EyeIcon,
   ChevronLeftIcon,
-  ChevronRightIcon,ClockIcon  
+  ChevronRightIcon,
+  ClockIcon  
 } from '@heroicons/react/24/outline';
 
 import { OilChangeStatusBadge } from '../../components/oilchange/OilChangeStatusButton';
@@ -57,7 +59,7 @@ const OilChangeListPage: React.FC = () => {
   const navigate = useNavigate();
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   
-  // Estados
+  // Estados principales
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [oilChanges, setOilChanges] = useState<OilChange[]>([]);
@@ -68,373 +70,222 @@ const OilChangeListPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   
-  // Estado para el PDF y compartir
+  // Estados para el PDF y compartir
   const [selectedOilChange, setSelectedOilChange] = useState<OilChange | null>(null);
   const [selectedLubricentro, setSelectedLubricentro] = useState<Lubricentro | null>(null);
   const [showingPdfPreview, setShowingPdfPreview] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   
-  // Nuevo estado para paginación
+  // Estados para paginación
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 10; // Cambiado de 20 a 10 para mejor usabilidad
   
-  // Debounced search term
+  // Estados para ordenamiento
+  const [sortBy, setSortBy] = useState<'nroCambio' | 'fechaServicio' | 'createdAt'>('nroCambio');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  
-  // Datos para paginación
-  const pageSize = 10; // Cambiado a 10 para mejor usabilidad
-  
-  // Cargar datos iniciales
-  useEffect(() => {
-    if (userProfile?.lubricentroId) {
-      loadInitialData();
-    }
-  }, [userProfile]);
-  
-  // Efecto para búsqueda instantánea
-  useEffect(() => {
-    if (debouncedSearchTerm) {
-      handleSearch();
-    } else if (isSearching) {
-      clearSearch();
-    }
-  }, [debouncedSearchTerm]);
-  
-  // Cargar datos iniciales
-  const loadInitialData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      if (!userProfile?.lubricentroId) {
-        setError('No se encontró información del lubricentro');
-        return;
-      }
-      
-      const result = await getOilChangesByLubricentro(userProfile.lubricentroId, pageSize);
-      setOilChanges(result.oilChanges);
-      setLastVisible(result.lastVisible);
-      setHasMore(result.oilChanges.length === pageSize);
-      
-      // Estimar el total de páginas - esto debería idealmente venir del servidor
-      // Por ahora usaremos una estimación
-      const estimatedTotal = Math.max(1, result.oilChanges.length === pageSize ? 10 : 1);
-      setTotalPages(estimatedTotal);
-      setCurrentPage(1);
-      
-    } catch (err) {
-      console.error('Error al cargar cambios de aceite:', err);
-      setError('Error al cargar los datos. Por favor, intente nuevamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Cargar página específica
-  const loadPage = async (page: number) => {
-    if (page < 1) return;
+
+  const loadOilChanges = async (reset: boolean = false) => {
+    if (loading && !reset) return;
     
     try {
       setLoading(true);
       
+      if (reset) {
+        setOilChanges([]);
+        setLastVisible(null);
+        setHasMore(true);
+        setCurrentPage(1);
+      }
+
       if (!userProfile?.lubricentroId) {
-        return;
+        throw new Error('No se encontró el lubricentro del usuario');
       }
+
+      const debouncedSearch = searchTerm.trim();
       
-      // Si es la primera página, cargar datos iniciales
-      if (page === 1) {
-        return loadInitialData();
-      }
-      
-      // Para otras páginas, necesitamos hacer cálculos
-      // Idealmente, el backend debería soportar paginación por número de página
-      // Como no tenemos eso, simulamos navegando con lastVisible
-      
-      // Esta es una implementación simple - para una app real, necesitarías
-      // un mejor manejo de paginación, posiblemente cachear resultados anteriores
-      let currentLastVisible = null;
-      let skipPages = page - currentPage;
-      
-      if (skipPages > 0) {
-        // Avanzar páginas
-        currentLastVisible = lastVisible;
-        
-          while (skipPages > 0 && currentLastVisible) {
-          const result: { 
-            oilChanges: OilChange[],
-            lastVisible: QueryDocumentSnapshot<DocumentData> | null 
-          } = await getOilChangesByLubricentro(
-            userProfile.lubricentroId,
-            pageSize,
-            currentLastVisible
-          );
-          
-          if (result.oilChanges.length === 0) break;
-          
-          currentLastVisible = result.lastVisible;
-          skipPages--;
-          
-          // Si llegamos a la última página
-          if (result.oilChanges.length < pageSize) {
-            setOilChanges(result.oilChanges);
-            setLastVisible(result.lastVisible);
-            setHasMore(false);
-            setCurrentPage(page);
-            return;
-          }
-          
-          // Si es la página objetivo
-          if (skipPages === 0) {
-            setOilChanges(result.oilChanges);
-            setLastVisible(result.lastVisible);
-            setHasMore(result.oilChanges.length === pageSize);
-            setCurrentPage(page);
-            return;
-          }
-        }
-      } else {
-        // Retroceder páginas - esto es más complicado con Firestore
-        // Para una implementación real, deberías almacenar los puntos de paginación
-        // Como solución simple, recargamos desde el principio
-        let tmpPage = 1;
-        let tmpLastVisible = null;
-        
-        const initialResult = await getOilChangesByLubricentro(
+      if (debouncedSearch) {
+        // Si hay término de búsqueda, usar la búsqueda
+        setIsSearching(true);
+        const searchResults = await searchOilChanges(
           userProfile.lubricentroId,
-          pageSize
+          'cliente', // Puedes hacer esto configurable
+          debouncedSearch
         );
         
-        setOilChanges(initialResult.oilChanges);
-        tmpLastVisible = initialResult.lastVisible;
-        
-        while (tmpPage < page) {
-          tmpPage++;
-          
-          if (tmpPage === page) {
-            setCurrentPage(page);
-            setLastVisible(tmpLastVisible);
-            setHasMore(initialResult.oilChanges.length === pageSize);
-            return;
-          }
-          
-          const nextResult = await getOilChangesByLubricentro(
+        setOilChanges(searchResults);
+        setHasMore(false);
+      } else {
+        // Cargar datos normales con ordenamiento mejorado
+        const { oilChanges: newOilChanges, lastVisible: newLastVisible } = 
+          await getOilChangesByLubricentro(
             userProfile.lubricentroId,
-            pageSize,
-           tmpLastVisible = initialResult.lastVisible || undefined
+            PAGE_SIZE,
+            reset ? undefined : lastVisible,
+            sortBy, // Pasar parámetro de ordenamiento
+            sortOrder // Pasar dirección de ordenamiento
           );
-          
-          if (nextResult.oilChanges.length === 0) {
-            // No hay más datos
-            setHasMore(false);
-            setCurrentPage(tmpPage - 1); // Retroceder a la última página válida
-            return;
-          }
-          
-          setOilChanges(nextResult.oilChanges);
-          tmpLastVisible = nextResult.lastVisible;
-          setHasMore(nextResult.oilChanges.length === pageSize);
+
+        if (reset) {
+          setOilChanges(newOilChanges);
+        } else {
+          setOilChanges(prev => [...prev, ...newOilChanges]);
         }
+        
+        setLastVisible(newLastVisible);
+        // Mejorar detección de hasMore
+        setHasMore(newOilChanges.length === PAGE_SIZE && newLastVisible !== null);
       }
-      
-      setCurrentPage(page);
-    } catch (err) {
-      console.error('Error al navegar a la página:', err);
-      setError('Error al cargar los datos. Por favor, intente nuevamente.');
+    } catch (error) {
+      console.error('Error al cargar cambios de aceite:', error);
+      setError('Error al cargar los cambios de aceite. Por favor, intente nuevamente.');
     } finally {
       setLoading(false);
+      setIsSearching(false);
     }
   };
-  
-  // Cargar más datos (avanzar página)
-  const loadMoreData = async () => {
-    if (!hasMore || !userProfile?.lubricentroId) return;
-    loadPage(currentPage + 1);
-  };
-  
-  // Realizar búsqueda mejorada que busca tanto en dominio como en cliente
-  const handleSearch = async () => {
-    if (!debouncedSearchTerm.trim() || !userProfile?.lubricentroId) return;
+
+  // Función de búsqueda local como fallback
+  const performLocalSearch = (searchTerm: string, allChanges: OilChange[]) => {
+    const searchLower = searchTerm.toLowerCase();
+    const searchUpper = searchTerm.toUpperCase();
     
-    try {
-      setIsSearching(true);
-      setLoading(true);
-      setError(null);
+    return allChanges.filter(change => {
+      // Búsqueda por nombre cliente
+      const matchesCliente = change.nombreCliente?.toLowerCase().includes(searchLower);
       
-      // Realizar dos búsquedas: una por cliente y otra por dominio
-      const resultsCliente = await searchOilChanges(
-        userProfile.lubricentroId,
-        'cliente',
-        debouncedSearchTerm.trim(),
-        100
-      );
+      // Búsqueda por dominio (exacta y parcial)
+      const matchesDominioExacto = change.dominioVehiculo === searchUpper;
+      const matchesDominioParcial = change.dominioVehiculo?.toLowerCase().includes(searchLower);
       
-      const resultsDominio = await searchOilChanges(
-        userProfile.lubricentroId,
-        'dominio',
-        debouncedSearchTerm.trim(),
-        100
-      );
+      // Búsqueda por otros campos
+      const matchesMarca = change.marcaVehiculo?.toLowerCase().includes(searchLower);
+      const matchesModelo = change.modeloVehiculo?.toLowerCase().includes(searchLower);
+      const matchesNroCambio = change.nroCambio?.toLowerCase().includes(searchLower);
       
-      // Combinar resultados y eliminar duplicados
-      const combinedResults = [...resultsCliente, ...resultsDominio];
-      const uniqueResults = combinedResults.filter((change, index, self) =>
-        index === self.findIndex((c) => c.id === change.id)
-      );
-      
-      setOilChanges(uniqueResults);
-      setHasMore(false); // No paginamos los resultados de búsqueda
-      
-      // Si estamos buscando, consideramos que hay solo una página
-      setTotalPages(1);
-      setCurrentPage(1);
-    } catch (err) {
-      console.error('Error al buscar cambios de aceite:', err);
-      setError('Error al realizar la búsqueda. Por favor, intente nuevamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // Limpiar búsqueda y volver a cargar datos iniciales
-  const clearSearch = () => {
-    setSearchTerm('');
-    setIsSearching(false);
-    loadInitialData();
-  };
-  
-  // Generar PDF
-const generatePDF = async (oilChangeId: string) => {
-  try {
-    setError(null);
-    setGeneratingPdf(true);
-    
-    // Obtener los datos del cambio de aceite
-    const oilChange = await getOilChangeById(oilChangeId);
-    
-    // Obtener datos del lubricentro
-    let lubricentro: Lubricentro | null = null;
-    if (oilChange.lubricentroId) {
-      lubricentro = await getLubricentroById(oilChange.lubricentroId);
-    }
-    
-    // Usar el método directo que no depende de html2canvas
-    enhancedPdfService.generateDirectPDF(oilChange, lubricentro);
-   
-    setGeneratingPdf(false);
-  } catch (err) {
-    console.error('Error al generar PDF:', err);
-    setError('Error al generar el PDF. Por favor, intente nuevamente.');
-    setGeneratingPdf(false);
-  }
-};
-  
-  // Compartir por WhatsApp
-  const shareViaWhatsApp = async (oilChangeId: string) => {
-    try {
-      // Obtener los datos del cambio de aceite
-      const oilChange = await getOilChangeById(oilChangeId);
-      
-      // Obtener datos del lubricentro
-      let lubricentroName = "Lubricentro";
-      if (oilChange.lubricentroId) {
-        const lubricentro = await getLubricentroById(oilChange.lubricentroId);
-        lubricentroName = lubricentro.fantasyName;
-      }
-      
-      // Usar el servicio mejorado para generar el mensaje y URL
-      const { whatsappUrl, whatsappUrlWithPhone } = enhancedPdfService.generateWhatsAppMessage(oilChange, lubricentroName);
-      
-      // Abrir en nueva ventana - priorizar URL con teléfono si está disponible
-      window.open(whatsappUrlWithPhone || whatsappUrl, '_blank');
-      
-    } catch (err) {
-      console.error('Error al compartir via WhatsApp:', err);
-      setError('Error al preparar el mensaje para compartir. Por favor, intente nuevamente.');
-    }
-  };
-  
-  // Formatear fecha
-  const formatDate = (date: Date): string => {
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
+      return matchesCliente || matchesDominioExacto || matchesDominioParcial || 
+             matchesMarca || matchesModelo || matchesNroCambio;
     });
   };
-  
-  if (loading && oilChanges.length === 0) {
-    return (
-      <div className="flex justify-center items-center h-80">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
-  
-  // Componente de paginación
-  const Pagination = () => {
-    // No mostrar paginación si solo hay una página o estamos buscando
-    if (totalPages <= 1 || isSearching) return null;
-    
-    return (
-      <div className="flex justify-center mt-6">
-        <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Paginación">
-          <button
-            onClick={() => loadPage(currentPage - 1)}
-            disabled={currentPage === 1 || loading}
-            className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${
-              currentPage === 1 || loading ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <span className="sr-only">Anterior</span>
-            <ChevronLeftIcon className="h-5 w-5" />
-          </button>
-          
-          {/* Mostrar páginas */}
-          {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-            // Cálculo para mostrar páginas alrededor de la actual si hay muchas
-            let pageNumber: number;
-            if (totalPages <= 5) {
-              pageNumber = i + 1;
-            } else {
-              // Complejo: mostrar 2 páginas antes y 2 después de la actual
-              const middleIndex = 2; // índice del elemento central (0-based)
-              if (currentPage <= 3) {
-                pageNumber = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNumber = totalPages - 4 + i;
-              } else {
-                pageNumber = currentPage - middleIndex + i;
-              }
-            }
-            
-            return (
-              <button
-                key={pageNumber}
-                onClick={() => loadPage(pageNumber)}
-                disabled={loading}
-                className={`relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium ${
-                  currentPage === pageNumber ? 'z-10 bg-primary-50 border-primary-500 text-primary-600' : 'text-gray-500 hover:bg-gray-50'
-                } ${loading ? 'cursor-not-allowed' : ''}`}
-              >
-                {pageNumber}
-              </button>
-            );
-          })}
-          
-          <button
-            onClick={() => loadPage(currentPage + 1)}
-            disabled={!hasMore || loading}
-            className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${
-              !hasMore || loading ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            <span className="sr-only">Siguiente</span>
-            <ChevronRightIcon className="h-5 w-5" />
-          </button>
-        </nav>
-      </div>
-    );
+
+  // Función para manejar completar servicio
+  const handleComplete = (id: string) => {
+    navigate(`/cambios-aceite/${id}/completar`);
   };
+
+  // Función para actualizar después de cambios de estado
+  const handleStatusUpdated = () => {
+    loadOilChanges(true);
+  };
+
+  // Función para manejar doble click
+  const handleRowDoubleClick = (oilChange: OilChange) => {
+    navigate(`/cambios-aceite/${oilChange.id}`);
+  };
+
+  // Función para corregir datos inconsistentes
+  const handleFixData = async () => {
+    if (!userProfile?.lubricentroId) return;
+    
+    try {
+      setLoading(true);
+      const fixedCount = await fixCreatedAtFields(userProfile.lubricentroId);
+      
+      if (fixedCount > 0) {
+        // Recargar datos después de la corrección
+        await loadOilChanges(true);
+        alert(`Se corrigieron ${fixedCount} registros. Los datos se han actualizado.`);
+      } else {
+        alert('Todos los datos están correctos.');
+      }
+    } catch (error) {
+      console.error('Error al corregir datos:', error);
+      alert('Error al corregir los datos. Intente nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cargar más cambios de aceite (paginación)
+  const loadMoreOilChanges = async () => {
+    if (!hasMore || loading || isSearching) return;
+    await loadOilChanges(false);
+  };
+
+  // Función para imprimir PDF
+  const handlePrint = async (oilChange: OilChange) => {
+    try {
+      setGeneratingPdf(true);
+      setSelectedOilChange(oilChange);
+      
+      if (!selectedLubricentro && userProfile?.lubricentroId) {
+        const lubricentro = await getLubricentroById(userProfile.lubricentroId);
+        if (lubricentro) {
+          setSelectedLubricentro(lubricentro);
+        }
+      }
+
+      // Pequeña pausa para que el estado se actualice
+      setTimeout(async () => {
+        if (selectedLubricentro) {
+          await enhancedPdfService.generateDirectPDF(oilChange, selectedLubricentro);
+        }
+        setGeneratingPdf(false);
+      }, 100);
+
+    } catch (error) {
+      console.error('Error al generar PDF:', error);
+      setError('Error al generar el PDF');
+      setGeneratingPdf(false);
+    }
+  };
+
+  // Función para compartir
+  const handleShare = async (oilChange: OilChange) => {
+    try {
+      if (!selectedLubricentro && userProfile?.lubricentroId) {
+        const lubricentro = await getLubricentroById(userProfile.lubricentroId);
+        if (lubricentro) {
+          setSelectedLubricentro(lubricentro);
+        }
+      }
+
+      const phoneNumber = oilChange.celular?.replace(/\D/g, '');
+      if (!phoneNumber) {
+        alert('No hay número de teléfono registrado para este cliente');
+        return;
+      }
+
+      const message = `¡Hola ${oilChange.nombreCliente}! Te envío el comprobante de tu cambio de aceite realizado el ${new Date(oilChange.fechaServicio).toLocaleDateString('es-ES')} en ${selectedLubricentro?.fantasyName}. Tu próximo cambio está programado para el ${new Date(oilChange.fechaProximoCambio).toLocaleDateString('es-ES')}.`;
+
+      const whatsappUrl = `https://wa.me/54${phoneNumber}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+
+    } catch (error) {
+      console.error('Error al compartir:', error);
+      setError('Error al compartir por WhatsApp');
+    }
+  };
+
+  // Efecto para cargar datos iniciales
+  useEffect(() => {
+    loadOilChanges(true);
+  }, [userProfile?.lubricentroId]);
+
+  // Efecto para la búsqueda
+  useEffect(() => {
+    console.log('🎬 EFECTO DE BÚSQUEDA ACTIVADO:', { 
+      debouncedSearchTerm, 
+      searchTerm,
+      iguales: debouncedSearchTerm === searchTerm 
+    });
+    
+    if (debouncedSearchTerm !== searchTerm) return;
+    
+    console.log('✅ EJECUTANDO loadOilChanges con reset=true');
+    loadOilChanges(true);
+  }, [debouncedSearchTerm]);
   
   return (
     <PageContainer
@@ -465,246 +316,293 @@ const generatePDF = async (oilChangeId: string) => {
             >
               Nuevo Cambio
             </Button>
-        </div>
+          </div>
       }
     >
-      {error && (
-        <Alert type="error" className="mb-6" dismissible onDismiss={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      
-      {/* Barra de búsqueda mejorada */}
+      {/* Barra de búsqueda */}
       <Card className="mb-6">
         <CardBody>
-          <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4 sm:items-center">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
-              <div className="relative rounded-md shadow-sm">
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
                   type="text"
+                  placeholder="Buscar por cliente o dominio del vehículo..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por patente o nombre del cliente"
-                  className="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
                 />
               </div>
             </div>
-            <div className="flex space-x-2">
-              {isSearching && (
-                <Button
-                  color="secondary"
-                  variant="outline"
-                  onClick={clearSearch}
-                >
-                  Limpiar
-                </Button>
-              )}
-              {!isSearching && debouncedSearchTerm === '' && (
-                <Button
-                  color="primary"
-                  variant="outline"
-                  onClick={loadInitialData}
-                  icon={<ArrowPathIcon className="h-4 w-4" />}
-                >
-                  Actualizar
-                </Button>
-              )}
+            <div className="flex gap-2">
+              <Button
+                color="secondary"
+                variant="outline"
+                icon={<ArrowPathIcon className="h-5 w-5" />}
+                onClick={() => {
+                  setSearchTerm('');
+                  loadOilChanges(true);
+                }}
+                disabled={loading}
+              >
+                Limpiar
+              </Button>
             </div>
           </div>
         </CardBody>
       </Card>
-      
+
+      {/* Mostrar errores */}
+      {error && (
+        <Alert type="error" className="mb-6">
+          {error}
+          <Button
+            color="secondary"
+            size="sm"
+            className="ml-4"
+            onClick={() => {
+              setError(null);
+              loadOilChanges(true);
+            }}
+          >
+            Reintentar
+          </Button>
+        </Alert>
+      )}
+
       {/* Tabla de cambios de aceite */}
-      <Card>
-        <CardHeader
-          title={isSearching ? `Resultados de búsqueda para "${searchTerm}"` : "Cambios de Aceite"}
-          subtitle={isSearching ? `${oilChanges.length} resultados encontrados` : `Mostrando ${oilChanges.length} registros`}
-        />
-        <CardBody>
-          {generatingPdf && (
-            <div className="my-4 text-center">
-              <Spinner size="md" />
-              <p className="mt-2 text-gray-600">Generando PDF, por favor espere...</p>
-            </div>
-          )}
-          
-          {oilChanges.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      N° Cambio
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Cliente
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Vehículo
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Dominio
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Próximo Cambio
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {oilChanges.map((change) => (
-                    <tr key={change.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {change.nroCambio}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <OilChangeStatusBadge status={change.estado} />
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(change.fecha)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {change.nombreCliente}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {`${change.marcaVehiculo} ${change.modeloVehiculo}`}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {change.dominioVehiculo}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {formatDate(change.fechaProximoCambio)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2 flex">
-                        <Tooltip content="Ver detalles completos del cambio de aceite">
-                          <Button
-                            size="sm"
-                            color="primary"
-                            variant="outline"
-                            onClick={() => navigate(`/cambios-aceite/${change.id}`)}
-                          >
-                            <EyeIcon className="h-4 w-4" />
-                          </Button>
-                        </Tooltip>
-                        
-                        {/* Solo mostrar editar si no está enviado */}
-                        {change.estado !== 'enviado' && (
-                          <Tooltip content="Editar información del cambio de aceite">
-                            <Button
-                              size="sm"
-                              color="secondary"
-                              variant="outline"
-                              onClick={() => navigate(`/cambios-aceite/editar/${change.id}`)}
-                            >
-                              <PencilIcon className="h-4 w-4" />
-                            </Button>
-                          </Tooltip>
-                        )}
-                        
-                        <Tooltip content="Duplicar este cambio para crear uno nuevo con los mismos datos del vehículo">
-                          <Button
-                            size="sm"
-                            color="success"
-                            variant="outline"
-                            onClick={() => navigate(`/cambios-aceite/nuevo?clone=${change.id}`)}
-                          >
-                            <DocumentDuplicateIcon className="h-4 w-4" />
-                          </Button>
-                        </Tooltip>
-                        
-                        {/* Solo mostrar PDF si está completo o enviado */}
-                        {(change.estado === 'completo' || change.estado === 'enviado') && (
-                          <Tooltip content="Generar y descargar PDF del comprobante">
-                            <Button
-                              size="sm"
-                              color="info"
-                              variant="outline"
-                              onClick={() => generatePDF(change.id)}
-                              disabled={generatingPdf}
-                            >
-                              <PrinterIcon className="h-4 w-4" />
-                            </Button>
-                          </Tooltip>
-                        )}
-                        
-                        {/* Solo mostrar WhatsApp si está completo o enviado */}
-                        {(change.estado === 'completo' || change.estado === 'enviado') && (
-                          <Tooltip content="Compartir comprobante por WhatsApp">
-                            <Button
-                              size="sm"
-                              color="warning"
-                              variant="outline"
-                              onClick={() => shareViaWhatsApp(change.id)}
-                            >
-                              <ShareIcon className="h-4 w-4" />
-                            </Button>
-                          </Tooltip>
-                        )}
-                        
-                        {/* Botón para cambiar estado */}
-                        <Tooltip content={
-                          change.estado === 'pendiente' ? 'Marcar como completado - El servicio ha sido realizado' :
-                          change.estado === 'completo' ? 'Marcar como enviado - El comprobante ha sido entregado al cliente' :
-                          'No hay acciones de estado disponibles'
-                        }>
-                          <div>
-                            <OilChangeStatusButton 
-                              oilChange={change} 
-                              onStatusUpdated={loadInitialData}
-                              showLabel={false}
-                            />
-                          </div>
-                        </Tooltip>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="py-8 text-center">
-              <p className="text-gray-500">
-                {isSearching ? 'No se encontraron resultados para la búsqueda.' : 'No hay cambios de aceite registrados.'}
-              </p>
-              {!isSearching && (
-                <Button 
+      {oilChanges.length > 0 ? (
+        <Card>
+          <CardHeader 
+            title={`Cambios de Aceite (${oilChanges.length}${hasMore ? '+' : ''})`}
+            subtitle="Haga doble click en una fila para ver los detalles completos"
+            action={
+              <div className="flex space-x-2">
+                <Button
+                  color="secondary"
+                  size="sm"
+                  onClick={handleFixData}
+                  disabled={loading}
+                >
+                  🔧 Corregir Datos
+                </Button>
+                <Button
                   color="primary"
                   size="sm"
-                  className="mt-4"
-                  onClick={() => navigate('/cambios-aceite/nuevo')}
+                  onClick={() => loadOilChanges(true)}
+                  disabled={loading}
+                  icon={<ArrowPathIcon className="h-4 w-4" />}
                 >
-                  Registrar Nuevo Cambio
+                  Actualizar
                 </Button>
-              )}
+                {/* Debug info */}
+                <span className="text-xs text-gray-500">
+                  {hasMore ? 'Hay más' : 'No hay más'} | Total: {oilChanges.length}
+                </span>
+              </div>
+            }
+          />
+          <CardBody>
+            <SortableOilChangeTable
+              oilChanges={oilChanges}
+              onRowDoubleClick={handleRowDoubleClick}
+              onViewDetails={(id) => navigate(`/cambios-aceite/${id}`)}
+              onEdit={(id) => navigate(`/cambios-aceite/${id}/edit`)}
+              onPrint={handlePrint}
+              onShare={handleShare}
+              onComplete={handleComplete}
+              onStatusUpdated={handleStatusUpdated}
+              loading={loading && oilChanges.length === 0}
+            />
+          </CardBody>
+          
+          {/* Paginación corregida - Mostrar si hay 10+ registros o hasMore */}
+          {(hasMore || oilChanges.length >= 10) && (
+            <div className="bg-white px-4 py-3 border-t border-gray-200 sm:px-6">
+              <div className="flex flex-1 justify-between items-center">
+                {/* Información de resultados */}
+                <div className="flex-1 flex justify-between sm:hidden">
+                  <button
+                    onClick={() => loadOilChanges(true)}
+                    disabled={loading}
+                    className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                      loading 
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Recargar
+                  </button>
+                  {hasMore && (
+                    <button
+                      onClick={loadMoreOilChanges}
+                      disabled={loading}
+                      className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ml-3 ${
+                        loading 
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                          : 'bg-white text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {loading ? 'Cargando...' : 'Cargar más'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Versión desktop */}
+                <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      Mostrando <span className="font-medium">{oilChanges.length}</span> resultados
+                      {hasMore && <span className="text-gray-500"> (hay más disponibles)</span>}
+                      {searchTerm && <span className="text-gray-500"> para "{searchTerm}"</span>}
+                      {!hasMore && oilChanges.length >= PAGE_SIZE && <span className="text-gray-500"> (todos cargados)</span>}
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    {searchTerm && (
+                      <Button
+                        size="sm"
+                        color="secondary"
+                        variant="outline"
+                        onClick={() => {
+                          setSearchTerm('');
+                          loadOilChanges(true);
+                        }}
+                      >
+                        Limpiar búsqueda
+                      </Button>
+                    )}
+                    
+                    <Button
+                      size="sm"
+                      color="secondary"
+                      variant="outline"
+                      onClick={() => loadOilChanges(true)}
+                      disabled={loading}
+                      icon={<ArrowPathIcon className="h-4 w-4" />}
+                    >
+                      Recargar
+                    </Button>
+                    
+                    {hasMore && (
+                      <Button
+                        size="sm"
+                        color="primary"
+                        variant="outline"
+                        onClick={loadMoreOilChanges}
+                        disabled={loading}
+                        icon={loading ? undefined : <ChevronRightIcon className="h-4 w-4" />}
+                      >
+                        {loading ? 'Cargando...' : 'Cargar más'}
+                      </Button>
+                    )}
+                    
+                    {!hasMore && oilChanges.length >= PAGE_SIZE && (
+                      <p className="text-sm text-green-600 font-medium">
+                        ✓ Todos los resultados cargados ({oilChanges.length} total)
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-          
-          {/* Paginación mejorada */}
-          {oilChanges.length > 0 && (
-            <Pagination />
-          )}
-        </CardBody>
-      </Card>
-      
-      {/* Componente de impresión mejorado para generar PDF */}
-      {showingPdfPreview && selectedOilChange && (
-        <div className="hidden">
-          <EnhancedPrintComponent 
-            ref={pdfTemplateRef} 
-            oilChange={selectedOilChange} 
-            lubricentro={selectedLubricentro} 
+        </Card>
+      ) : !loading && !error ? (
+        <Card>
+          <CardBody>
+            <div className="text-center py-8">
+              <DocumentDuplicateIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-lg font-medium text-gray-900">
+                {searchTerm ? 'No se encontraron resultados' : 'No hay cambios de aceite registrados'}
+              </h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {searchTerm ? 
+                  `No se encontraron cambios de aceite que coincidan con "${searchTerm}"` :
+                  'Comience registrando el primer cambio de aceite.'
+                }
+              </p>
+              <div className="mt-6">
+                {searchTerm ? (
+                  <Button
+                    color="secondary"
+                    onClick={() => {
+                      setSearchTerm('');
+                      loadOilChanges(true);
+                    }}
+                  >
+                    Ver Todos los Cambios
+                  </Button>
+                ) : (
+                  <Button
+                    color="primary"
+                    onClick={() => navigate('/cambios-aceite/nuevo')}
+                  >
+                    Registrar Primer Cambio
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      ) : loading && oilChanges.length === 0 ? (
+        <Card>
+          <CardBody>
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              <p className="mt-2 text-gray-500">
+                {isSearching ? 'Buscando...' : 'Cargando cambios de aceite...'}
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {/* Componente oculto para generar PDF */}
+      {selectedOilChange && selectedLubricentro && (
+        <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
+          <EnhancedPrintComponent
+            ref={pdfTemplateRef}
+            oilChange={selectedOilChange}
+            lubricentro={selectedLubricentro}
           />
+        </div>
+      )}
+
+      {/* Indicador de carga para PDF */}
+      {generatingPdf && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <div className="flex items-center space-x-3">
+              <Spinner size="md" />
+              <span>Generando PDF...</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de vista previa del PDF (si se necesita) */}
+      {showingPdfPreview && selectedOilChange && selectedLubricentro && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-4xl max-h-[90vh] overflow-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Vista Previa del PDF</h3>
+              <Button
+                color="secondary"
+                onClick={() => setShowingPdfPreview(false)}
+              >
+                Cerrar
+              </Button>
+            </div>
+            <EnhancedPrintComponent
+              oilChange={selectedOilChange}
+              lubricentro={selectedLubricentro}
+            />
+          </div>
         </div>
       )}
     </PageContainer>
