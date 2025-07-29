@@ -181,60 +181,115 @@ const LubricentroTable: React.FC<LubricentroTableProps> = ({
     }
   };
 
-  // Función para obtener nombre del plan
-  const getPlanName = (subscriptionPlan?: string) => {
-    if (!subscriptionPlan) return 'Sin Plan';
-    
-    // Primero intentar con SUBSCRIPTION_PLANS
-    const plan = SUBSCRIPTION_PLANS[subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
-    if (plan) {
-      return plan.name;
+ // Buscar y reemplazar la función getPlanName existente
+const getPlanName = (lubricentro: Lubricentro): string => {
+  if (!lubricentro.subscriptionPlan) return 'Sin Plan';
+  
+  // Primero intentar con SUBSCRIPTION_PLANS (planes estáticos)
+  const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+  if (staticPlan) {
+    return staticPlan.name;
+  }
+  
+  // Mapeo para planes dinámicos comunes
+  const dynamicPlanNames: Record<string, string> = {
+    'PLAN 100': 'Plan 100 Servicios',
+    'PLAN_100': 'Plan 100 Servicios',
+    'plan_100': 'Plan 100 Servicios',
+    'PLAN 200': 'Plan 200 Servicios',
+    'PLAN_200': 'Plan 200 Servicios',
+    'plan_200': 'Plan 200 Servicios',
+    'PLAN_BASICO': 'Plan Básico',
+    'plan_basico': 'Plan Básico',
+    'PLAN_PREMIUM': 'Plan Premium',
+    'plan_premium': 'Plan Premium',
+    'PLAN_ENTERPRISE': 'Plan Empresarial',
+    'plan_enterprise': 'Plan Empresarial'
+  };
+  
+  return dynamicPlanNames[lubricentro.subscriptionPlan] || 
+         lubricentro.subscriptionPlan.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 
+         'Plan Personalizado';
+};
+
+// Agregar esta función después de getPlanName
+const getServiceInfo = (lubricentro: Lubricentro): { current: number; total: number | string; percentage: number } => {
+  // Para lubricentros en trial
+  if (lubricentro.estado === 'trial') {
+    const trialLimit = 10;
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    return {
+      current: currentServices,
+      total: trialLimit,
+      percentage: Math.min(100, (currentServices / trialLimit) * 100)
+    };
+  }
+  
+  // Para planes por servicios
+  if (lubricentro.subscriptionRenewalType === 'service') {
+    const totalContracted = lubricentro.totalServicesContracted || 0;
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    return {
+      current: servicesUsed,
+      total: totalContracted,
+      percentage: totalContracted > 0 ? Math.min(100, (servicesUsed / totalContracted) * 100) : 0
+    };
+  }
+  
+  // Para planes mensuales/semestrales
+  if (lubricentro.subscriptionPlan) {
+    const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+    if (staticPlan && staticPlan.maxMonthlyServices) {
+      const currentServices = lubricentro.servicesUsedThisMonth || 0;
+      return {
+        current: currentServices,
+        total: staticPlan.maxMonthlyServices,
+        percentage: Math.min(100, (currentServices / staticPlan.maxMonthlyServices) * 100)
+      };
     }
-    
-    // Si no está en SUBSCRIPTION_PLANS, mostrar el nombre tal como viene
-    // Esto maneja planes personalizados o dinámicos
-    const planNames: Record<string, string> = {
-      'PLAN 100': 'Plan 100',
-      'plan_100': 'Plan 100', 
-      'plan_basico': 'Plan Básico',
-      'plan_premium': 'Plan Premium',
-      'plan_enterprise': 'Plan Empresarial'
-    };
-    
-    return planNames[subscriptionPlan] || subscriptionPlan || 'Plan Desconocido';
+  }
+  
+  // Plan ilimitado o sin información
+  const currentServices = lubricentro.servicesUsedThisMonth || 0;
+  return {
+    current: currentServices,
+    total: 'Ilimitado',
+    percentage: 0
   };
+};
 
-  // Renderizar botones de acción con tooltips
-  const renderActionButton = (
-    icon: React.ReactNode, 
-    onClick: () => void, 
-    tooltip: string, 
-    variant: 'view' | 'edit' | 'activate' | 'deactivate' | 'extend' = 'view'
-  ) => {
-    const variants = {
-      view: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
-      edit: 'bg-gray-50 text-gray-600 hover:bg-gray-100',
-      activate: 'bg-green-50 text-green-600 hover:bg-green-100',
-      deactivate: 'bg-red-50 text-red-600 hover:bg-red-100',
-      extend: 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100'
-    };
+    const renderActionButton = (
+      icon: React.ReactNode, 
+      onClick: () => void, 
+      tooltip: string, 
+      variant: 'view' | 'edit' | 'activate' | 'deactivate' | 'extend' = 'view'
+    ) => {
+      const variants = {
+        view: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
+        edit: 'bg-gray-50 text-gray-600 hover:bg-gray-100',
+        activate: 'bg-green-50 text-green-600 hover:bg-green-100',
+        deactivate: 'bg-red-50 text-red-600 hover:bg-red-100',
+        extend: 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100'
+      };
 
-    return (
-      <div className="relative group">
-        <button
-          onClick={onClick}
-          className={`p-2 rounded-md transition-colors ${variants[variant]}`}
-          title={tooltip}
-        >
-          {icon}
-        </button>
-        {/* Tooltip */}
-        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-          {tooltip}
+      return (
+        <div className="relative group">
+          <button
+            onClick={onClick}
+            className={`p-2 rounded-md transition-colors ${variants[variant]}`}
+            title={tooltip}
+          >
+            {icon}
+          </button>
+          {/* Tooltip mejorado */}
+          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+            {tooltip}
+            {/* Flecha del tooltip */}
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-2 border-transparent border-t-gray-900"></div>
+          </div>
         </div>
-      </div>
-    );
-  };
+      );
+    };
 
   // Renderizar controles de paginación
   const renderPagination = () => {
@@ -441,7 +496,8 @@ const LubricentroTable: React.FC<LubricentroTableProps> = ({
 
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm text-gray-900">
-                    {getPlanName(lubricentro.subscriptionPlan)}
+                    {getPlanName(lubricentro)}
+                    
                   </div>
                   {lubricentro.subscriptionRenewalType && (
                     <div className="text-xs text-gray-500">

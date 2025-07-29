@@ -348,7 +348,7 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
   }
 };
 
-// ✅ FUNCIÓN CORREGIDA: Crear cambio de aceite sin errores de Firebase
+// ✅ FUNCIÓN CORREGIDA: Crear cambio de aceite Y actualizar contadores del lubricentro
 export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>): Promise<string> => {
   try {
     // Verificar lubricentro
@@ -385,7 +385,7 @@ export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>)
       dominioVehiculo: data.dominioVehiculo.toUpperCase(),
       fecha: ensureDateObject(data.fecha),
       fechaServicio: ensureDateObject(data.fechaServicio),
-      fechaProximoCambio: ensureDateObject(fechaProximoCambio), // ✅ USAR LA CALCULADA
+      fechaProximoCambio: ensureDateObject(fechaProximoCambio),
       
       // Calcular kmProximo si no viene definido
       kmProximo: data.kmProximo || (data.kmActuales + (data.perioricidad_servicio || 6) * 1500),
@@ -422,7 +422,56 @@ export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>)
     // ✅ LIMPIAR DATOS ANTES DE ENVIAR A FIREBASE
     const cleanedData = cleanDataForFirebase(baseData);
     
+    // 1. CREAR EL SERVICIO
     const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
+    console.log('✅ Servicio creado con ID:', docRef.id);
+    
+    // 2. ACTUALIZAR CONTADORES DEL LUBRICENTRO (SOLO SI ES COMPLETO)
+    if (baseData.estado === 'completo') {
+      try {
+        console.log('🔄 Actualizando contadores del lubricentro:', data.lubricentroId);
+        
+        // Obtener datos actuales del lubricentro
+        const currentLubricentro = await getLubricentroById(data.lubricentroId);
+        if (currentLubricentro) {
+          
+          // Calcular nuevos valores
+          const currentServicesUsed = currentLubricentro.servicesUsed || 0;
+          const currentServicesRemaining = currentLubricentro.servicesRemaining || 0;
+          const currentServicesUsedThisMonth = currentLubricentro.servicesUsedThisMonth || 0;
+          
+          const newServicesUsed = currentServicesUsed + 1;
+          const newServicesRemaining = Math.max(0, currentServicesRemaining - 1);
+          const newServicesUsedThisMonth = currentServicesUsedThisMonth + 1;
+          
+          // Preparar datos de actualización
+          const updateData: any = {
+            servicesUsed: newServicesUsed,
+            servicesUsedThisMonth: newServicesUsedThisMonth,
+            updatedAt: new Date()
+          };
+          
+          // Solo actualizar servicesRemaining si el lubricentro tiene plan por servicios
+          if (currentLubricentro.totalServicesContracted && currentLubricentro.totalServicesContracted > 0) {
+            updateData.servicesRemaining = newServicesRemaining;
+            console.log(`📊 Servicios actualizados: ${currentServicesUsed} → ${newServicesUsed}`);
+            console.log(`📊 Servicios restantes: ${currentServicesRemaining} → ${newServicesRemaining}`);
+          }
+          
+          // Actualizar el lubricentro
+          await updateLubricentro(data.lubricentroId, updateData);
+          
+          console.log('✅ Contadores del lubricentro actualizados correctamente');
+        }
+        
+      } catch (updateError) {
+        console.error('⚠️ Error al actualizar contadores del lubricentro:', updateError);
+        // No hacer throw aquí para no afectar la creación del servicio
+        // El servicio se creó correctamente, solo falló la actualización de contadores
+      }
+    } else {
+      console.log('ℹ️ Servicio creado como pendiente, no se actualizan contadores hasta completar');
+    }
     
     return docRef.id;
   } catch (error) {

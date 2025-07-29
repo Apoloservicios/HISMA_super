@@ -2,6 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+
+// Importar funciones de Firebase
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+// Componentes UI
 import { 
   PageContainer, 
   Card, 
@@ -13,6 +18,7 @@ import {
   Badge
 } from '../../components/ui';
 
+// Servicios
 import { 
   getAllLubricentros, 
   updateLubricentroStatus, 
@@ -20,6 +26,7 @@ import {
   getLubricentroById
 } from '../../services/lubricentroService';
 
+// Tipos
 import { Lubricentro, LubricentroStatus } from '../../types';
 import { SUBSCRIPTION_PLANS, SubscriptionPlanType } from '../../types/subscription';
 
@@ -40,11 +47,10 @@ import {
   WrenchScrewdriverIcon 
 } from '@heroicons/react/24/outline';
 
-// Función utilitaria para validar planes
-const isValidSubscriptionPlan = (plan: string | undefined): boolean => {
-  if (!plan) return false;
-  return ['starter', 'basic', 'premium', 'enterprise'].includes(plan as SubscriptionPlanType);
-};
+// Estado para almacenar los planes dinámicos
+let cachedPlans: any[] = [];
+let plansLastFetched = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
 // Interfaces para props de componentes
 interface ModalProps {
@@ -58,8 +64,465 @@ interface ExtendTrialModalProps extends ModalProps {
   onConfirm: (days: number) => Promise<void>;
 }
 
-// Componente para extender período de prueba
-const ExtendTrialModal: React.FC<ExtendTrialModalProps> = ({ isOpen, onClose, onConfirm, lubricentro, loading }) => {
+interface StatsType {
+  total: number;
+  activos: number;
+  inactivos: number;
+  trial: number;
+  expiring7Days: number;
+}
+
+// ================================
+// FUNCIONES UTILITARIAS
+// ================================
+
+// Función de debug para logging de datos
+const debugLubricentroData = (lubricentro: Lubricentro, context: string) => {
+  console.log(`🔍 DEBUG [${context}] - Lubricentro: ${lubricentro.fantasyName}`);
+  console.log('📋 Datos completos:', {
+    id: lubricentro.id,
+    fantasyName: lubricentro.fantasyName,
+    estado: lubricentro.estado,
+    subscriptionPlan: lubricentro.subscriptionPlan,
+    subscriptionRenewalType: lubricentro.subscriptionRenewalType,
+    servicesUsed: lubricentro.servicesUsed,
+    servicesUsedThisMonth: lubricentro.servicesUsedThisMonth,
+    totalServicesContracted: lubricentro.totalServicesContracted,
+    trialEndDate: lubricentro.trialEndDate,
+    subscriptionEndDate: lubricentro.subscriptionEndDate,
+    createdAt: lubricentro.createdAt
+  });
+  
+  // Test de las funciones
+  console.log('🎯 Resultados de funciones:');
+  console.log('  - getCorrectPlanName:', getCorrectPlanName(lubricentro));
+  console.log('  - getCorrectServiceInfo:', getCorrectServiceInfo(lubricentro));
+  console.log('---');
+};
+
+
+
+// Función corregida para obtener el nombre correcto del plan CON DEBUG
+const getCorrectPlanName = (lubricentro: Lubricentro): string => {
+  if (!lubricentro.subscriptionPlan) {
+    console.log('⚠️ Sin subscriptionPlan para:', lubricentro.fantasyName);
+    return 'Sin Plan';
+  }
+  
+  console.log(`🔍 Plan original: "${lubricentro.subscriptionPlan}" para ${lubricentro.fantasyName}`);
+  
+  // Mapeo completo incluyendo todas las variaciones de planes
+  const allPlanNames: Record<string, string> = {
+    // Planes estáticos
+    'starter': 'Plan Iniciante',
+    'basic': 'Plan Básico', 
+    'premium': 'Plan Premium',
+    'enterprise': 'Plan Empresarial',
+    
+    // Planes dinámicos - PLAN50
+    'PLAN50': 'PLAN50',
+    'Plan50': 'PLAN50',
+    'plan50': 'PLAN50',
+    'PLAN 50': 'PLAN50',
+    'plan_50': 'PLAN50',
+    'PLAN_50': 'PLAN50',
+    
+    // Planes dinámicos - PLAN100
+    'PLAN100': 'PLAN100',
+    'Plan100': 'PLAN100',
+    'plan100': 'PLAN100',
+    'PLAN 100': 'PLAN100',
+    'plan_100': 'PLAN100',
+    'PLAN_100': 'PLAN100',
+    
+    // Otros planes dinámicos
+    'PLAN200': 'PLAN200',
+    'Plan200': 'PLAN200',
+    'plan200': 'PLAN200',
+    'PLAN 200': 'PLAN200',
+    'PLAN_BASICO': 'Plan Básico',
+    'plan_basico': 'Plan Básico',
+    'PLAN_PREMIUM': 'Plan Premium',
+    'plan_premium': 'Plan Premium'
+  };
+  
+  const result = allPlanNames[lubricentro.subscriptionPlan] || 
+         lubricentro.subscriptionPlan.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 
+         'Plan Personalizado';
+         
+  console.log(`🎯 Plan procesado: "${result}" para ${lubricentro.fantasyName}`);
+  
+  return result;
+};
+
+
+// Función para obtener todos los planes desde Firebase
+const fetchAllPlansFromFirebase = async (): Promise<any[]> => {
+  try {
+    // Verificar si tenemos cache válido
+    const now = Date.now();
+    if (cachedPlans.length > 0 && (now - plansLastFetched) < CACHE_DURATION) {
+      console.log('📋 Usando planes en cache');
+      return cachedPlans;
+    }
+
+    console.log('🔄 Cargando planes desde Firebase...');
+    
+    const plansSnapshot = await getDocs(collection(db, 'subscription_plans'));
+    const plans = plansSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    // Actualizar cache
+    cachedPlans = plans;
+    plansLastFetched = now;
+    
+    console.log(`✅ ${plans.length} planes cargados desde Firebase:`, plans.map(p => p.id));
+    return plans;
+  } catch (error) {
+    console.error('❌ Error al cargar planes desde Firebase:', error);
+    return [];
+  }
+};
+
+// Función actualizada para obtener el nombre del plan
+const getDynamicPlanName = (lubricentro: Lubricentro): string => {
+  if (!lubricentro.subscriptionPlan) return 'Sin Plan';
+  
+  console.log(`🔍 Plan para ${lubricentro.fantasyName}: "${lubricentro.subscriptionPlan}"`);
+  
+  // Si tiene totalServicesContracted, mostrar como PLAN{número}
+  if (lubricentro.totalServicesContracted) {
+    const totalServices = lubricentro.totalServicesContracted;
+    const displayName = `PLAN${totalServices}`;
+    console.log(`🎯 Plan con servicios contratados: ${displayName}`);
+    return displayName;
+  }
+  
+  // Mapeo para mostrar nombres más amigables
+  const friendlyNames: Record<string, string> = {
+    'starter': 'Plan Iniciante',
+    'basic': 'Plan Básico',
+    'premium': 'Plan Premium',
+    'enterprise': 'Plan Empresarial',
+    'P100': 'PLAN100',
+    'Plan50': 'PLAN50',
+    'PLAN250': 'PLAN250'
+  };
+  
+  const displayName = friendlyNames[lubricentro.subscriptionPlan] || lubricentro.subscriptionPlan;
+  console.log(`🎯 Plan procesado: ${displayName}`);
+  
+  return displayName;
+};
+
+// Función actualizada para obtener información de servicios
+const getDynamicServiceInfo = (lubricentro: Lubricentro): string => {
+  console.log(`🔍 Servicios para ${lubricentro.fantasyName}:`, {
+    estado: lubricentro.estado,
+    subscriptionPlan: lubricentro.subscriptionPlan,
+    totalServicesContracted: lubricentro.totalServicesContracted,
+    servicesUsed: lubricentro.servicesUsed,
+    servicesRemaining: lubricentro.servicesRemaining,
+    servicesUsedThisMonth: lubricentro.servicesUsedThisMonth
+  });
+
+  // Para lubricentros en trial
+  if (lubricentro.estado === 'trial') {
+    const trialLimit = 10;
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    const result = `${currentServices}/${trialLimit}`;
+    console.log(`🎯 Trial result: ${result}`);
+    return result;
+  }
+  
+  // Para planes por servicios (detectados por totalServicesContracted)
+  if (lubricentro.totalServicesContracted && lubricentro.totalServicesContracted > 0) {
+    const totalContracted = lubricentro.totalServicesContracted;
+    let servicesUsed = lubricentro.servicesUsed || 0;
+    
+    // Calcular servicios usados desde servicesRemaining si servicesUsed es 0
+    if (servicesUsed === 0 && lubricentro.servicesRemaining !== undefined) {
+      servicesUsed = totalContracted - lubricentro.servicesRemaining;
+    }
+    
+    const result = `${servicesUsed}/${totalContracted}`;
+    console.log(`🎯 Service plan result: ${result} (calculado desde servicesRemaining: ${lubricentro.servicesRemaining})`);
+    return result;
+  }
+  
+  // Para planes estáticos sin totalServicesContracted, usar datos de SUBSCRIPTION_PLANS
+  if (lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS]) {
+    const plan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    const total = plan.maxMonthlyServices || 'Ilimitado';
+    const result = typeof total === 'number' ? `${currentServices}/${total}` : `${currentServices}/Ilimitado`;
+    console.log(`🎯 Static plan result: ${result}`);
+    return result;
+  }
+  
+  // Fallback
+  const currentServices = lubricentro.servicesUsedThisMonth || lubricentro.servicesUsed || 0;
+  const result = `${currentServices}/N/A`;
+  console.log(`🎯 Fallback result: ${result}`);
+  return result;
+};
+
+// Función actualizada para información detallada de servicios
+const getDynamicServiceDisplayInfo = (lubricentro: Lubricentro): { 
+  current: number; 
+  total: number | string; 
+  percentage: number;
+  description: string;
+} => {
+  // Para lubricentros en trial
+  if (lubricentro.estado === 'trial') {
+    const trialLimit = 10;
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    return {
+      current: currentServices,
+      total: trialLimit,
+      percentage: Math.min(100, (currentServices / trialLimit) * 100),
+      description: 'Período de prueba'
+    };
+  }
+  
+  // Para planes por servicios (detectados por totalServicesContracted)
+  if (lubricentro.totalServicesContracted && lubricentro.totalServicesContracted > 0) {
+    const totalContracted = lubricentro.totalServicesContracted;
+    let servicesUsed = lubricentro.servicesUsed || 0;
+    
+    // Calcular servicios usados desde servicesRemaining si servicesUsed es 0
+    if (servicesUsed === 0 && lubricentro.servicesRemaining !== undefined) {
+      servicesUsed = totalContracted - lubricentro.servicesRemaining;
+    }
+    
+    return {
+      current: servicesUsed,
+      total: totalContracted,
+      percentage: Math.min(100, (servicesUsed / totalContracted) * 100),
+      description: 'Plan por servicios'
+    };
+  }
+  
+  // Para planes mensuales/semestrales estáticos
+  if (lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS]) {
+    const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+    if (staticPlan && staticPlan.maxMonthlyServices !== null) {
+      const currentServices = lubricentro.servicesUsedThisMonth || 0;
+      return {
+        current: currentServices,
+        total: staticPlan.maxMonthlyServices,
+        percentage: Math.min(100, (currentServices / staticPlan.maxMonthlyServices) * 100),
+        description: 'Este mes'
+      };
+    }
+  }
+  
+  // Plan ilimitado o sin información
+  const currentServices = lubricentro.servicesUsedThisMonth || lubricentro.servicesUsed || 0;
+  return {
+    current: currentServices,
+    total: 'Ilimitado',
+    percentage: 0,
+    description: 'Plan ilimitado'
+  };
+};
+
+
+// Función corregida para obtener información correcta de servicios CON DEBUG
+const getCorrectServiceInfo = (lubricentro: Lubricentro): string => {
+  console.log(`🔍 Servicios para ${lubricentro.fantasyName}:`, {
+    estado: lubricentro.estado,
+    subscriptionPlan: lubricentro.subscriptionPlan,
+    subscriptionRenewalType: lubricentro.subscriptionRenewalType,
+    servicesUsed: lubricentro.servicesUsed,
+    servicesUsedThisMonth: lubricentro.servicesUsedThisMonth,
+    totalServicesContracted: lubricentro.totalServicesContracted
+  });
+
+  // Para lubricentros en trial
+  if (lubricentro.estado === 'trial') {
+    const trialLimit = 10;
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    const result = `${currentServices}/${trialLimit}`;
+    console.log(`🎯 Trial result: ${result}`);
+    return result;
+  }
+  
+  // Para PLAN50 específicamente (todas las variaciones)
+  const plan50Variations = ['PLAN50', 'Plan50', 'plan50', 'PLAN 50', 'plan_50', 'PLAN_50'];
+  if (plan50Variations.includes(lubricentro.subscriptionPlan || '')) {
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    const result = `${servicesUsed}/50`;
+    console.log(`🎯 PLAN50 result: ${result}`);
+    return result;
+  }
+  
+  // Para PLAN100 específicamente
+  const plan100Variations = ['PLAN100', 'Plan100', 'plan100', 'PLAN 100', 'plan_100', 'PLAN_100'];
+  if (plan100Variations.includes(lubricentro.subscriptionPlan || '')) {
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    const result = `${servicesUsed}/100`;
+    console.log(`🎯 PLAN100 result: ${result}`);
+    return result;
+  }
+  
+  // Para planes por servicios en general
+  if (lubricentro.subscriptionRenewalType === 'service') {
+    const totalContracted = lubricentro.totalServicesContracted || 0;
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    const result = `${servicesUsed}/${totalContracted}`;
+    console.log(`🎯 Service plan result: ${result}`);
+    return result;
+  }
+  
+  // Para planes mensuales estáticos
+  if (lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS]) {
+    const plan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    const total = plan.maxMonthlyServices || 'Ilimitado';
+    const result = typeof total === 'number' ? `${currentServices}/${total}` : `${currentServices}/Ilimitado`;
+    console.log(`🎯 Static plan result: ${result}`);
+    return result;
+  }
+  
+  // Fallback
+  const currentServices = lubricentro.servicesUsedThisMonth || lubricentro.servicesUsed || 0;
+  const result = `${currentServices}/N/A`;
+  console.log(`🎯 Fallback result: ${result}`);
+  return result;
+};
+
+// Función para obtener información detallada de servicios (para alertas)
+const getServiceDisplayInfo = (lubricentro: Lubricentro): { 
+  current: number; 
+  total: number | string; 
+  percentage: number;
+  description: string;
+} => {
+  // Para lubricentros en trial
+  if (lubricentro.estado === 'trial') {
+    const trialLimit = 10;
+    const currentServices = lubricentro.servicesUsedThisMonth || 0;
+    return {
+      current: currentServices,
+      total: trialLimit,
+      percentage: Math.min(100, (currentServices / trialLimit) * 100),
+      description: 'Período de prueba'
+    };
+  }
+  
+  // Para PLAN50 específicamente
+  const plan50Variations = ['PLAN50', 'Plan50', 'plan50', 'PLAN 50', 'plan_50', 'PLAN_50'];
+  if (plan50Variations.includes(lubricentro.subscriptionPlan || '')) {
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    return {
+      current: servicesUsed,
+      total: 50,
+      percentage: Math.min(100, (servicesUsed / 50) * 100),
+      description: 'Plan por servicios'
+    };
+  }
+  
+  // Para PLAN100 específicamente
+  const plan100Variations = ['PLAN100', 'Plan100', 'plan100', 'PLAN 100', 'plan_100', 'PLAN_100'];
+  if (plan100Variations.includes(lubricentro.subscriptionPlan || '')) {
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    return {
+      current: servicesUsed,
+      total: 100,
+      percentage: Math.min(100, (servicesUsed / 100) * 100),
+      description: 'Plan por servicios'
+    };
+  }
+  
+  // Para planes por servicios en general
+  if (lubricentro.subscriptionRenewalType === 'service') {
+    const totalContracted = lubricentro.totalServicesContracted || 0;
+    const servicesUsed = lubricentro.servicesUsed || 0;
+    return {
+      current: servicesUsed,
+      total: totalContracted,
+      percentage: totalContracted > 0 ? Math.min(100, (servicesUsed / totalContracted) * 100) : 0,
+      description: 'Plan por servicios'
+    };
+  }
+  
+  // Para planes mensuales/semestrales estáticos
+  if (lubricentro.subscriptionPlan) {
+    const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
+    if (staticPlan && staticPlan.maxMonthlyServices !== null) {
+      const currentServices = lubricentro.servicesUsedThisMonth || 0;
+      return {
+        current: currentServices,
+        total: staticPlan.maxMonthlyServices,
+        percentage: Math.min(100, (currentServices / staticPlan.maxMonthlyServices) * 100),
+        description: 'Este mes'
+      };
+    }
+  }
+  
+  // Plan ilimitado o sin información
+  const currentServices = lubricentro.servicesUsedThisMonth || lubricentro.servicesUsed || 0;
+  return {
+    current: currentServices,
+    total: 'Ilimitado',
+    percentage: 0,
+    description: 'Plan ilimitado'
+  };
+};
+
+// Función para formatear fechas
+const formatDate = (date: Date | string | undefined): string => {
+  if (!date) return 'No disponible';
+  return new Date(date).toLocaleDateString('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+};
+
+// Función para calcular días restantes
+const getDaysRemaining = (endDate: Date | string | undefined): number => {
+  if (!endDate) return 0;
+  
+  const end = new Date(endDate);
+  const now = new Date();
+  const diffTime = end.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return diffDays > 0 ? diffDays : 0;
+};
+
+// ================================
+// COMPONENTES AUXILIARES
+// ================================
+
+// Componente StatusBadge
+const StatusBadge: React.FC<{ status: LubricentroStatus }> = ({ status }) => {
+  switch (status) {
+    case 'activo':
+      return <Badge color="success" text="Activo" />;
+    case 'trial':
+      return <Badge color="warning" text="Prueba" />;
+    case 'inactivo':
+      return <Badge color="error" text="Inactivo" />;
+    default:
+      return <Badge color="default" text={status} />;
+  }
+};
+
+
+// Componente Modal para extender período de prueba
+const ExtendTrialModal: React.FC<ExtendTrialModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  lubricentro, 
+  loading 
+}) => {
   const [days, setDays] = useState<number>(7);
 
   if (!lubricentro) return null;
@@ -150,24 +613,23 @@ const ExtendTrialModal: React.FC<ExtendTrialModalProps> = ({ isOpen, onClose, on
   );
 };
 
-// Status Badge component
-const StatusBadge: React.FC<{ status: LubricentroStatus }> = ({ status }) => {
-  switch (status) {
-    case 'activo':
-      return <Badge color="success" text="Activo" />;
-    case 'trial':
-      return <Badge color="warning" text="Prueba" />;
-    case 'inactivo':
-      return <Badge color="error" text="Inactivo" />;
-    default:
-      return <Badge color="default" text={status} />;
-  }
-};
 
-// Dashboard principal
+
+
+
+
+// ================================
+// COMPONENTE PRINCIPAL
+// ================================
+
+
 const SuperAdminDashboard: React.FC = () => {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
+  
+  // ================================
+  // ESTADOS PRINCIPALES
+  // ================================
   
   // Estados para los datos
   const [loading, setLoading] = useState<boolean>(true);
@@ -184,8 +646,8 @@ const SuperAdminDashboard: React.FC = () => {
   const [isExtendTrialModalOpen, setIsExtendTrialModalOpen] = useState<boolean>(false);
   const [processingAction, setProcessingAction] = useState<boolean>(false);
   
-  // Estadísticas
-  const [stats, setStats] = useState({
+  // Estados para estadísticas y alertas
+  const [stats, setStats] = useState<StatsType>({
     total: 0,
     activos: 0,
     inactivos: 0,
@@ -193,9 +655,12 @@ const SuperAdminDashboard: React.FC = () => {
     expiring7Days: 0
   });
   
-  // Estados adicionales
   const [expiringSoon, setExpiringSoon] = useState<Lubricentro[]>([]);
   const [serviceOverLimit, setServiceOverLimit] = useState<Lubricentro[]>([]);
+  
+  // ================================
+  // EFFECTS
+  // ================================
   
   // Cargar datos iniciales
   useEffect(() => {
@@ -206,96 +671,159 @@ const SuperAdminDashboard: React.FC = () => {
   useEffect(() => {
     applyFilters();
   }, [searchTerm, activeTab, lubricentros]);
+
+  // ================================
+  // FUNCIONES DE CARGA Y FILTRADO
+  // ================================
   
-  // Cargar lubricentros
-  const loadLubricentros = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const data = await getAllLubricentros();
-      
-      // Identificar lubricentros con planes inválidos
-      const invalidPlanLubricentros = data.filter(
-        (l: Lubricentro) => l.subscriptionPlan && !isValidSubscriptionPlan(l.subscriptionPlan)
-      );
-      
-      if (invalidPlanLubricentros.length > 0) {
-        console.warn('⚠️ ATENCIÓN: Se encontraron lubricentros con planes de suscripción inválidos:');
-        invalidPlanLubricentros.forEach((l: Lubricentro) => {
-          console.warn(`- ${l.fantasyName} (ID: ${l.id}): Plan "${l.subscriptionPlan}"`);
-        });
-        console.warn('Los planes válidos son: starter, basic, premium, enterprise');
-        console.warn('Por favor, corrija estos valores en la base de datos.');
+  // Función modificada para cargar lubricentros CON DEBUG
+// Función mejorada para cargar lubricentros con sincronización automática
+// Función actualizada para cargar lubricentros con validación dinámica
+const loadLubricentros = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    console.log('📡 Cargando lubricentros desde getAllLubricentros()...');
+    const data = await getAllLubricentros();
+    console.log('📊 Datos recibidos:', data.length, 'lubricentros');
+    
+    // Cargar todos los planes válidos de Firebase
+    const validPlans = await fetchAllPlansFromFirebase();
+    const validPlanIds = validPlans.map(p => p.id);
+    
+    console.log('📋 Planes válidos en Firebase:', validPlanIds);
+    
+    // Identificar lubricentros con planes que NO existen en Firebase
+    const invalidPlanLubricentros = data.filter((l: Lubricentro) => 
+      l.subscriptionPlan && !validPlanIds.includes(l.subscriptionPlan)
+    );
+    
+    if (invalidPlanLubricentros.length > 0) {
+      console.warn('⚠️ ATENCIÓN: Se encontraron lubricentros con planes que NO existen en la colección subscription_plans:');
+      invalidPlanLubricentros.forEach((l: Lubricentro) => {
+        console.warn(`- ${l.fantasyName} (ID: ${l.id}): Plan "${l.subscriptionPlan}"`);
+      });
+      console.warn('Planes válidos disponibles:', validPlanIds);
+      console.warn('Por favor, verifique que los planes estén correctamente creados en Firebase.');
+    } else {
+      console.log('✅ Todos los planes de lubricentros son válidos');
+    }
+    
+    // Debug de todos los lubricentros
+    data.forEach((lubricentro: Lubricentro, index: number) => {
+      debugLubricentroData(lubricentro, `Dashboard-${index + 1}`);
+    });
+    
+    setLubricentros(data);
+    calculateStats(data);
+    
+    console.log('🎉 Carga de lubricentros completada exitosamente');
+    
+  } catch (err) {
+    console.error('❌ Error al cargar lubricentros:', err);
+    setError('Error al cargar la lista de lubricentros');
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Función para refrescar un lubricentro específico (agregar después de loadLubricentros)
+const refreshLubricentroData = async (lubricentroId: string) => {
+  try {
+    console.log(`🔄 Refrescando datos para lubricentro: ${lubricentroId}`);
+    
+    const updatedLubricentro = await getLubricentroById(lubricentroId);
+    
+    setLubricentros(prevLubricentros => 
+      prevLubricentros.map(l => 
+        l.id === lubricentroId ? updatedLubricentro : l
+      )
+    );
+    
+    console.log(`✅ Datos actualizados en la tabla para: ${updatedLubricentro.fantasyName}`);
+    
+    // Debug de los datos actualizados
+    debugLubricentroData(updatedLubricentro, 'Refrescado-Manual');
+    
+  } catch (err) {
+    console.error('❌ Error al refrescar lubricentro:', err);
+    setError('Error al refrescar los datos del lubricentro');
+  }
+};
+  
+  // Calcular estadísticas y alertas
+  const calculateStats = (data: Lubricentro[]) => {
+    const activos = data.filter(l => l.estado === 'activo').length;
+    const inactivos = data.filter(l => l.estado === 'inactivo').length;
+    const trial = data.filter(l => l.estado === 'trial').length;
+    
+    // Calcular lubricentros que expiran en los próximos 7 días
+    const now = new Date();
+    const in7Days = new Date(now);
+    in7Days.setDate(in7Days.getDate() + 7);
+    
+    const expiringLubricentros = data.filter(l => 
+      l.estado === 'trial' && 
+      l.trialEndDate && 
+      new Date(l.trialEndDate) > now &&
+      new Date(l.trialEndDate) <= in7Days
+    );
+    setExpiringSoon(expiringLubricentros);
+    
+    // Encontrar lubricentros cerca del límite de servicios
+    const nearLimitLubricentros = data.filter((l: Lubricentro) => {
+      if (l.estado === 'trial') {
+        const trialLimit = 10;
+        const currentServices = l.servicesUsedThisMonth || 0;
+        return currentServices >= (trialLimit * 0.8); // 80% o más del límite
       }
       
-      setLubricentros(data);
+      // Para PLAN50
+      const plan50Variations = ['PLAN50', 'Plan50', 'plan50', 'PLAN 50', 'plan_50', 'PLAN_50'];
+      if (plan50Variations.includes(l.subscriptionPlan || '')) {
+        const servicesUsed = l.servicesUsed || 0;
+        return servicesUsed >= (50 * 0.8); // 80% de 50 servicios
+      }
       
-      // Calcular estadísticas
-      const activos = data.filter(l => l.estado === 'activo').length;
-      const inactivos = data.filter(l => l.estado === 'inactivo').length;
-      const trial = data.filter(l => l.estado === 'trial').length;
+      // Para PLAN100
+      const plan100Variations = ['PLAN100', 'Plan100', 'plan100', 'PLAN 100', 'plan_100', 'PLAN_100'];
+      if (plan100Variations.includes(l.subscriptionPlan || '')) {
+        const servicesUsed = l.servicesUsed || 0;
+        return servicesUsed >= (100 * 0.8); // 80% de 100 servicios
+      }
       
-      // Calcular lubricentros que expiran en los próximos 7 días
-      const now = new Date();
-      const in7Days = new Date(now);
-      in7Days.setDate(in7Days.getDate() + 7);
-      
-      const expiringLubricentros = data.filter(l => 
-        l.estado === 'trial' && 
-        l.trialEndDate && 
-        new Date(l.trialEndDate) > now &&
-        new Date(l.trialEndDate) <= in7Days
-      );
-      setExpiringSoon(expiringLubricentros);
-      
-      // Encontrar lubricentros cerca del límite de servicios
-      const nearLimitLubricentros = data.filter((l: Lubricentro) => {
-        if (l.estado === 'trial') {
-          const trialLimit = 10; // Trial limit is 10 services
-          const currentServices = l.servicesUsedThisMonth || 0;
-          return currentServices >= (trialLimit * 0.8); // 80% or more of limit
+      if (l.estado === 'activo' && l.subscriptionPlan) {
+        // Verificar que el plan es uno de los válidos
+        const validPlans: SubscriptionPlanType[] = ['starter', 'basic', 'premium', 'enterprise'];
+        
+        if (!validPlans.includes(l.subscriptionPlan as SubscriptionPlanType)) {
+          return false;
         }
         
-        if (l.estado === 'activo' && l.subscriptionPlan) {
-          // Verificar que el plan es uno de los válidos
-          const validPlans: SubscriptionPlanType[] = ['starter', 'basic', 'premium', 'enterprise'];
-          
-          // Si el plan no es válido, no incluirlo
-          if (!validPlans.includes(l.subscriptionPlan as SubscriptionPlanType)) {
-            return false;
-          }
-          
-          const planId = l.subscriptionPlan as SubscriptionPlanType;
-          const plan = SUBSCRIPTION_PLANS[planId];
-          
-          // Si es un plan ilimitado o no existe, no incluirlo
-          if (!plan || plan.maxMonthlyServices === null) {
-            return false;
-          }
-          
-          const currentServices = l.servicesUsedThisMonth || 0;
-          return currentServices >= (plan.maxMonthlyServices * 0.8); // 80% or more of limit
+        const planId = l.subscriptionPlan as SubscriptionPlanType;
+        const plan = SUBSCRIPTION_PLANS[planId];
+        
+        if (!plan || plan.maxMonthlyServices === null) {
+          return false;
         }
         
-        return false;
-      });
-      setServiceOverLimit(nearLimitLubricentros);
+        const currentServices = l.servicesUsedThisMonth || 0;
+        return currentServices >= (plan.maxMonthlyServices * 0.8);
+      }
       
-      setStats({
-        total: data.length,
-        activos,
-        inactivos,
-        trial,
-        expiring7Days: expiringLubricentros.length
-      });
-      
-    } catch (err) {
-      console.error('Error al cargar lubricentros:', err);
-      setError('Error al cargar la lista de lubricentros');
-    } finally {
-      setLoading(false);
-    }
+      return false;
+    });
+    setServiceOverLimit(nearLimitLubricentros);
+    
+    // Actualizar estadísticas
+    setStats({
+      total: data.length,
+      activos,
+      inactivos,
+      trial,
+      expiring7Days: expiringLubricentros.length
+    });
   };
   
   // Aplicar filtros y búsqueda
@@ -303,24 +831,32 @@ const SuperAdminDashboard: React.FC = () => {
     let filtered = [...lubricentros];
     
     // Filtro por estado
-    if (activeTab === 'activo') {
-      filtered = filtered.filter(l => l.estado === 'activo');
-    } else if (activeTab === 'trial') {
-      filtered = filtered.filter(l => l.estado === 'trial');
-    } else if (activeTab === 'inactivo') {
-      filtered = filtered.filter(l => l.estado === 'inactivo');
-    } else if (activeTab === 'expirando') {
-      // Filtrar por período de prueba a punto de expirar (próximos 7 días)
-      const now = new Date();
-      const in7Days = new Date(now);
-      in7Days.setDate(in7Days.getDate() + 7);
-      
-      filtered = filtered.filter(l => 
-        l.estado === 'trial' && 
-        l.trialEndDate && 
-        new Date(l.trialEndDate) > now &&
-        new Date(l.trialEndDate) <= in7Days
-      );
+    switch (activeTab) {
+      case 'activo':
+        filtered = filtered.filter(l => l.estado === 'activo');
+        break;
+      case 'trial':
+        filtered = filtered.filter(l => l.estado === 'trial');
+        break;
+      case 'inactivo':
+        filtered = filtered.filter(l => l.estado === 'inactivo');
+        break;
+      case 'expirando':
+        // Filtrar por período de prueba a punto de expirar (próximos 7 días)
+        const now = new Date();
+        const in7Days = new Date(now);
+        in7Days.setDate(in7Days.getDate() + 7);
+        
+        filtered = filtered.filter(l => 
+          l.estado === 'trial' && 
+          l.trialEndDate && 
+          new Date(l.trialEndDate) > now &&
+          new Date(l.trialEndDate) <= in7Days
+        );
+        break;
+      default:
+        // 'todos' - no filtrar
+        break;
     }
     
     // Aplicar búsqueda
@@ -336,6 +872,10 @@ const SuperAdminDashboard: React.FC = () => {
     
     setFilteredLubricentros(filtered);
   };
+
+  // ================================
+  // FUNCIONES DE MANEJO DE ACCIONES
+  // ================================
   
   // Preparar cambio de estado
   const prepareChangeStatus = (lubricentro: Lubricentro, status: LubricentroStatus) => {
@@ -350,7 +890,7 @@ const SuperAdminDashboard: React.FC = () => {
       await updateLubricentroStatus(lubricentroId, newStatus);
       
       // Actualizar la lista de lubricentros
-      loadLubricentros();
+      await loadLubricentros();
     } catch (err) {
       console.error('Error al cambiar el estado del lubricentro:', err);
       setError('Error al cambiar el estado del lubricentro');
@@ -374,9 +914,10 @@ const SuperAdminDashboard: React.FC = () => {
       await extendTrialPeriod(selectedLubricentro.id, days);
       
       // Actualizar la lista de lubricentros
-      loadLubricentros();
+      await loadLubricentros();
       
       setIsExtendTrialModalOpen(false);
+      setSelectedLubricentro(null);
     } catch (err) {
       console.error('Error al extender el período de prueba:', err);
       setError('Error al extender el período de prueba');
@@ -384,7 +925,7 @@ const SuperAdminDashboard: React.FC = () => {
       setProcessingAction(false);
     }
   };
-  
+
   // Ver detalles del lubricentro
   const viewLubricentroDetails = async (id: string) => {
     try {
@@ -397,61 +938,16 @@ const SuperAdminDashboard: React.FC = () => {
     }
   };
   
-  // Formatear fecha
-  const formatDate = (date: Date | string | undefined): string => {
-    if (!date) return 'No disponible';
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
+  // Manejar navegación
+  const handleNavigation = (path: string) => {
+    navigate(path);
   };
+
+  // ================================
+  // RENDERIZADO
+  // ================================
   
-  // Calcular días restantes
-  const getDaysRemaining = (endDate: Date | string | undefined): number => {
-    if (!endDate) return 0;
-    
-    const end = new Date(endDate);
-    const now = new Date();
-    const diffTime = end.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    return diffDays > 0 ? diffDays : 0;
-  };
-  
-  // Calcular porcentaje de uso de servicios
-  const getServiceUsagePercentage = (lubricentro: Lubricentro): number => {
-    if (lubricentro.estado === 'trial') {
-      const trialLimit = 10; // Trial limit is 10 services
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      return Math.min(100, (currentServices / trialLimit) * 100);
-    }
-    
-    if (lubricentro.estado === 'activo' && lubricentro.subscriptionPlan) {
-      // Verificar que el plan es uno de los válidos
-      const validPlans: SubscriptionPlanType[] = ['starter', 'basic', 'premium', 'enterprise'];
-      
-      // Si el plan no es válido, no mostrar porcentaje
-      if (!validPlans.includes(lubricentro.subscriptionPlan as SubscriptionPlanType)) {
-        console.warn(`Plan no válido: ${lubricentro.subscriptionPlan}`);
-        return 0;
-      }
-      
-      const planId = lubricentro.subscriptionPlan as SubscriptionPlanType;
-      const plan = SUBSCRIPTION_PLANS[planId];
-      
-      // Si es un plan ilimitado, no mostrar porcentaje
-      if (!plan || plan.maxMonthlyServices === null) {
-        return 0;
-      }
-      
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      return Math.min(100, (currentServices / plan.maxMonthlyServices) * 100);
-    }
-    
-    return 0;
-  };
-  
+  // Mostrar loading si está cargando y no hay datos
   if (loading && lubricentros.length === 0) {
     return (
       <div className="flex justify-center items-center h-80">
@@ -462,25 +958,26 @@ const SuperAdminDashboard: React.FC = () => {
   
   return (
     <PageContainer
-      title="Gestión de Lubricentro"
+      title="Gestión de Lubricentros"
       subtitle="Administración de lubricentros registrados en el sistema"
       action={
         <Button
           color="primary"
           icon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => navigate('/superadmin/lubricentros/nuevo')}
+          onClick={() => handleNavigation('/superadmin/lubricentros/nuevo')}
         >
-          Nuevo Lubricentro4
+          Nuevo Lubricentro
         </Button>
       }
     >
+      {/* Mensaje de Error */}
       {error && (
         <Alert type="error" className="mb-6" dismissible onDismiss={() => setError(null)}>
           {error}
         </Alert>
       )}
       
-      {/* Stat Cards */}
+      {/* Tarjetas de Estadísticas */}
       <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-3 lg:grid-cols-5">
         <Card>
           <CardBody>
@@ -553,7 +1050,7 @@ const SuperAdminDashboard: React.FC = () => {
         </Card>
       </div>
       
-      {/* Search and Filters */}
+      {/* Barra de Búsqueda y Filtros */}
       <Card className="mb-6">
         <CardBody>
           <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
@@ -589,14 +1086,14 @@ const SuperAdminDashboard: React.FC = () => {
               variant="outline"
               icon={<ArrowPathIcon className="h-5 w-5" />}
               onClick={loadLubricentros}
+              disabled={loading}
             >
               Actualizar
             </Button>
           </div>
         </CardBody>
       </Card>
-      
-      {/* Alerts Section */}
+      {/* Sección de Alertas */}
       {expiringSoon.length > 0 && (
         <Alert type="warning" className="mb-6">
           <div className="flex">
@@ -629,18 +1126,22 @@ const SuperAdminDashboard: React.FC = () => {
               </h3>
               <div className="mt-2 text-sm text-yellow-700">
                 <p>
-                  Hay {serviceOverLimit.length} lubricentros que están cerca o han alcanzado su límite mensual de servicios.
+                  Hay {serviceOverLimit.length} lubricentros que están cerca o han alcanzado su límite de servicios.
                 </p>
               </div>
             </div>
           </div>
         </Alert>
       )}
-      
-      {/* Lubricentros Table */}
+      {/* Tabla Principal de Lubricentros */}
       <Card>
         <CardHeader 
-          title={`Lubricentros ${activeTab !== 'todos' ? (activeTab === 'trial' ? 'en Prueba' : activeTab === 'activo' ? 'Activos' : activeTab === 'inactivo' ? 'Inactivos' : 'Por Expirar') : ''}`} 
+          title={`Lubricentros ${activeTab !== 'todos' ? (
+            activeTab === 'trial' ? 'en Prueba' : 
+            activeTab === 'activo' ? 'Activos' : 
+            activeTab === 'inactivo' ? 'Inactivos' : 
+            'Por Expirar'
+          ) : ''}`} 
           subtitle={`Mostrando ${filteredLubricentros.length} ${filteredLubricentros.length === 1 ? 'lubricentro' : 'lubricentros'}`}
         />
         <CardBody>
@@ -662,7 +1163,10 @@ const SuperAdminDashboard: React.FC = () => {
                       Servicios
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha Límite
+                      Fecha de Registro
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fin de Suscripción
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Acciones
@@ -674,21 +1178,12 @@ const SuperAdminDashboard: React.FC = () => {
                     <tr key={lubricentro.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10">
-                            {lubricentro.logoUrl ? (
-                              <img className="h-10 w-10 rounded-full" src={lubricentro.logoUrl} alt={lubricentro.fantasyName} />
-                            ) : (
-                              <div className="h-10 w-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600">
-                                <BuildingOfficeIcon className="h-6 w-6" />
-                              </div>
-                            )}
-                          </div>
-                          <div className="ml-4">
+                          <div>
                             <div className="text-sm font-medium text-gray-900">
                               {lubricentro.fantasyName}
                             </div>
                             <div className="text-sm text-gray-500">
-                              {lubricentro.domicilio}
+                              {lubricentro.responsable}
                             </div>
                           </div>
                         </div>
@@ -697,118 +1192,66 @@ const SuperAdminDashboard: React.FC = () => {
                         <StatusBadge status={lubricentro.estado} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="text-sm text-gray-900">
-                          {lubricentro.estado === 'trial' ? 'Prueba' : 
-                           lubricentro.subscriptionPlan && 
-                           ['starter', 'basic', 'premium', 'enterprise'].includes(lubricentro.subscriptionPlan as SubscriptionPlanType) &&
-                           SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType] ? 
-                             SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType].name : 
-                             'Plan no definido'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {lubricentro.servicesUsedThisMonth || 0}
-                          {lubricentro.estado === 'trial' ? 
-                            '/10' : 
-                            lubricentro.subscriptionPlan && 
-                            ['starter', 'basic', 'premium', 'enterprise'].includes(lubricentro.subscriptionPlan as SubscriptionPlanType) &&
-                            SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType] &&
-                            SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType].maxMonthlyServices !== null ? 
-                              `/${SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType].maxMonthlyServices}` : 
-                              ''}
+                          {getDynamicPlanName(lubricentro)}
                         </div>
-                        {(lubricentro.estado === 'trial' || 
-                          (lubricentro.subscriptionPlan && 
-                           ['starter', 'basic', 'premium', 'enterprise'].includes(lubricentro.subscriptionPlan as SubscriptionPlanType) &&
-                           SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType] &&
-                           SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as SubscriptionPlanType].maxMonthlyServices !== null)) && (
-                          <div className="w-24 bg-gray-200 rounded-full h-1.5 mt-1">
-                            <div 
-                              className={`h-1.5 rounded-full ${
-                                getServiceUsagePercentage(lubricentro) > 80 ? 'bg-red-500' : 
-                                getServiceUsagePercentage(lubricentro) > 50 ? 'bg-yellow-500' : 'bg-green-500'
-                              }`}
-                              style={{ width: `${getServiceUsagePercentage(lubricentro)}%` }}
-                            ></div>
+                        {lubricentro.subscriptionRenewalType && (
+                          <div className="text-xs text-gray-500">
+                            {lubricentro.subscriptionRenewalType === 'monthly' ? 'Mensual' :
+                            lubricentro.subscriptionRenewalType === 'semiannual' ? 'Semestral' :
+                            lubricentro.subscriptionRenewalType === 'service' ? 'Por servicios' :
+                            lubricentro.subscriptionRenewalType}
                           </div>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
+                          {getDynamicServiceInfo(lubricentro)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatDate(lubricentro.createdAt)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
                         {lubricentro.estado === 'trial' && lubricentro.trialEndDate ? (
                           <div>
-                            <div className="text-sm text-gray-900">{formatDate(lubricentro.trialEndDate)}</div>
-                            <div className={`text-xs ${getDaysRemaining(lubricentro.trialEndDate) <= 3 ? 'text-red-500' : 'text-gray-500'}`}>
+                            <div className="text-sm text-gray-900">
+                              {formatDate(lubricentro.trialEndDate)}
+                            </div>
+                            <div className="text-xs text-gray-500">
                               {getDaysRemaining(lubricentro.trialEndDate) > 0 
                                 ? `${getDaysRemaining(lubricentro.trialEndDate)} días restantes` 
                                 : 'Expirado'}
                             </div>
                           </div>
                         ) : lubricentro.subscriptionEndDate ? (
-                          <div className="text-sm text-gray-900">{formatDate(lubricentro.subscriptionEndDate)}</div>
+                          <div>
+                            <div className="text-sm text-gray-900">
+                              {formatDate(lubricentro.subscriptionEndDate)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              Fin de suscripción
+                            </div>
+                          </div>
                         ) : (
-                          <span className="text-sm text-gray-500">-</span>
+                          <span className="text-sm text-gray-400">N/A</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex space-x-2 justify-end">
+                        <div className="flex space-x-2">
                           <Button
                             size="sm"
                             color="primary"
-                            variant="outline"
-                            onClick={() => navigate(`/superadmin/lubricentros/${lubricentro.id}`)}
-                            title="Ver detalles"
+                            onClick={() => handleNavigation(`/superadmin/lubricentros/${lubricentro.id}`)}
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                              <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                            </svg>
+                            Ver
                           </Button>
-                          
-                          {lubricentro.estado === 'trial' && (
-                            <Button
-                              size="sm"
-                              color="warning"
-                              variant="outline"
-                              onClick={() => prepareExtendTrial(lubricentro)}
-                              title="Extender prueba"
-                            >
-                              <ClockIcon className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {lubricentro.estado !== 'activo' && (
-                            <Button
-                              size="sm"
-                              color="success"
-                              variant="outline"
-                              onClick={() => prepareChangeStatus(lubricentro, 'activo')}
-                              title="Activar"
-                            >
-                              <CheckIcon className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {lubricentro.estado !== 'inactivo' && (
-                            <Button
-                              size="sm"
-                              color="error"
-                              variant="outline"
-                              onClick={() => prepareChangeStatus(lubricentro, 'inactivo')}
-                              title="Desactivar"
-                            >
-                              <XMarkIcon className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
                           <Button
                             size="sm"
-                            color="info"
-                            variant="outline"
-                            onClick={() => navigate(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
-                            title="Gestionar Suscripción"
+                            color="secondary"
+                            onClick={() => handleNavigation(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
                           >
-                            <CreditCardIcon className="h-4 w-4" />
+                            Suscripción
                           </Button>
                         </div>
                       </td>
@@ -818,32 +1261,21 @@ const SuperAdminDashboard: React.FC = () => {
               </table>
             </div>
           ) : (
-            <div className="py-8 text-center">
-              <p className="text-gray-500">
-                {searchTerm 
-                  ? 'No se encontraron lubricentros con ese criterio de búsqueda.' 
-                  : activeTab !== 'todos' 
-                    ? `No hay lubricentros ${activeTab === 'activo' ? 'activos' : 
-                       activeTab === 'trial' ? 'en período de prueba' : 
-                       activeTab === 'inactivo' ? 'inactivos' : 'por expirar'}.` 
-                    : 'No hay lubricentros registrados.'}
+            <div className="text-center py-12">
+              <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
+                <BuildingOfficeIcon className="h-12 w-12" />
+              </div>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay lubricentros</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {searchTerm || activeTab !== 'todos' 
+                  ? 'No se encontraron lubricentros con los filtros aplicados.' 
+                  : 'No hay lubricentros registrados en el sistema.'}
               </p>
-              {searchTerm && (
-                <Button
-                  color="secondary"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => setSearchTerm('')}
-                >
-                  Limpiar Búsqueda
-                </Button>
-              )}
             </div>
           )}
         </CardBody>
       </Card>
-      
-      {/* Section: Lubricentros por Expirar */}
+      {/* Tabla: Lubricentros por Expirar */}
       {expiringSoon.length > 0 && (
         <Card className="mt-6">
           <CardHeader 
@@ -876,15 +1308,20 @@ const SuperAdminDashboard: React.FC = () => {
                       <tr key={lubricentro.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="ml-4">
+                            <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {lubricentro.fantasyName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {lubricentro.responsable}
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{formatDate(lubricentro.trialEndDate)}</div>
+                          <div className="text-sm text-gray-900">
+                            {formatDate(lubricentro.trialEndDate)}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Badge 
@@ -898,6 +1335,7 @@ const SuperAdminDashboard: React.FC = () => {
                               size="sm"
                               color="warning"
                               onClick={() => prepareExtendTrial(lubricentro)}
+                              disabled={processingAction}
                             >
                               Extender Prueba
                             </Button>
@@ -905,6 +1343,7 @@ const SuperAdminDashboard: React.FC = () => {
                               size="sm"
                               color="success"
                               onClick={() => prepareChangeStatus(lubricentro, 'activo')}
+                              disabled={processingAction}
                             >
                               Activar
                             </Button>
@@ -920,12 +1359,12 @@ const SuperAdminDashboard: React.FC = () => {
         </Card>
       )}
       
-      {/* Section: Lubricentros cerca del límite de servicios */}
+      {/* Tabla: Lubricentros cerca del límite de servicios */}
       {serviceOverLimit.length > 0 && (
         <Card className="mt-6">
           <CardHeader 
             title="Servicios Cercanos al Límite" 
-            subtitle={`${serviceOverLimit.length} lubricentros próximos a alcanzar su límite de servicios mensuales`}
+            subtitle={`${serviceOverLimit.length} lubricentros próximos a alcanzar su límite de servicios`}
           />
           <CardBody>
             <div className="overflow-x-auto">
@@ -937,6 +1376,9 @@ const SuperAdminDashboard: React.FC = () => {
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Estado
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Plan
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Servicios Usados
@@ -951,34 +1393,19 @@ const SuperAdminDashboard: React.FC = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {serviceOverLimit.map((lubricentro) => {
-                    const currentServices = lubricentro.servicesUsedThisMonth || 0;
-                    let serviceLimit: number | null = null;
-                    
-                    if (lubricentro.estado === 'trial') {
-                      serviceLimit = 10; // Trial limit
-                    } else if (lubricentro.estado === 'activo' && lubricentro.subscriptionPlan) {
-                      // Verificar que el plan es uno de los válidos
-                      const validPlans: SubscriptionPlanType[] = ['starter', 'basic', 'premium', 'enterprise'];
-                      
-                      if (validPlans.includes(lubricentro.subscriptionPlan as SubscriptionPlanType)) {
-                        const planId = lubricentro.subscriptionPlan as SubscriptionPlanType;
-                        const plan = SUBSCRIPTION_PLANS[planId];
-                        
-                        if (plan && plan.maxMonthlyServices !== null) {
-                          serviceLimit = plan.maxMonthlyServices;
-                        }
-                      }
-                    }
-                    
-                    const usagePercentage = serviceLimit ? (currentServices / serviceLimit) * 100 : 0;
+                    const serviceInfo = getDynamicServiceDisplayInfo(lubricentro);
+                    const [currentServices, totalServices] = getDynamicServiceInfo(lubricentro).split('/');
                     
                     return (
                       <tr key={lubricentro.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="ml-4">
+                            <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {lubricentro.fantasyName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {lubricentro.responsable}
                               </div>
                             </div>
                           </div>
@@ -987,20 +1414,33 @@ const SuperAdminDashboard: React.FC = () => {
                           <StatusBadge status={lubricentro.estado} />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{currentServices}</div>
-                          <div className="w-24 bg-gray-200 rounded-full h-1.5 mt-1">
-                            <div 
-                              className={`h-1.5 rounded-full ${
-                                usagePercentage > 90 ? 'bg-red-500' : 
-                                usagePercentage > 80 ? 'bg-yellow-500' : 'bg-green-500'
-                              }`}
-                              style={{ width: `${usagePercentage}%` }}
-                            ></div>
+                          <div className="text-sm text-gray-900">
+                            {getDynamicPlanName(lubricentro)}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {serviceInfo.description}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">
-                            {serviceLimit || 'Ilimitado'}
+                            {currentServices}
+                          </div>
+                          {typeof serviceInfo.total === 'number' && serviceInfo.total > 0 && (
+                            <div className="w-24 bg-gray-200 rounded-full h-1.5 mt-1">
+                              <div 
+                                className={`h-1.5 rounded-full ${
+                                  serviceInfo.percentage >= 90 ? 'bg-red-500' : 
+                                  serviceInfo.percentage >= 75 ? 'bg-yellow-500' : 
+                                  'bg-green-500'
+                                }`}
+                                style={{ width: `${Math.min(100, serviceInfo.percentage)}%` }}
+                              ></div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {totalServices}
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -1008,7 +1448,7 @@ const SuperAdminDashboard: React.FC = () => {
                             <Button
                               size="sm"
                               color="primary"
-                              onClick={() => navigate(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
+                              onClick={() => handleNavigation(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
                             >
                               Gestionar Plan
                             </Button>
@@ -1023,26 +1463,24 @@ const SuperAdminDashboard: React.FC = () => {
           </CardBody>
         </Card>
       )}
-      
-      {/* Administrative Actions */}
+      {/* Botones de Acciones Administrativas */}
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
         <Button 
           color="primary" 
           size="lg" 
           fullWidth 
           icon={<BuildingOfficeIcon className="h-5 w-5" />} 
-          onClick={() => navigate('/superadmin/lubricentros')}
+          onClick={() => handleNavigation('/superadmin/lubricentros')}
         >
           Gestión de Lubricentros
         </Button>
         
-        {/* NUEVO BOTÓN */}
         <Button 
           color="secondary" 
           size="lg" 
           fullWidth 
           icon={<WrenchScrewdriverIcon className="h-5 w-5" />} 
-          onClick={() => navigate('/superadmin/servicios')}
+          onClick={() => handleNavigation('/superadmin/servicios')}
         >
           Todos los Servicios
         </Button>
@@ -1052,7 +1490,7 @@ const SuperAdminDashboard: React.FC = () => {
           size="lg" 
           fullWidth 
           icon={<UserGroupIcon className="h-5 w-5" />} 
-          onClick={() => navigate('/usuarios')}
+          onClick={() => handleNavigation('/usuarios')}
         >
           Gestionar Usuarios
         </Button>
@@ -1062,7 +1500,7 @@ const SuperAdminDashboard: React.FC = () => {
           size="lg" 
           fullWidth 
           icon={<ChartBarIcon className="h-5 w-5" />} 
-          onClick={() => navigate('/superadmin/reportes')}
+          onClick={() => handleNavigation('/superadmin/reportes')}
         >
           Estadísticas Globales
         </Button>
@@ -1072,16 +1510,19 @@ const SuperAdminDashboard: React.FC = () => {
           size="lg" 
           fullWidth 
           icon={<CreditCardIcon className="h-5 w-5" />} 
-          onClick={() => navigate('/superadmin/lubricentros')}
+          onClick={() => handleNavigation('/superadmin/planes')}
         >
           Planes y Suscripciones
         </Button>
       </div>
       
-      {/* Trial Extension Modal */}
+      {/* Modal para Extender Periodo de Prueba */}
       <ExtendTrialModal
         isOpen={isExtendTrialModalOpen}
-        onClose={() => setIsExtendTrialModalOpen(false)}
+        onClose={() => {
+          setIsExtendTrialModalOpen(false);
+          setSelectedLubricentro(null);
+        }}
         onConfirm={handleExtendTrial}
         lubricentro={selectedLubricentro}
         loading={processingAction}
