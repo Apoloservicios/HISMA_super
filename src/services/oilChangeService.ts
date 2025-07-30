@@ -350,21 +350,93 @@ export const getUpcomingOilChanges = async (
     throw error;
   }
 };
+// ✅ NUEVA FUNCIÓN: Búsqueda en múltiples campos
+// Agregar esta función al archivo src/services/oilChangeService.ts
 
+// Búsqueda avanzada de cambios de aceite (múltiples campos)
+export const searchOilChangesMultiField = async (
+  lubricentroId: string,
+  searchTerm: string,
+  pageSize: number = 50
+): Promise<OilChange[]> => {
+  try {
+    const term = searchTerm.trim();
+    
+    if (!term) {
+      return [];
+    }
+
+    console.log(`🔍 Búsqueda multi-campo para: "${term}"`);
+    
+    // Obtener TODOS los cambios del lubricentro (sin filtros)
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('lubricentroId', '==', lubricentroId),
+      orderBy('fechaServicio', 'desc'),
+      limit(pageSize * 2) // Obtener más para filtrar localmente
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const allChanges = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    
+    // Filtrar localmente por múltiples campos
+    const searchLower = term.toLowerCase();
+    const searchUpper = term.toUpperCase();
+    
+    const results = allChanges.filter(change => {
+      // Búsqueda por nombre cliente
+      const matchesCliente = change.nombreCliente?.toLowerCase().includes(searchLower);
+      
+      // Búsqueda por dominio (exacta y parcial)
+      const matchesDominioExacto = change.dominioVehiculo === searchUpper;
+      const matchesDominioParcial = change.dominioVehiculo?.toLowerCase().includes(searchLower);
+      
+      // Búsqueda por otros campos
+      const matchesMarca = change.marcaVehiculo?.toLowerCase().includes(searchLower);
+      const matchesModelo = change.modeloVehiculo?.toLowerCase().includes(searchLower);
+      const matchesNroCambio = change.nroCambio?.toLowerCase().includes(searchLower);
+      
+      return matchesCliente || matchesDominioExacto || matchesDominioParcial || 
+             matchesMarca || matchesModelo || matchesNroCambio;
+    }).slice(0, pageSize);
+    
+    console.log(`✅ Búsqueda multi-campo: ${results.length} resultados encontrados`);
+    
+    return results;
+  } catch (error) {
+    console.error('Error en búsqueda multi-campo:', error);
+    throw error;
+  }
+};
 // Obtener cambios de aceite por vehículo
+// Versión de respaldo simple (sin orderBy para evitar problemas de índices)
 export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<OilChange[]> => {
   try {
     const dominio = dominioVehiculo.toUpperCase();
     
+    console.log(`🔍 Buscando cambios para dominio: "${dominio}"`);
+    
+    // Consulta simple sin orderBy
     const q = query(
       collection(db, COLLECTION_NAME),
-      where('dominioVehiculo', '==', dominio),
-      orderBy('fecha', 'desc')
+      where('dominioVehiculo', '==', dominio)
     );
     
     const querySnapshot = await getDocs(q);
     
-    return querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    console.log(`🔍 Resultados encontrados para dominio "${dominio}": ${querySnapshot.docs.length}`);
+    
+    // Convertir documentos a objetos OilChange
+    const results = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    
+    // Ordenar manualmente por fecha de servicio (más reciente primero)
+    results.sort((a, b) => {
+      const dateA = new Date(a.fechaServicio);
+      const dateB = new Date(b.fechaServicio);
+      return dateB.getTime() - dateA.getTime();
+    });
+    
+    return results;
   } catch (error) {
     console.error('Error al obtener los cambios de aceite del vehículo:', error);
     throw error;
@@ -439,7 +511,7 @@ export const createOilChange = async (data: Omit<OilChange, 'id' | 'createdAt'>)
       operatorId: data.operatorId,
       
       // Timestamp
-      createdAt: serverTimestamp()
+      createdAt: new Date(),
     };
     
     // ✅ LIMPIAR DATOS ANTES DE ENVIAR A FIREBASE
@@ -1296,6 +1368,49 @@ export const fixCreatedAtFields = async (lubricentroId: string) => {
           updatedAt: serverTimestamp()
         });
         
+        fixedCount++;
+      }
+    }
+    
+    console.log(`✅ Se corrigieron ${fixedCount} registros`);
+    return fixedCount;
+  } catch (error) {
+    console.error('❌ Error al corregir campos createdAt:', error);
+    throw error;
+  }
+};
+
+export const fixCreatedAtFieldsForAll = async (lubricentroId: string): Promise<number> => {
+  try {
+    console.log('🔧 Corrigiendo campos createdAt problemáticos...');
+    
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('lubricentroId', '==', lubricentroId)
+    );
+    
+    const snapshot = await getDocs(q);
+    let fixedCount = 0;
+    
+    for (const docSnap of snapshot.docs) {
+      const data = docSnap.data();
+      
+      // Verificar si createdAt tiene el formato problemático
+      if (data.createdAt && 
+          typeof data.createdAt === 'object' && 
+          data.createdAt._methodName === 'serverTimestamp') {
+        
+        // Usar fechaServicio como createdAt
+        const fallbackDate = data.fechaServicio?.toDate() || 
+                            data.fecha?.toDate() || 
+                            new Date();
+        
+        await updateDoc(docSnap.ref, {
+          createdAt: fallbackDate,
+          updatedAt: new Date()
+        });
+        
+        console.log(`✅ Corregido registro ${data.nroCambio}: ${fallbackDate}`);
         fixedCount++;
       }
     }

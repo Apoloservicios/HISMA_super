@@ -1,6 +1,8 @@
 // src/components/tables/SortableOilChangeTable.tsx
-import React, { useState, useMemo } from 'react';
-import { ChevronUpIcon, ChevronDownIcon, EyeIcon, PencilIcon, PrinterIcon, ShareIcon, CheckIcon } from '@heroicons/react/24/outline';
+// Versión completa corregida sin errores TypeScript
+
+import React, { useState, useMemo, MouseEvent } from 'react';
+import { ChevronUpIcon, ChevronDownIcon, EyeIcon, PencilIcon, PrinterIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { OilChange } from '../../types';
 import { OilChangeStatusBadge } from '../oilchange/OilChangeStatusButton';
 import OilChangeStatusButton from '../oilchange/OilChangeStatusButton';
@@ -17,8 +19,8 @@ interface SortableOilChangeTableProps {
   onEdit: (id: string) => void;
   onPrint: (oilChange: OilChange) => void;
   onShare: (oilChange: OilChange) => void;
-  onComplete?: (id: string) => void; // Nueva función para completar
-  onStatusUpdated?: () => void; // Para actualizar después de cambios de estado
+  onComplete?: (id: string) => void;
+  onStatusUpdated?: () => void;
   loading?: boolean;
 }
 
@@ -42,7 +44,7 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('desc'); // Por defecto descendente para nuevos campos
+      setSortDirection('desc');
     }
   };
 
@@ -50,6 +52,23 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
   const extractNumber = (nroCambio: string): number => {
     const parts = nroCambio.split('-');
     return parts.length === 2 ? parseInt(parts[1]) || 0 : 0;
+  };
+
+  // ✅ FUNCIONES HELPER PARA MANEJAR EVENTOS
+  const handleViewClick = (oilChangeId: string) => () => {
+    onViewDetails(oilChangeId);
+  };
+
+  const handleEditClick = (oilChangeId: string) => () => {
+    onEdit(oilChangeId);
+  };
+
+  const handlePrintClick = (oilChange: OilChange) => () => {
+    onPrint(oilChange);
+  };
+
+  const handleShareClick = (oilChange: OilChange) => () => {
+    onShare(oilChange);
   };
 
   // Datos ordenados
@@ -93,12 +112,12 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
   }, [oilChanges, sortField, sortDirection]);
 
   // Función para renderizar header con ordenamiento
-  const renderSortableHeader = (field: SortField, label: string) => {
+  const renderSortableHeader = (field: SortField, label: string, className: string = "") => {
     const isActive = sortField === field;
     
     return (
       <th 
-        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+        className={`py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${className}`}
         onClick={() => handleSort(field)}
         title={`Ordenar por ${label}`}
       >
@@ -139,16 +158,19 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            {renderSortableHeader('nroCambio', 'N° Cambio')}
-            {renderSortableHeader('estado', 'Estado')}
-            {renderSortableHeader('fechaServicio', 'Fecha')}
-            {renderSortableHeader('nombreCliente', 'Cliente')}
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            {renderSortableHeader('nroCambio', 'N° Cambio', 'px-3 w-20')}
+            {renderSortableHeader('estado', 'Estado', 'px-2 w-24')}
+            {renderSortableHeader('fechaServicio', 'Fecha', 'px-2 w-20')}
+            {renderSortableHeader('nombreCliente', 'Cliente', 'px-3')}
+            
+            <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
               Vehículo
             </th>
-            {renderSortableHeader('dominioVehiculo', 'Dominio')}
-            {renderSortableHeader('fechaProximoCambio', 'Próximo Cambio')}
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            
+            {renderSortableHeader('dominioVehiculo', 'Dominio', 'px-2 w-20')}
+            {renderSortableHeader('fechaProximoCambio', 'Próximo', 'hidden lg:table-cell px-2 w-20')}
+            
+            <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
               Acciones
             </th>
           </tr>
@@ -161,78 +183,71 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
               onDoubleClick={() => onRowDoubleClick(oilChange)}
               title="Doble click para ver detalles completos"
             >
-              <td className="px-6 py-4 whitespace-nowrap">
+              <td className="px-3 py-2 whitespace-nowrap">
                 <span className="text-sm font-medium text-gray-900">
                   {oilChange.nroCambio}
                 </span>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
+              
+              <td className="px-2 py-2 whitespace-nowrap">
                 <OilChangeStatusBadge status={oilChange.estado} />
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              
+              <td className="px-2 py-2 whitespace-nowrap text-sm text-gray-900">
                 {formatDate(oilChange.fechaServicio)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">{oilChange.nombreCliente}</div>
+              
+              <td className="px-3 py-2">
+                <div className="text-sm text-gray-900 truncate max-w-32" title={oilChange.nombreCliente}>
+                  {oilChange.nombreCliente}
+                </div>
                 {oilChange.celular && (
-                  <div className="text-sm text-gray-500">{oilChange.celular}</div>
+                  <div className="text-xs text-gray-500">{oilChange.celular}</div>
                 )}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm text-gray-900">
+              
+              <td className="px-2 py-2">
+                <div className="text-sm text-gray-900 truncate max-w-28" title={`${oilChange.marcaVehiculo} ${oilChange.modeloVehiculo}`}>
                   {oilChange.marcaVehiculo} {oilChange.modeloVehiculo}
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-xs text-gray-500">
                   {oilChange.kmActuales.toLocaleString()} km
                 </div>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap">
+              
+              <td className="px-2 py-2 whitespace-nowrap">
                 <span className="text-sm font-medium text-gray-900">
                   {oilChange.dominioVehiculo}
                 </span>
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+              
+              <td className="hidden lg:table-cell px-2 py-2 whitespace-nowrap text-sm text-gray-900">
                 {formatDate(oilChange.fechaProximoCambio)}
               </td>
-              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+              
+              <td className="px-2 py-2 whitespace-nowrap text-right text-sm font-medium">
                 <div className="flex space-x-1">
-                  {/* Ver detalles - siempre disponible */}
+                  {/* Ver detalles */}
                   <Tooltip content="Ver detalles">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => onViewDetails(oilChange.id)}
+                      onClick={handleViewClick(oilChange.id)}
                     >
                       <EyeIcon className="h-4 w-4" />
                     </Button>
                   </Tooltip>
                   
-                  {/* Botón Completar - solo para servicios pendientes */}
-                  {oilChange.estado === 'pendiente' && onComplete && (
-                    <Tooltip content="Completar servicio">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onComplete(oilChange.id)}
-                        className="border-green-300 hover:bg-green-50"
-                      >
-                        <CheckIcon className="h-4 w-4 text-green-600" />
-                      </Button>
-                    </Tooltip>
-                  )}
-                  
-                  {/* Editar - no disponible para enviados */}
-                  {oilChange.estado !== 'enviado' && (
-                    <Tooltip content="Editar">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onEdit(oilChange.id)}
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </Button>
-                    </Tooltip>
-                  )}
+                  {/* Editar */}
+                  <Tooltip content="Editar">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleEditClick(oilChange.id)}
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </Button>
+                  </Tooltip>
                   
                   {/* PDF - solo para completos o enviados */}
                   {(oilChange.estado === 'completo' || oilChange.estado === 'enviado') && (
@@ -240,7 +255,7 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onPrint(oilChange)}
+                        onClick={handlePrintClick(oilChange)}
                       >
                         <PrinterIcon className="h-4 w-4" />
                       </Button>
@@ -253,7 +268,7 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => onShare(oilChange)}
+                        onClick={handleShareClick(oilChange)}
                       >
                         <ShareIcon className="h-4 w-4" />
                       </Button>
@@ -282,14 +297,13 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
         </div>
       )}
       
-      {/* Información sobre el ordenamiento */}
       <div className="mt-2 text-xs text-gray-500 text-center">
-        Ordenado por: {sortField === 'nroCambio' ? 'Número de Cambio' : 
-                       sortField === 'fechaServicio' ? 'Fecha de Servicio' :
+        Ordenado por: {sortField === 'nroCambio' ? 'Número' : 
+                       sortField === 'fechaServicio' ? 'Fecha' :
                        sortField === 'nombreCliente' ? 'Cliente' :
                        sortField === 'dominioVehiculo' ? 'Dominio' :
-                       sortField === 'estado' ? 'Estado' : 'Próximo Cambio'} 
-        ({sortDirection === 'asc' ? 'Ascendente' : 'Descendente'})
+                       sortField === 'estado' ? 'Estado' : 'Próximo'} 
+        ({sortDirection === 'asc' ? '↑' : '↓'})
       </div>
     </div>
   );

@@ -30,7 +30,8 @@ import {
   isValidAño, 
   isValidKilometraje 
 } from '../../services/validationService';
-import { OilChange, Lubricentro } from '../../types';
+
+import { OilChange, Lubricentro, OilChangeStatus } from '../../types';
 import { 
   UserIcon, 
   PhoneIcon, 
@@ -477,35 +478,116 @@ const OilChangeFormPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateFullForm()) {
-      setError('Por favor, corrija los errores en el formulario antes de guardar.');
-      return;
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  // ✅ CORREGIR: Usar validateFullForm en lugar de validateForm
+  if (!validateFullForm()) {
+    return;
+  }
+  
+  setSaving(true);
+  setError(null);
+  
+  try {
+    if (isEditing && id) {
+      // ✅ CORREGIR: Al editar, asegurar tipos correctos
+      const updateData: Partial<OilChange> = {
+        ...formData,
+        estado: 'completo' as OilChangeStatus, // ✅ Casting explícito del tipo
+        fechaCompletado: new Date(),
+        usuarioCompletado: userProfile?.id || '',
+        // ✅ CORREGIR: Verificar que las fechas no sean undefined antes de crear Date
+        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
+        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
+        updatedAt: new Date()
+      };
+      
+      await updateOilChange(id, updateData);
+      setSuccess('Cambio de aceite actualizado correctamente');
+      
+      setTimeout(() => {
+        navigate('/cambios-aceite');
+      }, 1500);
+      
+    } else {
+      // ✅ CORREGIR: Crear nuevo con validaciones de tipos
+      const newData: Omit<OilChange, 'id' | 'createdAt'> = {
+        ...formData,
+        // ✅ Asegurar que campos requeridos no sean undefined
+        lubricentroId: formData.lubricentroId || userProfile?.lubricentroId || '',
+        lubricentroNombre: formData.lubricentroNombre || '',
+        nroCambio: formData.nroCambio || '',
+        nombreCliente: formData.nombreCliente || '',
+        dominioVehiculo: formData.dominioVehiculo || '',
+        marcaVehiculo: formData.marcaVehiculo || '',
+        modeloVehiculo: formData.modeloVehiculo || '',
+        tipoVehiculo: formData.tipoVehiculo || 'auto',
+        kmActuales: formData.kmActuales || 0,
+        kmProximo: formData.kmProximo || 0,
+        perioricidad_servicio: formData.perioricidad_servicio || 6,
+        marcaAceite: formData.marcaAceite || '',
+        tipoAceite: formData.tipoAceite || '',
+        sae: formData.sae || '',
+        cantidadAceite: formData.cantidadAceite || 0,
+        
+        // Estados y fechas
+        estado: 'completo' as OilChangeStatus,
+        fechaCompletado: new Date(),
+        usuarioCompletado: userProfile?.id || '',
+        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
+        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
+        
+        // Operario
+        nombreOperario: formData.nombreOperario || '',
+        operatorId: formData.operatorId || userProfile?.id || '',
+        
+        // Campos opcionales con valores por defecto
+        celular: formData.celular || '',
+        añoVehiculo: formData.añoVehiculo,
+        observaciones: formData.observaciones || '',
+        
+        // Campos booleanos
+        filtroAceite: formData.filtroAceite || false,
+        filtroAceiteNota: formData.filtroAceiteNota || '',
+        filtroAire: formData.filtroAire || false,
+        filtroAireNota: formData.filtroAireNota || '',
+        filtroHabitaculo: formData.filtroHabitaculo || false,
+        filtroHabitaculoNota: formData.filtroHabitaculoNota || '',
+        filtroCombustible: formData.filtroCombustible || false,
+        filtroCombustibleNota: formData.filtroCombustibleNota || '',
+        aditivo: formData.aditivo || false,
+        aditivoNota: formData.aditivoNota || '',
+        refrigerante: formData.refrigerante || false,
+        refrigeranteNota: formData.refrigeranteNota || '',
+        diferencial: formData.diferencial || false,
+        diferencialNota: formData.diferencialNota || '',
+        caja: formData.caja || false,
+        cajaNota: formData.cajaNota || '',
+        engrase: formData.engrase || false,
+        engraseNota: formData.engraseNota || '',
+        
+        // Fechas de sistema
+        fechaCreacion: new Date(),
+        usuarioCreacion: userProfile?.id || ''
+      };
+      
+      await createOilChange(newData);
+      setSuccess('Cambio de aceite registrado correctamente');
+      
+      setTimeout(() => {
+        navigate('/cambios-aceite');
+      }, 1500);
     }
-    
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-    
-    try {
-      if (isEditing && id) {
-        await updateOilChange(id, formData as Partial<OilChange>);
-        setSuccess('Cambio de aceite actualizado correctamente');
-        setTimeout(() => navigate(`/cambios-aceite/${id}`), 1000);
-      } else {
-        const newId = await createOilChange(formData as Omit<OilChange, 'id' | 'createdAt'>);
-        setSuccess(isCloning ? 'Cambio de aceite duplicado correctamente' : 'Cambio de aceite registrado correctamente');
-        setTimeout(() => navigate(`/cambios-aceite/${newId}`), 1000);
-      }
-    } catch (err) {
-      console.error('Error al guardar el cambio de aceite:', err);
-      setError('Error al guardar los datos. Por favor, intente nuevamente.');
-    } finally {
-      setSaving(false);
-    }
-  };
+  } catch (err) {
+    console.error('Error:', err);
+    setError('Error al guardar. Por favor, intente nuevamente.');
+  } finally {
+    setSaving(false);
+  }
+};
   
     // ✅ FUNCIÓN CORREGIDA: Formatear fecha para input sin problemas de timezone
     const formatDateForInput = (date: Date | undefined): string => {

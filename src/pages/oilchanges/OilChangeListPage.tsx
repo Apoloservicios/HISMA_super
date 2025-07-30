@@ -2,10 +2,11 @@
 // Implementación completa con paginación y buscador mejorado
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { PageContainer, Card, CardHeader, CardBody, Button, Alert, Spinner } from '../../components/ui';
-import { getOilChangesByLubricentro, searchOilChanges, getOilChangeById, fixCreatedAtFields } from '../../services/oilChangeService';
+import { getOilChangesByLubricentro, searchOilChanges, getOilChangeById, fixCreatedAtFields, searchOilChangesMultiField,fixCreatedAtFieldsForAll } from '../../services/oilChangeService';
 import { getLubricentroById } from '../../services/lubricentroService';
 import { OilChange, Lubricentro } from '../../types';
 import { SortableOilChangeTable } from '../../components/tables/SortableOilChangeTable';
@@ -37,6 +38,7 @@ import OilChangeStatusButton from '../../components/oilchange/OilChangeStatusBut
 import Tooltip from '../../components/ui/Tooltip';
 
 
+
 // Debounce function para la búsqueda
 const useDebounce = (value: string, delay: number) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -57,6 +59,7 @@ const useDebounce = (value: string, delay: number) => {
 const OilChangeListPage: React.FC = () => {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const pdfTemplateRef = useRef<HTMLDivElement>(null);
   
   // Estados principales
@@ -65,6 +68,10 @@ const OilChangeListPage: React.FC = () => {
   const [oilChanges, setOilChanges] = useState<OilChange[]>([]);
   const [lastVisible, setLastVisible] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+const [isStale, setIsStale] = useState(false); // Para indicar si los datos pueden estar desactualizados
+
   
   // Estados para búsqueda y filtrado
   const [searchTerm, setSearchTerm] = useState('');
@@ -81,70 +88,118 @@ const OilChangeListPage: React.FC = () => {
   const PAGE_SIZE = 10; // Cambiado de 20 a 10 para mejor usabilidad
   
   // Estados para ordenamiento
-  const [sortBy, setSortBy] = useState<'nroCambio' | 'fechaServicio' | 'createdAt'>('nroCambio');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+const [sortBy, setSortBy] = useState<'nroCambio' | 'fechaServicio' | 'createdAt'>('fechaServicio');
+const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+ const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  const loadOilChanges = async (reset: boolean = false) => {
-    if (loading && !reset) return;
+// ✅ FUNCIÓN CORREGIDA para OilChangeListPage.tsx
+
+const loadOilChanges = async (reset: boolean = false) => {
+  if (loading && !reset) return;
+  
+  try {
+    setLoading(true);
     
-    try {
-      setLoading(true);
-      
-      if (reset) {
-        setOilChanges([]);
-        setLastVisible(null);
-        setHasMore(true);
-        setCurrentPage(1);
-      }
+    if (reset) {
+      setOilChanges([]);
+      setLastVisible(null);
+      setHasMore(true);
+      setCurrentPage(1);
+    }
 
-      if (!userProfile?.lubricentroId) {
-        throw new Error('No se encontró el lubricentro del usuario');
-      }
+    if (!userProfile?.lubricentroId) {
+      throw new Error('No se encontró el lubricentro del usuario');
+    }
 
-      const debouncedSearch = searchTerm.trim();
+    const debouncedSearch = searchTerm.trim();
+    
+    if (debouncedSearch) {
+      // ✅ CORREGIDO: Usar búsqueda multi-campo
+      setIsSearching(true);
       
-      if (debouncedSearch) {
-        // Si hay término de búsqueda, usar la búsqueda
-        setIsSearching(true);
-        const searchResults = await searchOilChanges(
+      console.log(`🔍 Iniciando búsqueda para: "${debouncedSearch}"`);
+      
+      // Intentar la nueva función multi-campo primero
+      try {
+        const searchResults = await searchOilChangesMultiField(
           userProfile.lubricentroId,
-          'cliente', // Puedes hacer esto configurable
-          debouncedSearch
+          debouncedSearch,
+          50 // Buscar más resultados
         );
         
+        console.log(`✅ Búsqueda completada: ${searchResults.length} resultados`);
         setOilChanges(searchResults);
+        setTotalCount(searchResults.length); // ✅ NUEVO: Actualizar total para búsqueda
         setHasMore(false);
-      } else {
-        // Cargar datos normales con ordenamiento mejorado
-        const { oilChanges: newOilChanges, lastVisible: newLastVisible } = 
-          await getOilChangesByLubricentro(
-            userProfile.lubricentroId,
-            PAGE_SIZE,
-            reset ? undefined : lastVisible,
-            sortBy, // Pasar parámetro de ordenamiento
-            sortOrder // Pasar dirección de ordenamiento
-          );
-
-        if (reset) {
-          setOilChanges(newOilChanges);
-        } else {
-          setOilChanges(prev => [...prev, ...newOilChanges]);
-        }
+      } catch (searchError) {
+        console.warn('Error en búsqueda multi-campo, usando fallback local:', searchError);
         
-        setLastVisible(newLastVisible);
-        // Mejorar detección de hasMore
-        setHasMore(newOilChanges.length === PAGE_SIZE && newLastVisible !== null);
+        // Fallback: cargar todos los datos y filtrar localmente
+        const { oilChanges: allChanges } = await getOilChangesByLubricentro(
+          userProfile.lubricentroId,
+          200, // Cargar más registros para búsqueda local
+          undefined,
+          'fechaServicio',
+          'desc'
+        );
+        
+        // Usar la función de búsqueda local existente
+        const filteredResults = performLocalSearch(debouncedSearch, allChanges);
+        
+        console.log(`✅ Búsqueda local completada: ${filteredResults.length} resultados`);
+        setOilChanges(filteredResults);
+        setTotalCount(filteredResults.length); // ✅ NUEVO: Actualizar total para búsqueda local
+        setHasMore(false);
       }
-    } catch (error) {
-      console.error('Error al cargar cambios de aceite:', error);
-      setError('Error al cargar los cambios de aceite. Por favor, intente nuevamente.');
-    } finally {
-      setLoading(false);
-      setIsSearching(false);
+    } else {
+      // ✅ NUEVO: Para carga normal, obtener el conteo total primero
+      if (reset) {
+        try {
+          // Obtener conteo total aproximado (solo en reset)
+          const { oilChanges: allForCount } = await getOilChangesByLubricentro(
+            userProfile.lubricentroId,
+            500, // Número alto para obtener conteo total aproximado
+            undefined,
+            'fechaServicio',
+            'desc'
+          );
+          setTotalCount(allForCount.length);
+        } catch (countError) {
+          console.warn('Error obteniendo conteo total:', countError);
+          setTotalCount(0);
+        }
+        setLastRefresh(new Date());
+setIsStale(false);
+      }
+      
+      // Cargar datos normales sin búsqueda
+      const { oilChanges: newOilChanges, lastVisible: newLastVisible } = 
+        await getOilChangesByLubricentro(
+          userProfile.lubricentroId,
+          PAGE_SIZE,
+          reset ? undefined : lastVisible,
+          sortBy,
+          sortOrder
+        );
+
+      if (reset) {
+        setOilChanges(newOilChanges);
+      } else {
+        setOilChanges(prev => [...prev, ...newOilChanges]);
+      }
+      
+      setLastVisible(newLastVisible);
+      setHasMore(newOilChanges.length === PAGE_SIZE && newLastVisible !== null);
     }
-  };
+  } catch (error) {
+    console.error('Error al cargar cambios de aceite:', error);
+    setError('Error al cargar los cambios de aceite. Por favor, intente nuevamente.');
+  } finally {
+    setLoading(false);
+    setIsSearching(false);
+  }
+};
 
   // Función de búsqueda local como fallback
   const performLocalSearch = (searchTerm: string, allChanges: OilChange[]) => {
@@ -183,6 +238,12 @@ const OilChangeListPage: React.FC = () => {
   const handleRowDoubleClick = (oilChange: OilChange) => {
     navigate(`/cambios-aceite/${oilChange.id}`);
   };
+
+  // Función para manejar edición
+const handleEdit = (id: string) => {
+  console.log('🔧 Navegando a editar cambio:', id);
+  navigate(`/cambios-aceite/editar/${id}`);
+};
 
   // Función para corregir datos inconsistentes
   const handleFixData = async () => {
@@ -286,6 +347,43 @@ const OilChangeListPage: React.FC = () => {
     console.log('✅ EJECUTANDO loadOilChanges con reset=true');
     loadOilChanges(true);
   }, [debouncedSearchTerm]);
+  // 5️⃣ EFECTO PARA DETECTAR NAVEGACIÓN - Agregar después de los useEffect existentes
+// ✅ Recargar cuando se navega a la página desde otra ruta
+useEffect(() => {
+  console.log('🔄 Navegación detectada - Verificando si necesita refrescar...');
+  
+  // Solo recargar si venimos de otra página
+  if (location.pathname === '/cambios-aceite') {
+    console.log('✅ En página de historial - Recargando datos frescos...');
+    loadOilChanges(true);
+  }
+}, [location.pathname]);
+
+// 6️⃣ EFECTO PARA DETECTAR DATOS DESACTUALIZADOS - Agregar después del anterior
+// ✅ Marcar como desactualizado después de 2 minutos
+useEffect(() => {
+  const staleTimer = setTimeout(() => {
+    if (!searchTerm.trim()) {
+      console.log('⏰ Datos marcados como posiblemente desactualizados');
+      setIsStale(true);
+    }
+  }, 300000); // 2 minutos
+
+  return () => clearTimeout(staleTimer);
+}, [lastRefresh, searchTerm]);
+
+// 7️⃣ EFECTO PARA FOCUS - Recargar cuando la ventana vuelve a tener foco
+useEffect(() => {
+  const handleFocus = () => {
+    if (!searchTerm.trim() && !loading) {
+      console.log('🔄 Ventana enfocada - Recargando datos...');
+      loadOilChanges(true);
+    }
+  };
+
+  window.addEventListener('focus', handleFocus);
+  return () => window.removeEventListener('focus', handleFocus);
+}, [searchTerm, loading]);
   
   return (
     <PageContainer
@@ -373,44 +471,100 @@ const OilChangeListPage: React.FC = () => {
         </Alert>
       )}
 
+      {/* ✅ AGREGAR AQUÍ LA NOTIFICACIÓN (después del Alert de error) */}
+      {isStale && !error && (
+        <Alert type="warning" className="mb-6">
+          <div className="flex items-center justify-between">
+            <span>Los datos pueden estar desactualizados. Se recomienda actualizar para ver los cambios más recientes.</span>
+            <Button
+              size="sm"
+              color="warning"
+              onClick={() => loadOilChanges(true)}
+              disabled={loading}
+            >
+              Actualizar Ahora
+            </Button>
+          </div>
+        </Alert>
+      )}
+
       {/* Tabla de cambios de aceite */}
       {oilChanges.length > 0 ? (
         <Card>
-          <CardHeader 
-            title={`Cambios de Aceite (${oilChanges.length}${hasMore ? '+' : ''})`}
-            subtitle="Haga doble click en una fila para ver los detalles completos"
-            action={
-              <div className="flex space-x-2">
-                <Button
-                  color="secondary"
-                  size="sm"
-                  onClick={handleFixData}
-                  disabled={loading}
-                >
-                  🔧 Corregir Datos
-                </Button>
-                <Button
-                  color="primary"
-                  size="sm"
-                  onClick={() => loadOilChanges(true)}
-                  disabled={loading}
-                  icon={<ArrowPathIcon className="h-4 w-4" />}
-                >
-                  Actualizar
-                </Button>
-                {/* Debug info */}
-                <span className="text-xs text-gray-500">
-                  {hasMore ? 'Hay más' : 'No hay más'} | Total: {oilChanges.length}
-                </span>
-              </div>
-            }
-          />
+
+            <CardHeader 
+              title={`Cambios de Aceite (${oilChanges.length}${hasMore ? '+' : ''})`}
+              subtitle={`Haga doble click en una fila para ver los detalles completos. Última actualización: ${lastRefresh.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
+              action={
+                <div className="flex space-x-2 items-center">
+                  {/* Indicador de datos desactualizados */}
+                  {isStale && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                      </svg>
+                      Datos desactualizados
+                    </span>
+                  )}
+                  
+                  {/* Botón actualizar */}
+
+                  <Button
+                    color="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      if (!userProfile?.lubricentroId) return;
+                      
+                      try {
+                        setLoading(true);
+                        const fixedCount = await fixCreatedAtFieldsForAll(userProfile.lubricentroId);
+                        alert(`Se corrigieron ${fixedCount} registros. Recarga la página.`);
+                        loadOilChanges(true);
+                      } catch (error) {
+                        console.error('Error:', error);
+                        alert('Error al corregir datos');
+                      } finally {
+                        setLoading(false);
+                      }
+                    }}
+                    disabled={loading}
+                  >
+                    🔧 Arreglar Fechas
+                  </Button>
+                  <Button
+                    color={isStale ? "warning" : "primary"}
+                    size="sm"
+                    onClick={() => {
+                      console.log('🔄 Actualizando manualmente...');
+                      loadOilChanges(true);
+                    }}
+                    disabled={loading}
+                    icon={<ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}
+                  >
+                    {loading ? 'Actualizando...' : isStale ? 'Actualizar Ahora' : 'Actualizar'}
+                  </Button>
+                  
+                  {/* Información de estado */}
+                  <div className="text-xs text-gray-500 flex items-center space-x-2">
+                    <span>
+                      {hasMore ? 'Hay más' : 'Completo'}
+                    </span>
+                    {totalCount > 0 && (
+                      <span className="bg-gray-100 px-2 py-1 rounded">
+                        Total: {totalCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              }
+            />
+
           <CardBody>
             <SortableOilChangeTable
               oilChanges={oilChanges}
               onRowDoubleClick={handleRowDoubleClick}
               onViewDetails={(id) => navigate(`/cambios-aceite/${id}`)}
-              onEdit={(id) => navigate(`/cambios-aceite/${id}/edit`)}
+              onEdit={handleEdit}
               onPrint={handlePrint}
               onShare={handleShare}
               onComplete={handleComplete}
@@ -453,14 +607,21 @@ const OilChangeListPage: React.FC = () => {
 
                 {/* Versión desktop */}
                 <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-gray-700">
-                      Mostrando <span className="font-medium">{oilChanges.length}</span> resultados
-                      {hasMore && <span className="text-gray-500"> (hay más disponibles)</span>}
-                      {searchTerm && <span className="text-gray-500"> para "{searchTerm}"</span>}
-                      {!hasMore && oilChanges.length >= PAGE_SIZE && <span className="text-gray-500"> (todos cargados)</span>}
-                    </p>
-                  </div>
+                    <div>
+                      <p className="text-sm text-gray-700">
+                        Mostrando <span className="font-medium">{oilChanges.length}</span>
+                        {searchTerm ? (
+                          <span> resultados{hasMore ? '+' : ''} para "{searchTerm}"</span>
+                        ) : (
+                          <>
+                            {totalCount > 0 && (
+                              <span> de <span className="font-medium">{totalCount}</span> total</span>
+                            )}
+                            {hasMore && <span className="text-gray-500"> (cargando por páginas)</span>}
+                          </>
+                        )}
+                      </p>
+                    </div>
                   
                   <div className="flex items-center space-x-2">
                     {searchTerm && (
