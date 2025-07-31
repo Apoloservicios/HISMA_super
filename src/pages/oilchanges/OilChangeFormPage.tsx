@@ -789,6 +789,7 @@ const handleSubmit = async (e: React.FormEvent) => {
                   placeholder="Modelo del vehículo"
                   required
                   error={validationErrors.modeloVehiculo}
+                  
                 />
                 <Input
                   label="Año"

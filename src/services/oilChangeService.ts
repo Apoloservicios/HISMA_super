@@ -907,6 +907,7 @@ export const updateOilChangeStatus = async (
     };
 
 // ✅ COMPLETAR CAMBIO DE ACEITE (pasar de pendiente a completo)
+// ✅ FUNCIÓN CORREGIDA: Completar cambio de aceite con actualización de contadores
 export const completeOilChange = async (
   id: string,
   completionData: {
@@ -945,17 +946,24 @@ export const completeOilChange = async (
   try {
     const docRef = doc(db, COLLECTION_NAME, id);
     
-    // Calcular fecha próximo cambio
-    const fechaProximoCambio = new Date(completionData.fechaServicio);
-    fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + completionData.perioricidad_servicio);
-    
-    // Obtener datos actuales para calcular km próximo
+    // Obtener datos actuales del cambio de aceite
     const currentDoc = await getDoc(docRef);
     if (!currentDoc.exists()) {
       throw new Error('El cambio de aceite no existe');
     }
     
     const currentData = currentDoc.data();
+    
+    // Verificar que esté en estado pendiente
+    if (currentData.estado !== 'pendiente') {
+      throw new Error('Solo se pueden completar cambios de aceite pendientes');
+    }
+    
+    // Calcular fecha próximo cambio
+    const fechaProximoCambio = new Date(completionData.fechaServicio);
+    fechaProximoCambio.setMonth(fechaProximoCambio.getMonth() + completionData.perioricidad_servicio);
+    
+    // Calcular km próximo
     const kmProximo = currentData.kmActuales + (completionData.perioricidad_servicio * 1500); // Aproximado 1500km/mes
     
     const updateData = {
@@ -968,9 +976,68 @@ export const completeOilChange = async (
     };
     
     const cleanedData = cleanDataForFirebase(updateData);
+    
+    // 1. ACTUALIZAR EL DOCUMENTO DEL CAMBIO DE ACEITE
     await updateDoc(docRef, cleanedData);
+    console.log('✅ Cambio de aceite actualizado a completo:', id);
+    
+    // ✅ 2. ACTUALIZAR CONTADORES DEL LUBRICENTRO (NUEVA LÓGICA)
+    const lubricentroId = currentData.lubricentroId;
+    if (lubricentroId) {
+      try {
+        console.log('🔄 Actualizando contadores del lubricentro:', lubricentroId);
+        
+        // Obtener datos actuales del lubricentro
+        const currentLubricentro = await getLubricentroById(lubricentroId);
+        if (currentLubricentro) {
+          
+          // Calcular nuevos valores
+          const currentServicesUsed = currentLubricentro.servicesUsed || 0;
+          const currentServicesRemaining = currentLubricentro.servicesRemaining || 0;
+          const currentServicesUsedThisMonth = currentLubricentro.servicesUsedThisMonth || 0;
+          
+          const newServicesUsed = currentServicesUsed + 1;
+          const newServicesRemaining = Math.max(0, currentServicesRemaining - 1);
+          const newServicesUsedThisMonth = currentServicesUsedThisMonth + 1;
+          
+          // Preparar datos de actualización
+          const lubricentroUpdateData: any = {
+            servicesUsed: newServicesUsed,
+            servicesUsedThisMonth: newServicesUsedThisMonth,
+            updatedAt: new Date()
+          };
+          
+          // Solo actualizar servicesRemaining si el lubricentro tiene plan por servicios
+          if (currentLubricentro.totalServicesContracted && currentLubricentro.totalServicesContracted > 0) {
+            lubricentroUpdateData.servicesRemaining = newServicesRemaining;
+            console.log(`📊 Servicios actualizados: ${currentServicesUsed} → ${newServicesUsed}`);
+            console.log(`📊 Servicios restantes: ${currentServicesRemaining} → ${newServicesRemaining}`);
+          }
+          
+          // ✅ ACTUALIZAR HISTORIAL MENSUAL
+          const currentMonth = new Date().toISOString().slice(0, 7); // "2025-07"
+          const currentHistory = currentLubricentro.servicesUsedHistory || {};
+          lubricentroUpdateData.servicesUsedHistory = {
+            ...currentHistory,
+            [currentMonth]: (currentHistory[currentMonth] || 0) + 1
+          };
+          
+          // Actualizar el lubricentro
+          await updateLubricentro(lubricentroId, lubricentroUpdateData);
+          
+          console.log('✅ Contadores del lubricentro actualizados correctamente');
+        }
+        
+      } catch (updateError) {
+        console.error('⚠️ Error al actualizar contadores del lubricentro:', updateError);
+        // No hacer throw aquí para no afectar la actualización del servicio
+        // El servicio se completó correctamente, solo falló la actualización de contadores
+        console.warn('El servicio se completó pero no se pudieron actualizar los contadores del lubricentro');
+      }
+    }
+    
   } catch (error) {
-    console.error('Error al completar cambio de aceite:', error);
+    console.error('❌ Error al completar cambio de aceite:', error);
     throw error;
   }
 };

@@ -37,7 +37,7 @@ const CompleteOilChangePage: React.FC = () => {
   
   // Estados del formulario
   const [formData, setFormData] = useState({
-    fechaServicio: new Date().toISOString().split('T')[0],
+    fechaServicio: new Date(),
     marcaAceite: '',
     tipoAceite: '',
     sae: '',
@@ -249,7 +249,9 @@ const CompleteOilChangePage: React.FC = () => {
               <input
                 type="date"
                 name="fechaServicio"
-                value={formData.fechaServicio}
+                value={formData.fechaServicio instanceof Date ? 
+  formData.fechaServicio.toISOString().split('T')[0] : 
+  formData.fechaServicio}
                 onChange={handleInputChange}
                 className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                 required

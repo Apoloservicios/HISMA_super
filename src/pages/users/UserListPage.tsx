@@ -21,7 +21,7 @@ import {
 import { 
   getUsersByLubricentro, 
   updateUserStatus,
-  inviteUser
+  createUser  // ✅ AGREGADO
 } from '../../services/userService';
 import { User, UserStatus } from '../../types';
 
@@ -48,7 +48,7 @@ import { Lubricentro } from '../../types';
 
 
 
-// Componente para crear nuevo usuario
+// ✅ COMPONENTE CORREGIDO - CreateUserModal
 const CreateUserModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -69,24 +69,35 @@ const CreateUserModal: React.FC<{
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // ✅ FUNCIÓN PARA FORM SUBMIT
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await handleModalSubmit();
+  };
+
+  // ✅ FUNCIÓN PARA BOTÓN CLICK DEL MODAL
+  const handleModalSubmit = async () => {
+    console.log('🔄 Iniciando creación de usuario...', formData); // ✅ DEBUG
     setError(null);
 
     // Validar coincidencia de contraseñas
     if (formData.password !== formData.confirmPassword) {
+      console.log('❌ Error: Contraseñas no coinciden'); // ✅ DEBUG
       setError('Las contraseñas no coinciden');
       return;
     }
 
     // Validar longitud de contraseña
     if (formData.password.length < 6) {
+      console.log('❌ Error: Contraseña muy corta'); // ✅ DEBUG
       setError('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
     try {
+      console.log('✅ Validaciones pasadas, llamando onSubmit...'); // ✅ DEBUG
       await onSubmit(formData);
+      console.log('✅ Usuario creado exitosamente'); // ✅ DEBUG
       // Resetear formulario
       setFormData({
         nombre: '',
@@ -97,6 +108,7 @@ const CreateUserModal: React.FC<{
       });
       onClose();
     } catch (err: any) {
+      console.error('❌ Error al crear usuario:', err); // ✅ DEBUG
       setError(err.message || 'Error al crear el usuario');
     }
   };
@@ -118,7 +130,7 @@ const CreateUserModal: React.FC<{
           </Button>
           <Button 
             color="primary" 
-            onClick={() => handleSubmit(new Event('click') as unknown as React.FormEvent)}
+            onClick={handleModalSubmit} // ✅ CAMBIAR NOMBRE
             disabled={loading}
           >
             {loading ? (
@@ -139,59 +151,62 @@ const CreateUserModal: React.FC<{
         </Alert>
       )}
 
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* ✅ ENVUELTO EN FORM */}
+      <form onSubmit={handleFormSubmit}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Nombre"
+              name="nombre"
+              value={formData.nombre}
+              onChange={handleChange}
+              placeholder="Nombre"
+              required
+            />
+            <Input
+              label="Apellido"
+              name="apellido"
+              value={formData.apellido}
+              onChange={handleChange}
+              placeholder="Apellido"
+              required
+            />
+          </div>
           <Input
-            label="Nombre"
-            name="nombre"
-            value={formData.nombre}
+            label="Email"
+            name="email"
+            type="email"
+            value={formData.email}
             onChange={handleChange}
-            placeholder="Nombre"
+            placeholder="email@ejemplo.com"
             required
           />
-          <Input
-            label="Apellido"
-            name="apellido"
-            value={formData.apellido}
-            onChange={handleChange}
-            placeholder="Apellido"
-            required
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Contraseña"
+              name="password"
+              type="password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="••••••••"
+              required
+              helperText="Mínimo 6 caracteres"
+            />
+            <Input
+              label="Confirmar Contraseña"
+              name="confirmPassword"
+              type="password"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 text-sm text-yellow-700">
+            <p>Los usuarios creados por este medio deberán cambiar su contraseña al iniciar sesión por primera vez.</p>
+          </div>
         </div>
-        <Input
-          label="Email"
-          name="email"
-          type="email"
-          value={formData.email}
-          onChange={handleChange}
-          placeholder="email@ejemplo.com"
-          required
-        />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Contraseña"
-            name="password"
-            type="password"
-            value={formData.password}
-            onChange={handleChange}
-            placeholder="••••••••"
-            required
-            helperText="Mínimo 6 caracteres"
-          />
-          <Input
-            label="Confirmar Contraseña"
-            name="confirmPassword"
-            type="password"
-            value={formData.confirmPassword}
-            onChange={handleChange}
-            placeholder="••••••••"
-            required
-          />
-        </div>
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 text-sm text-yellow-700">
-          <p>Los usuarios creados por este medio deberán cambiar su contraseña al iniciar sesión por primera vez.</p>
-        </div>
-      </div>
+      </form> {/* ✅ CERRAR FORM */}
     </Modal>
   );
 };
@@ -389,7 +404,11 @@ const UserListPage: React.FC = () => {
   
   // Crear nuevo usuario
   const handleCreateUser = async (userData: any) => {
-    if (!userProfile?.lubricentroId || !lubricentro) return;
+    console.log('🔄 handleCreateUser llamado con:', userData); // ✅ DEBUG
+    if (!userProfile?.lubricentroId || !lubricentro) {
+      console.log('❌ Error: No hay lubricentroId o lubricentro'); // ✅ DEBUG
+      return;
+    }
     
     setProcessingCreate(true);
     try {
@@ -399,17 +418,25 @@ const UserListPage: React.FC = () => {
         ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].maxUsers 
         : 2;
       
+      console.log(`📊 Usuarios activos: ${activeUsers}, Máximo: ${maxUsers}`); // ✅ DEBUG
+      
       if (activeUsers >= maxUsers) {
         throw new Error(`Has alcanzado el límite de ${maxUsers} usuarios permitidos según tu plan ${lubricentro.subscriptionPlan?.toUpperCase() || 'BÁSICO'}`);
       }
       
-      await inviteUser(userData.email, {
+      console.log('✅ Límites OK, creando usuario...'); // ✅ DEBUG
+      
+      // ✅ CAMBIO PRINCIPAL: Usar createUser en lugar de inviteUser
+      await createUser(userData.email, userData.password, {
         nombre: userData.nombre,
         apellido: userData.apellido,
+        email: userData.email, // ✅ AGREGADO: campo email requerido
         role: 'user',
+        estado: 'activo', // ✅ Crear directamente como activo
         lubricentroId: userProfile.lubricentroId
       });
       
+      console.log('✅ Usuario invitado, recargando datos...'); // ✅ DEBUG
       // Recargar usuarios y lubricentro
       const [usersData, lubricentroData] = await Promise.all([
         getUsersByLubricentro(userProfile.lubricentroId),
@@ -419,9 +446,10 @@ const UserListPage: React.FC = () => {
       setUsers(usersData);
       setFilteredUsers(usersData);
       setLubricentro(lubricentroData);
+      console.log('✅ Datos recargados exitosamente'); // ✅ DEBUG
       
     } catch (err: any) {
-      console.error('Error al crear usuario:', err);
+      console.error('❌ Error en handleCreateUser:', err); // ✅ DEBUG
       throw new Error(err.message || 'Error al crear el usuario');
     } finally {
       setProcessingCreate(false);
