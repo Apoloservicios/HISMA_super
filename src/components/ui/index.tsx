@@ -25,6 +25,8 @@ interface CardHeaderProps {
   action?: ReactNode;
 }
 
+export { ImprovedInput } from './ImprovedInput';
+
 export const CardHeader: React.FC<CardHeaderProps> = ({ title, subtitle, action }) => {
   return (
     <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">

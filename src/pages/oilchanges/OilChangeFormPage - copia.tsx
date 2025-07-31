@@ -1,4 +1,4 @@
-// src/pages/oilchanges/OilChangeFormPage.tsx - PARTE 1: IMPORTS Y TIPOS
+// src/pages/oilchanges/OilChangeFormPage.tsx - COMPLETO
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -8,18 +8,14 @@ import {
   CardHeader, 
   CardBody, 
   Button, 
+  Input, 
   Select, 
   Textarea, 
   Checkbox,
   Alert, 
   Spinner 
 } from '../../components/ui';
-
-// ✅ IMPORTAR LOS NUEVOS COMPONENTES MEJORADOS
-import { ImprovedInput } from '../../components/ui/ImprovedInput';
-import OperatorSelect from '../../components/forms/OperatorSelect';
 import AutocompleteInput from '../../components/common/AutocompleteInput';
-
 import { 
   createOilChange, 
   getOilChangeById, 
@@ -50,7 +46,6 @@ import {
 
 type FormStep = 'cliente' | 'vehiculo' | 'aceite' | 'resumen';
 
-// PARTE 2: INICIO DEL COMPONENTE Y ESTADOS
 const OilChangeFormPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -113,241 +108,238 @@ const OilChangeFormPage: React.FC = () => {
   const [lubricentro, setLubricentro] = useState<Lubricentro | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [currentStep, setCurrentStep] = useState<FormStep>('cliente');
-  // PARTE 3: FUNCIONES HELPER
+
   const calculateNextChangeDate = (serviceDate: Date, periodicity: number): Date => {
     const nextDate = new Date(serviceDate);
     nextDate.setMonth(nextDate.getMonth() + periodicity);
     return nextDate;
   };
 
-  // ✅ NUEVA FUNCIÓN: Manejar cambio de operario
-  const handleOperatorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      nombreOperario: e.target.value
-    }));
-  };
-
-  const handleOperatorIdChange = (operatorId: string) => {
-    setFormData(prev => ({
-      ...prev,
-      operatorId: operatorId
-    }));
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    
-    if (validationErrors[name]) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
-      });
-    }
-    
-    setFormData(prev => {
-      if (name === 'kmActuales') {
-        const kmValue = parseInt(value, 10) || 0;
-        return { 
-          ...prev, 
-          [name]: kmValue, 
-          kmProximo: kmValue > 0 ? kmValue + 10000 : 0
-        };
-      } 
-      
-      if (name === 'dominioVehiculo') {
-        return { ...prev, [name]: value.toUpperCase() };
-      }
-      
-      if (name === 'perioricidad_servicio') {
-        const meses = parseInt(value, 10) || 3;
-        const serviceDate = prev.fechaServicio || new Date();
-        const nextDate = calculateNextChangeDate(serviceDate, meses);
-        
-        return { 
-          ...prev, 
-          [name]: meses, 
-          fechaProximoCambio: nextDate 
-        };
-      }
-      
-      if (name === 'fechaServicio') {
-        const newServiceDate = value ? new Date(value + 'T12:00:00') : new Date();
-        const periodicity = prev.perioricidad_servicio || 3;
-        const nextDate = calculateNextChangeDate(newServiceDate, periodicity);
-        
-        return {
-          ...prev,
-          [name]: newServiceDate,
-          fechaProximoCambio: nextDate
-        };
-      }
-      
-      if (name === 'fecha' || name === 'fechaProximoCambio') {
-        const newDate = value ? new Date(value + 'T12:00:00') : new Date();
-        return { ...prev, [name]: newDate };
-      }
-      
-      return { ...prev, [name]: value };
-    });
-  };
-  
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    setFormData(prev => ({ ...prev, [name]: checked }));
-  };
-  // PARTE 4: useEffect - CARGA DE DATOS
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        let lubricentroData: any = null;
-        let targetLubricentroId: string = '';
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      let lubricentroData: any = null;
+      let targetLubricentroId: string = '';
 
-        if (isEditing && id) {
-          console.log('🔄 Cargando servicio para editar:', id);
-          const oilChangeData = await getOilChangeById(id);
-          
-          if (!oilChangeData) {
-            setError('No se encontró el servicio solicitado');
-            return;
-          }
-
-          if (userProfile?.role !== 'superadmin' && oilChangeData.lubricentroId !== userProfile?.lubricentroId) {
-            setError('No tiene permisos para editar este servicio');
-            return;
-          }
-
-          targetLubricentroId = oilChangeData.lubricentroId;
-          lubricentroData = await getLubricentroById(targetLubricentroId);
-          
-          if (!lubricentroData) {
-            setError('No se encontró información del lubricentro del servicio');
-            return;
-          }
-
-          setFormData({
-            ...oilChangeData,
-            fecha: new Date(oilChangeData.fecha),
-            fechaServicio: new Date(oilChangeData.fechaServicio),
-            fechaProximoCambio: new Date(oilChangeData.fechaProximoCambio)
-          });
-
-          setLubricentro(lubricentroData);
-          console.log('✅ Servicio cargado correctamente para edición');
+      // CASO 1: Estamos editando un servicio existente
+      if (isEditing && id) {
+        console.log('🔄 Cargando servicio para editar:', id);
+        const oilChangeData = await getOilChangeById(id);
+        
+        if (!oilChangeData) {
+          setError('No se encontró el servicio solicitado');
           return;
         }
 
-        if (isCloning && cloneId) {
-          const oilChangeData = await getOilChangeById(cloneId);
-          
-          if (!oilChangeData) {
-            setError('No se encontró el servicio a clonar');
-            return;
-          }
-
-          if (!userProfile?.lubricentroId) {
-            setError('No se encontró información del lubricentro para crear el nuevo servicio');
-            return;
-          }
-
-          targetLubricentroId = userProfile.lubricentroId;
-          lubricentroData = await getLubricentroById(targetLubricentroId);
-          
-          const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
-          const today = new Date();
-          const nextChangeDate = calculateNextChangeDate(today, oilChangeData.perioricidad_servicio);
-          
-          setFormData({
-            lubricentroId: targetLubricentroId,
-            lubricentroNombre: lubricentroData.fantasyName,
-            nroCambio: nextNumber,
-            fecha: today,
-            fechaServicio: today,
-            fechaProximoCambio: nextChangeDate,
-            nombreCliente: oilChangeData.nombreCliente,
-            celular: oilChangeData.celular,
-            dominioVehiculo: oilChangeData.dominioVehiculo,
-            marcaVehiculo: oilChangeData.marcaVehiculo,
-            modeloVehiculo: oilChangeData.modeloVehiculo,
-            tipoVehiculo: oilChangeData.tipoVehiculo,
-            añoVehiculo: oilChangeData.añoVehiculo,
-            kmActuales: 0,
-            kmProximo: 0,
-            perioricidad_servicio: oilChangeData.perioricidad_servicio,
-            marcaAceite: oilChangeData.marcaAceite,
-            tipoAceite: oilChangeData.tipoAceite,
-            sae: oilChangeData.sae,
-            cantidadAceite: oilChangeData.cantidadAceite,
-            filtroAceite: oilChangeData.filtroAceite,
-            filtroAceiteNota: '',
-            filtroAire: oilChangeData.filtroAire,
-            filtroAireNota: '',
-            filtroHabitaculo: oilChangeData.filtroHabitaculo,
-            filtroHabitaculoNota: '',
-            filtroCombustible: oilChangeData.filtroCombustible,
-            filtroCombustibleNota: '',
-            aditivo: oilChangeData.aditivo,
-            aditivoNota: '',
-            refrigerante: oilChangeData.refrigerante,
-            refrigeranteNota: '',
-            diferencial: oilChangeData.diferencial,
-            diferencialNota: '',
-            caja: oilChangeData.caja,
-            cajaNota: '',
-            engrase: oilChangeData.engrase,
-            engraseNota: '',
-            observaciones: '',
-            nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
-            operatorId: userProfile?.id || '',
-          });
-
-          setLubricentro(lubricentroData);
+        // Verificar permisos: superadmin puede editar cualquier servicio
+        if (userProfile?.role !== 'superadmin' && oilChangeData.lubricentroId !== userProfile?.lubricentroId) {
+          setError('No tiene permisos para editar este servicio');
           return;
         }
 
+        // Obtener datos del lubricentro del servicio
+        targetLubricentroId = oilChangeData.lubricentroId;
+        lubricentroData = await getLubricentroById(targetLubricentroId);
+        
+        if (!lubricentroData) {
+          setError('No se encontró información del lubricentro del servicio');
+          return;
+        }
+
+        // Cargar todos los datos del servicio
+        setFormData({
+          ...oilChangeData,
+          fecha: new Date(oilChangeData.fecha),
+          fechaServicio: new Date(oilChangeData.fechaServicio),
+          fechaProximoCambio: new Date(oilChangeData.fechaProximoCambio)
+        });
+
+        setLubricentro(lubricentroData);
+        console.log('✅ Servicio cargado correctamente para edición');
+        return;
+      }
+
+      // CASO 2: Estamos clonando un servicio
+      if (isCloning && cloneId) {
+        const oilChangeData = await getOilChangeById(cloneId);
+        
+        if (!oilChangeData) {
+          setError('No se encontró el servicio a clonar');
+          return;
+        }
+
+        // Para clonación, usar el lubricentro del usuario actual
         if (!userProfile?.lubricentroId) {
-          setError('No se encontró información del lubricentro para crear un nuevo servicio');
+          setError('No se encontró información del lubricentro para crear el nuevo servicio');
           return;
         }
 
         targetLubricentroId = userProfile.lubricentroId;
         lubricentroData = await getLubricentroById(targetLubricentroId);
         
-        if (!lubricentroData) {
-          setError('No se encontró información del lubricentro');
-          return;
-        }
-
         const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
         const today = new Date();
-        const nextChangeDate = calculateNextChangeDate(today, 3);
+        const nextChangeDate = calculateNextChangeDate(today, oilChangeData.perioricidad_servicio);
         
-        setFormData(prev => ({
-          ...prev,
+        setFormData({
           lubricentroId: targetLubricentroId,
           lubricentroNombre: lubricentroData.fantasyName,
           nroCambio: nextNumber,
+          fecha: today,
+          fechaServicio: today,
           fechaProximoCambio: nextChangeDate,
+          nombreCliente: oilChangeData.nombreCliente,
+          celular: oilChangeData.celular,
+          dominioVehiculo: oilChangeData.dominioVehiculo,
+          marcaVehiculo: oilChangeData.marcaVehiculo,
+          modeloVehiculo: oilChangeData.modeloVehiculo,
+          tipoVehiculo: oilChangeData.tipoVehiculo,
+          añoVehiculo: oilChangeData.añoVehiculo,
+          kmActuales: 0,
+          kmProximo: 0,
+          perioricidad_servicio: oilChangeData.perioricidad_servicio,
+          marcaAceite: oilChangeData.marcaAceite,
+          tipoAceite: oilChangeData.tipoAceite,
+          sae: oilChangeData.sae,
+          cantidadAceite: oilChangeData.cantidadAceite,
+          filtroAceite: oilChangeData.filtroAceite,
+          filtroAceiteNota: '',
+          filtroAire: oilChangeData.filtroAire,
+          filtroAireNota: '',
+          filtroHabitaculo: oilChangeData.filtroHabitaculo,
+          filtroHabitaculoNota: '',
+          filtroCombustible: oilChangeData.filtroCombustible,
+          filtroCombustibleNota: '',
+          aditivo: oilChangeData.aditivo,
+          aditivoNota: '',
+          refrigerante: oilChangeData.refrigerante,
+          refrigeranteNota: '',
+          diferencial: oilChangeData.diferencial,
+          diferencialNota: '',
+          caja: oilChangeData.caja,
+          cajaNota: '',
+          engrase: oilChangeData.engrase,
+          engraseNota: '',
+          observaciones: '',
           nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
           operatorId: userProfile?.id || '',
-        }));
+        });
 
         setLubricentro(lubricentroData);
-        
-      } catch (err) {
-        console.error('❌ Error al cargar datos:', err);
-        setError('Error al cargar los datos. Por favor, intente nuevamente.');
-      } finally {
-        setLoading(false);
+        return;
       }
-    };
-    
-    fetchData();
-  }, [userProfile?.lubricentroId, id, cloneId, isEditing, isCloning, userProfile?.nombre, userProfile?.apellido, userProfile?.id]);
 
-  // PARTE 5: FUNCIONES DE VALIDACIÓN
+      // CASO 3: Creando un nuevo servicio
+      if (!userProfile?.lubricentroId) {
+        setError('No se encontró información del lubricentro para crear un nuevo servicio');
+        return;
+      }
+
+      targetLubricentroId = userProfile.lubricentroId;
+      lubricentroData = await getLubricentroById(targetLubricentroId);
+      
+      if (!lubricentroData) {
+        setError('No se encontró información del lubricentro');
+        return;
+      }
+
+      const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
+      const today = new Date();
+      const nextChangeDate = calculateNextChangeDate(today, 3);
+      
+      setFormData(prev => ({
+        ...prev,
+        lubricentroId: targetLubricentroId,
+        lubricentroNombre: lubricentroData.fantasyName,
+        nroCambio: nextNumber,
+        fechaProximoCambio: nextChangeDate,
+        nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
+        operatorId: userProfile?.id || '',
+      }));
+
+      setLubricentro(lubricentroData);
+      
+    } catch (err) {
+      console.error('❌ Error al cargar datos:', err);
+      setError('Error al cargar los datos. Por favor, intente nuevamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchData();
+}, [userProfile?.lubricentroId, id, cloneId, isEditing, isCloning, userProfile?.nombre, userProfile?.apellido, userProfile?.id]);
+
+  
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const { name, value } = e.target;
+  
+  if (validationErrors[name]) {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[name];
+      return newErrors;
+    });
+  }
+  
+  setFormData(prev => {
+    if (name === 'kmActuales') {
+      const kmValue = parseInt(value, 10) || 0;
+      return { 
+        ...prev, 
+        [name]: kmValue, 
+        kmProximo: kmValue > 0 ? kmValue + 10000 : 0
+      };
+    } 
+    
+    if (name === 'dominioVehiculo') {
+      return { ...prev, [name]: value.toUpperCase() };
+    }
+    
+    if (name === 'perioricidad_servicio') {
+      const meses = parseInt(value, 10) || 3;
+      const serviceDate = prev.fechaServicio || new Date();
+      const nextDate = calculateNextChangeDate(serviceDate, meses);
+      
+      return { 
+        ...prev, 
+        [name]: meses, 
+        fechaProximoCambio: nextDate 
+      };
+    }
+    
+    // ✅ CORRECCIÓN PARA FECHAS - Aquí está el cambio principal
+    if (name === 'fechaServicio') {
+      // En lugar de: const newServiceDate = new Date(value);
+      // Usamos esto para evitar problemas de timezone:
+      const newServiceDate = value ? new Date(value + 'T12:00:00') : new Date();
+      
+      const periodicity = prev.perioricidad_servicio || 3;
+      const nextDate = calculateNextChangeDate(newServiceDate, periodicity);
+      
+      return {
+        ...prev,
+        [name]: newServiceDate,
+        fechaProximoCambio: nextDate
+      };
+    }
+    
+    // ✅ AGREGAR MANEJO PARA OTROS CAMPOS DE FECHA (si los hay)
+    if (name === 'fecha' || name === 'fechaProximoCambio') {
+      const newDate = value ? new Date(value + 'T12:00:00') : new Date();
+      return { ...prev, [name]: newDate };
+    }
+    
+    return { ...prev, [name]: value };
+  });
+};
+  
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
+    setFormData(prev => ({ ...prev, [name]: checked }));
+  };
+  
   const validateCurrentStep = (): boolean => {
     const errors: Record<string, string> = {};
     
@@ -455,7 +447,7 @@ const OilChangeFormPage: React.FC = () => {
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
-  // PARTE 6: FUNCIONES DE NAVEGACIÓN
+  
   const goToNextStep = () => {
     if (!validateCurrentStep()) {
       setError('Por favor, complete todos los campos obligatorios antes de continuar.');
@@ -485,121 +477,136 @@ const OilChangeFormPage: React.FC = () => {
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  // PARTE 7: FUNCIÓN DE SUBMIT
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateFullForm()) {
-      return;
+  
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  // ✅ CORREGIR: Usar validateFullForm en lugar de validateForm
+  if (!validateFullForm()) {
+    return;
+  }
+  
+  setSaving(true);
+  setError(null);
+  
+  try {
+    if (isEditing && id) {
+      // ✅ CORREGIR: Al editar, asegurar tipos correctos
+      const updateData: Partial<OilChange> = {
+        ...formData,
+        estado: 'completo' as OilChangeStatus, // ✅ Casting explícito del tipo
+        fechaCompletado: new Date(),
+        usuarioCompletado: userProfile?.id || '',
+        // ✅ CORREGIR: Verificar que las fechas no sean undefined antes de crear Date
+        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
+        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
+        updatedAt: new Date()
+      };
+      
+      await updateOilChange(id, updateData);
+      setSuccess('Cambio de aceite actualizado correctamente');
+      
+      setTimeout(() => {
+        navigate('/cambios-aceite');
+      }, 1500);
+      
+    } else {
+      // ✅ CORREGIR: Crear nuevo con validaciones de tipos
+      const newData: Omit<OilChange, 'id' | 'createdAt'> = {
+        ...formData,
+        // ✅ Asegurar que campos requeridos no sean undefined
+        lubricentroId: formData.lubricentroId || userProfile?.lubricentroId || '',
+        lubricentroNombre: formData.lubricentroNombre || '',
+        nroCambio: formData.nroCambio || '',
+        nombreCliente: formData.nombreCliente || '',
+        dominioVehiculo: formData.dominioVehiculo || '',
+        marcaVehiculo: formData.marcaVehiculo || '',
+        modeloVehiculo: formData.modeloVehiculo || '',
+        tipoVehiculo: formData.tipoVehiculo || 'auto',
+        kmActuales: formData.kmActuales || 0,
+        kmProximo: formData.kmProximo || 0,
+        perioricidad_servicio: formData.perioricidad_servicio || 6,
+        marcaAceite: formData.marcaAceite || '',
+        tipoAceite: formData.tipoAceite || '',
+        sae: formData.sae || '',
+        cantidadAceite: formData.cantidadAceite || 0,
+        
+        // Estados y fechas
+        estado: 'completo' as OilChangeStatus,
+        fechaCompletado: new Date(),
+        usuarioCompletado: userProfile?.id || '',
+        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
+        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
+        
+        // Operario
+        nombreOperario: formData.nombreOperario || '',
+        operatorId: formData.operatorId || userProfile?.id || '',
+        
+        // Campos opcionales con valores por defecto
+        celular: formData.celular || '',
+        añoVehiculo: formData.añoVehiculo,
+        observaciones: formData.observaciones || '',
+        
+        // Campos booleanos
+        filtroAceite: formData.filtroAceite || false,
+        filtroAceiteNota: formData.filtroAceiteNota || '',
+        filtroAire: formData.filtroAire || false,
+        filtroAireNota: formData.filtroAireNota || '',
+        filtroHabitaculo: formData.filtroHabitaculo || false,
+        filtroHabitaculoNota: formData.filtroHabitaculoNota || '',
+        filtroCombustible: formData.filtroCombustible || false,
+        filtroCombustibleNota: formData.filtroCombustibleNota || '',
+        aditivo: formData.aditivo || false,
+        aditivoNota: formData.aditivoNota || '',
+        refrigerante: formData.refrigerante || false,
+        refrigeranteNota: formData.refrigeranteNota || '',
+        diferencial: formData.diferencial || false,
+        diferencialNota: formData.diferencialNota || '',
+        caja: formData.caja || false,
+        cajaNota: formData.cajaNota || '',
+        engrase: formData.engrase || false,
+        engraseNota: formData.engraseNota || '',
+        
+        // Fechas de sistema
+        fechaCreacion: new Date(),
+        usuarioCreacion: userProfile?.id || ''
+      };
+      
+      await createOilChange(newData);
+      setSuccess('Cambio de aceite registrado correctamente');
+      
+      setTimeout(() => {
+        navigate('/cambios-aceite');
+      }, 1500);
     }
-    
-    setSaving(true);
-    setError(null);
-    
-    try {
-      if (isEditing && id) {
-        const updateData: Partial<OilChange> = {
-          ...formData,
-          estado: 'completo' as OilChangeStatus,
-          fechaCompletado: new Date(),
-          usuarioCompletado: userProfile?.id || '',
-          fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
-          fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
-          fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
-          updatedAt: new Date()
-        };
-        
-        await updateOilChange(id, updateData);
-        setSuccess('Cambio de aceite actualizado correctamente');
-        
-        setTimeout(() => {
-          navigate('/cambios-aceite');
-        }, 1500);
-        
-      } else {
-        const newData: Omit<OilChange, 'id' | 'createdAt'> = {
-          ...formData,
-          lubricentroId: formData.lubricentroId || userProfile?.lubricentroId || '',
-          lubricentroNombre: formData.lubricentroNombre || '',
-          nroCambio: formData.nroCambio || '',
-          nombreCliente: formData.nombreCliente || '',
-          dominioVehiculo: formData.dominioVehiculo || '',
-          marcaVehiculo: formData.marcaVehiculo || '',
-          modeloVehiculo: formData.modeloVehiculo || '',
-          tipoVehiculo: formData.tipoVehiculo || 'auto',
-          kmActuales: formData.kmActuales || 0,
-          kmProximo: formData.kmProximo || 0,
-          perioricidad_servicio: formData.perioricidad_servicio || 6,
-          marcaAceite: formData.marcaAceite || '',
-          tipoAceite: formData.tipoAceite || '',
-          sae: formData.sae || '',
-          cantidadAceite: formData.cantidadAceite || 0,
-          
-          estado: 'completo' as OilChangeStatus,
-          fechaCompletado: new Date(),
-          usuarioCompletado: userProfile?.id || '',
-          fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
-          fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
-          fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
-          
-          nombreOperario: formData.nombreOperario || '',
-          operatorId: formData.operatorId || userProfile?.id || '',
-          
-          celular: formData.celular || '',
-          añoVehiculo: formData.añoVehiculo,
-          observaciones: formData.observaciones || '',
-          
-          filtroAceite: formData.filtroAceite || false,
-          filtroAceiteNota: formData.filtroAceiteNota || '',
-          filtroAire: formData.filtroAire || false,
-          filtroAireNota: formData.filtroAireNota || '',
-          filtroHabitaculo: formData.filtroHabitaculo || false,
-          filtroHabitaculoNota: formData.filtroHabitaculoNota || '',
-          filtroCombustible: formData.filtroCombustible || false,
-          filtroCombustibleNota: formData.filtroCombustibleNota || '',
-          aditivo: formData.aditivo || false,
-          aditivoNota: formData.aditivoNota || '',
-          refrigerante: formData.refrigerante || false,
-          refrigeranteNota: formData.refrigeranteNota || '',
-          diferencial: formData.diferencial || false,
-          diferencialNota: formData.diferencialNota || '',
-          caja: formData.caja || false,
-          cajaNota: formData.cajaNota || '',
-          engrase: formData.engrase || false,
-          engraseNota: formData.engraseNota || '',
-          
-          fechaCreacion: new Date(),
-          usuarioCreacion: userProfile?.id || ''
-        };
-        
-        await createOilChange(newData);
-        setSuccess('Cambio de aceite registrado correctamente');
-        
-        setTimeout(() => {
-          navigate('/cambios-aceite');
-        }, 1500);
-      }
-    } catch (err) {
-      console.error('Error:', err);
-      setError('Error al guardar. Por favor, intente nuevamente.');
-    } finally {
-      setSaving(false);
-    }
-  };
-  // PARTE 8: FUNCIONES DE FORMATO
-  const formatDateForInput = (date: Date | undefined): string => {
-    if (!date) return '';
-    
-    const d = new Date(date);
-    const offsetMinutes = d.getTimezoneOffset();
-    const adjustedDate = new Date(d.getTime() - (offsetMinutes * 60000));
-    
-    const year = adjustedDate.getFullYear();
-    const month = String(adjustedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(adjustedDate.getDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
-  };
+  } catch (err) {
+    console.error('Error:', err);
+    setError('Error al guardar. Por favor, intente nuevamente.');
+  } finally {
+    setSaving(false);
+  }
+};
+  
+    // ✅ FUNCIÓN CORREGIDA: Formatear fecha para input sin problemas de timezone
+    const formatDateForInput = (date: Date | undefined): string => {
+      if (!date) return '';
+      
+      // Crear una nueva fecha asegurándonos de usar la zona horaria local
+      const d = new Date(date);
+      
+      // Ajustar por la zona horaria para evitar el problema del día anterior
+      const offsetMinutes = d.getTimezoneOffset();
+      const adjustedDate = new Date(d.getTime() - (offsetMinutes * 60000));
+      
+      // Formatear como YYYY-MM-DD
+      const year = adjustedDate.getFullYear();
+      const month = String(adjustedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(adjustedDate.getDate()).padStart(2, '0');
+      
+      return `${year}-${month}-${day}`;
+    };
   
   const formatDateForDisplay = (date: Date | undefined): string => {
     if (!date) return 'No especificada';
@@ -617,7 +624,7 @@ const OilChangeFormPage: React.FC = () => {
       </div>
     );
   }
-  // PARTE 9: JSX - INICIO DEL RETURN
+
   return (
     <PageContainer
       title={
@@ -691,14 +698,14 @@ const OilChangeFormPage: React.FC = () => {
             <div className={currentStep === 'resumen' ? 'font-bold text-primary-600' : ''}>Resumen</div>
           </div>
         </div>
-   
-        {/* ✅ PASO 1: Datos del cliente - CON COMPONENTES MEJORADOS */}
+
+        {/* Paso 1: Datos del cliente */}
         {currentStep === 'cliente' && (
           <Card>
             <CardHeader title="Datos del Cliente" />
             <CardBody>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <ImprovedInput
+                <Input
                   label="Nombre del Cliente"
                   name="nombreCliente"
                   value={formData.nombreCliente || ''}
@@ -708,7 +715,7 @@ const OilChangeFormPage: React.FC = () => {
                   icon={<UserIcon className="h-5 w-5 text-gray-400" />}
                   error={validationErrors.nombreCliente}
                 />
-                <ImprovedInput
+                <Input
                   label="Teléfono / Celular"
                   name="celular"
                   value={formData.celular || ''}
@@ -716,7 +723,7 @@ const OilChangeFormPage: React.FC = () => {
                   placeholder="Número de contacto"
                   icon={<PhoneIcon className="h-5 w-5 text-gray-400" />}
                 />
-                <ImprovedInput
+                <Input
                   label="Fecha de Servicio"
                   name="fechaServicio"
                   type="date"
@@ -725,30 +732,27 @@ const OilChangeFormPage: React.FC = () => {
                   required
                   icon={<CalendarIcon className="h-5 w-5 text-gray-400" />}
                 />
-                {/* ✅ NUEVO: SELECT DE OPERARIOS MEJORADO */}
-                <OperatorSelect
+                <Input
                   label="Operario / Mecánico"
                   name="nombreOperario"
                   value={formData.nombreOperario || ''}
-                  operatorId={formData.operatorId}
-                  onChange={handleOperatorChange}
-                  onOperatorIdChange={handleOperatorIdChange}
-                  lubricentroId={userProfile?.lubricentroId || ''}
+                  onChange={handleChange}
+                  placeholder="Nombre del operario"
                   required
-                  helperText="Seleccione el mecánico que realizará el servicio"
+                  icon={<WrenchIcon className="h-5 w-5 text-gray-400" />}
                 />
               </div>
             </CardBody>
           </Card>
         )}
-      
-        {/* ✅ PASO 2: Datos del vehículo - CON COMPONENTES MEJORADOS */}
+
+        {/* Paso 2: Datos del vehículo */}
         {currentStep === 'vehiculo' && (
           <Card>
             <CardHeader title="Datos del Vehículo" />
             <CardBody>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                <ImprovedInput
+                <Input
                   label="Dominio (Patente)"
                   name="dominioVehiculo"
                   value={formData.dominioVehiculo || ''}
@@ -777,7 +781,7 @@ const OilChangeFormPage: React.FC = () => {
                   required
                   error={validationErrors.marcaVehiculo}
                 />
-                <ImprovedInput
+                <Input
                   label="Modelo"
                   name="modeloVehiculo"
                   value={formData.modeloVehiculo || ''}
@@ -785,8 +789,9 @@ const OilChangeFormPage: React.FC = () => {
                   placeholder="Modelo del vehículo"
                   required
                   error={validationErrors.modeloVehiculo}
+                  
                 />
-                <ImprovedInput
+                <Input
                   label="Año"
                   name="añoVehiculo"
                   type="number"
@@ -797,7 +802,7 @@ const OilChangeFormPage: React.FC = () => {
                   error={validationErrors.añoVehiculo}
                 />
                 <div className="relative">
-                  <ImprovedInput
+                  <Input
                     label="Kilometraje Actual"
                     name="kmActuales"
                     type="number"
@@ -814,7 +819,7 @@ const OilChangeFormPage: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <ImprovedInput
+                <Input
                   label="Periodicidad (meses)"
                   name="perioricidad_servicio"
                   type="number"
@@ -823,7 +828,7 @@ const OilChangeFormPage: React.FC = () => {
                   required
                   helperText="Entre 1 y 24 meses"
                 />
-                <ImprovedInput
+                <Input
                   label="Próximo Cambio (Km)"
                   name="kmProximo"
                   type="number"
@@ -839,9 +844,9 @@ const OilChangeFormPage: React.FC = () => {
                 />
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Próximo Cambio (Fecha)</label>
-                  <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg">
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
                     <p className="text-sm text-gray-600">
-                      Fecha calculada automáticamente: <strong className="text-blue-700">{formatDateForDisplay(formData.fechaProximoCambio)}</strong>
+                      Fecha calculada automáticamente: <strong>{formatDateForDisplay(formData.fechaProximoCambio)}</strong>
                     </p>
                     <p className="text-xs text-gray-500 mt-1">Basado en la fecha de servicio + {formData.perioricidad_servicio} meses</p>
                   </div>
@@ -850,8 +855,8 @@ const OilChangeFormPage: React.FC = () => {
             </CardBody>
           </Card>
         )}
-    
-        {/* ✅ PASO 3: Aceite y servicios adicionales - CON COMPONENTES MEJORADOS */}
+
+        {/* Paso 3: Aceite y servicios adicionales */}
         {currentStep === 'aceite' && (
           <>
             <Card className="mb-6">
@@ -867,137 +872,93 @@ const OilChangeFormPage: React.FC = () => {
                     <label htmlFor="marcaAceite" className="block text-sm font-medium text-gray-700 mb-1">
                       Marca de Aceite <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        id="marcaAceite"
-                        name="marcaAceite"
-                        value={formData.marcaAceite || ''}
-                        onChange={handleChange}
-                        placeholder="Marca del aceite"
-                        className={`
-                          block w-full rounded-lg border-2 px-3 py-2.5 text-sm
-                          transition-all duration-200 ease-in-out
-                          ${validationErrors.marcaAceite 
-                            ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
-                            : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                          }
-                          shadow-sm hover:shadow-md focus:shadow-lg
-                          placeholder:text-gray-400
-                        `}
-                        required
-                        list="marcasAceite"
-                      />
-                      <datalist id="marcasAceite">
-                        {autocompleteOptions.marcasAceite.map(marca => (
-                          <option key={marca} value={marca} />
-                        ))}
-                      </datalist>
-                    </div>
-                    {validationErrors.marcaAceite && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.marcaAceite}</p>
-                      </div>
-                    )}
+                    <input
+                      id="marcaAceite"
+                      name="marcaAceite"
+                      value={formData.marcaAceite || ''}
+                      onChange={handleChange}
+                      placeholder="Marca del aceite"
+                      className={`block w-full rounded-md border-2 ${
+                        validationErrors.marcaAceite ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
+                      } shadow-sm sm:text-sm`}
+                      required
+                      list="marcasAceite"
+                    />
+                    <datalist id="marcasAceite">
+                      {autocompleteOptions.marcasAceite.map(marca => (
+                        <option key={marca} value={marca} />
+                      ))}
+                    </datalist>
+                    {validationErrors.marcaAceite && <p className="mt-1 text-sm text-red-600">{validationErrors.marcaAceite}</p>}
                   </div>
-                  
                   <div className="relative">
                     <label htmlFor="tipoAceite" className="block text-sm font-medium text-gray-700 mb-1">
                       Tipo de Aceite <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        id="tipoAceite"
-                        name="tipoAceite"
-                        value={formData.tipoAceite || ''}
-                        onChange={handleChange}
-                        placeholder="Tipo de aceite"
-                        className={`
-                          block w-full rounded-lg border-2 px-3 py-2.5 text-sm
-                          transition-all duration-200 ease-in-out
-                          ${validationErrors.tipoAceite 
-                            ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
-                            : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                          }
-                          shadow-sm hover:shadow-md focus:shadow-lg
-                          placeholder:text-gray-400
-                        `}
-                        required
-                        list="tiposAceite"
-                      />
-                      <datalist id="tiposAceite">
-                        {autocompleteOptions.tiposAceite.map(tipo => (
-                          <option key={tipo} value={tipo} />
-                        ))}
-                      </datalist>
-                    </div>
-                    {validationErrors.tipoAceite && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.tipoAceite}</p>
-                      </div>
-                    )}
+                    <input
+                      id="tipoAceite"
+                      name="tipoAceite"
+                      value={formData.tipoAceite || ''}
+                      onChange={handleChange}
+                      placeholder="Tipo de aceite"
+                      className={`block w-full rounded-md border-2 ${
+                        validationErrors.tipoAceite ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
+                      } shadow-sm sm:text-sm`}
+                      required
+                      list="tiposAceite"
+                    />
+                    <datalist id="tiposAceite">
+                      {autocompleteOptions.tiposAceite.map(tipo => (
+                        <option key={tipo} value={tipo} />
+                      ))}
+                    </datalist>
+                    {validationErrors.tipoAceite && <p className="mt-1 text-sm text-red-600">{validationErrors.tipoAceite}</p>}
                   </div>
-                  
                   <div className="relative">
                     <label htmlFor="sae" className="block text-sm font-medium text-gray-700 mb-1">
                       Viscosidad (SAE) <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        id="sae"
-                        name="sae"
-                        value={formData.sae || ''}
-                        onChange={handleChange}
-                        placeholder="Ej: 5W-30"
-                        className={`
-                          block w-full rounded-lg border-2 px-3 py-2.5 text-sm
-                          transition-all duration-200 ease-in-out
-                          ${validationErrors.sae 
-                            ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
-                            : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                          }
-                          shadow-sm hover:shadow-md focus:shadow-lg
-                          placeholder:text-gray-400
-                        `}
-                        required
-                        list="viscosidadSae"
-                      />
-                      <datalist id="viscosidadSae">
-                        {autocompleteOptions.viscosidad.map(visc => (
-                          <option key={visc} value={visc} />
-                        ))}
-                      </datalist>
-                    </div>
-                    {validationErrors.sae && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.sae}</p>
-                      </div>
-                    )}
+                    <input
+                      id="sae"
+                      name="sae"
+                      value={formData.sae || ''}
+                      onChange={handleChange}
+                      placeholder="Ej: 5W-30"
+                      className={`block w-full rounded-md border-2 ${
+                        validationErrors.sae ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
+                      } shadow-sm sm:text-sm`}
+                      required
+                      list="viscosidadSae"
+                    />
+                    <datalist id="viscosidadSae">
+                      {autocompleteOptions.viscosidad.map(visc => (
+                        <option key={visc} value={visc} />
+                      ))}
+                    </datalist>
+                    {validationErrors.sae && <p className="mt-1 text-sm text-red-600">{validationErrors.sae}</p>}
                   </div>
-                  
-                  <ImprovedInput
-                    label="Cantidad (litros)"
-                    name="cantidadAceite"
-                    type="number"
-                    value={formData.cantidadAceite || 4}
-                    onChange={handleChange}
-                    placeholder="Litros de aceite"
-                    required
-                    error={validationErrors.cantidadAceite}
-                    helperText="Ingrese un valor mayor a 0"
-                  />
+                  <div className="relative">
+                    <label htmlFor="cantidadAceite" className="block text-sm font-medium text-gray-700 mb-1">
+                      Cantidad (litros) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="cantidadAceite"
+                      name="cantidadAceite"
+                      type="number"
+                      value={formData.cantidadAceite || 4}
+                      onChange={handleChange}
+                      className={`block w-full rounded-md border-2 ${
+                        validationErrors.cantidadAceite ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-primary-500 focus:ring-primary-500'
+                      } shadow-sm sm:text-sm`}
+                      required
+                    />
+                    {validationErrors.cantidadAceite && <p className="mt-1 text-sm text-red-600">{validationErrors.cantidadAceite}</p>}
+                    {!validationErrors.cantidadAceite && <p className="mt-1 text-sm text-gray-500">Ingrese un valor mayor a 0</p>}
+                  </div>
                 </div>
               </CardBody>
             </Card>
-           
+
             <Card className="mb-6">
               <CardHeader title="Filtros y Servicios Adicionales" />
               <CardBody>
@@ -1018,13 +979,7 @@ const OilChangeFormPage: React.FC = () => {
                     { id: 'caja', label: 'Caja', nota: 'cajaNota' },
                     { id: 'engrase', label: 'Engrase', nota: 'engraseNota' }
                   ].map((servicio) => (
-                    <div key={servicio.id} className={`
-                      border-2 rounded-lg p-4 shadow-sm transition-all duration-200 ease-in-out
-                      ${formData[servicio.id as keyof typeof formData] 
-                        ? 'border-green-300 bg-green-50 shadow-md' 
-                        : 'border-gray-300 bg-white hover:border-blue-300 hover:shadow-md'
-                      }
-                    `}>
+                    <div key={servicio.id} className="border-2 border-gray-300 rounded p-4 shadow-sm hover:border-primary-300 transition-colors">
                       <div className="flex items-center mb-2">
                         <input
                           type="checkbox"
@@ -1032,7 +987,7 @@ const OilChangeFormPage: React.FC = () => {
                           name={servicio.id}
                           checked={Boolean(formData[servicio.id as keyof typeof formData])}
                           onChange={handleCheckboxChange}
-                          className="h-5 w-5 text-primary-600 rounded focus:ring-primary-500 border-gray-300 transition-colors"
+                          className="h-5 w-5 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
                         />
                         <label htmlFor={servicio.id} className="ml-2 block text-sm font-medium text-gray-700">
                           {servicio.label}
@@ -1046,7 +1001,7 @@ const OilChangeFormPage: React.FC = () => {
                             value={String(formData[servicio.nota as keyof typeof formData] || '')}
                             onChange={handleChange}
                             placeholder="Marca, tipo, especificaciones..."
-                            className="block w-full rounded-lg border-2 border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200"
+                            className="block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
                           />
                         </div>
                       )}
@@ -1059,29 +1014,27 @@ const OilChangeFormPage: React.FC = () => {
             <Card>
               <CardHeader title="Observaciones" />
               <CardBody>
-                <div className="relative">
-                  <textarea
-                    id="observaciones"
-                    name="observaciones"
-                    value={formData.observaciones || ''}
-                    onChange={handleChange}
-                    placeholder={isCloning ? "Observaciones específicas para este nuevo servicio..." : "Detalles adicionales, recomendaciones, estado del vehículo..."}
-                    rows={4}
-                    className="block w-full rounded-lg border-2 border-gray-300 px-3 py-2.5 text-sm shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 resize-none hover:border-gray-400 hover:shadow-md focus:shadow-lg"
-                  />
-                </div>
+                <textarea
+                  id="observaciones"
+                  name="observaciones"
+                  value={formData.observaciones || ''}
+                  onChange={handleChange}
+                  placeholder={isCloning ? "Observaciones específicas para este nuevo servicio..." : "Detalles adicionales, recomendaciones, estado del vehículo..."}
+                  rows={4}
+                  className="block w-full rounded-md border-2 border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm resize-none"
+                ></textarea>
               </CardBody>
             </Card>
           </>
         )}
-
-        {/* PASO 4: Resumen - CON MEJORAS VISUALES */}
+        
+        {/* Paso 4: Resumen */}
         {currentStep === 'resumen' && (
           <Card>
             <CardHeader title={isEditing ? "Resumen de Cambios" : isCloning ? "Resumen del Nuevo Cambio de Aceite" : "Resumen del Cambio de Aceite"} />
             <CardBody>
               {isCloning && (
-                <div className="mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-lg">
+                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
                   <div className="flex items-start">
                     <div className="flex-shrink-0">
                       <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -1098,8 +1051,8 @@ const OilChangeFormPage: React.FC = () => {
 
               <div className="space-y-6">
                 {isCloning && (
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3 border-b border-blue-200 pb-2">Información del Servicio</h3>
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Información del Servicio</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium text-gray-500">Número de Cambio:</p>
@@ -1113,8 +1066,8 @@ const OilChangeFormPage: React.FC = () => {
                   </div>
                 )}
 
-                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b border-gray-300 pb-2">Datos del Cliente</h3>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Datos del Cliente</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Nombre del Cliente:</p>
@@ -1135,8 +1088,8 @@ const OilChangeFormPage: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b border-blue-300 pb-2">Datos del Vehículo</h3>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Datos del Vehículo</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Dominio (Patente):</p>
@@ -1172,8 +1125,8 @@ const OilChangeFormPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b border-yellow-300 pb-2">Datos del Aceite</h3>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Datos del Aceite</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm font-medium text-gray-500">Marca de Aceite:</p>
@@ -1194,8 +1147,8 @@ const OilChangeFormPage: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b border-green-300 pb-2">Filtros y Servicios Adicionales</h3>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Filtros y Servicios Adicionales</h3>
                   {(!formData.filtroAceite && !formData.filtroAire && !formData.filtroHabitaculo && !formData.filtroCombustible && !formData.aditivo && !formData.refrigerante && !formData.diferencial && !formData.caja && !formData.engrase) ? (
                     <p className="text-base text-gray-700">No se seleccionaron servicios adicionales.</p>
                   ) : (
@@ -1205,125 +1158,120 @@ const OilChangeFormPage: React.FC = () => {
                         { key: 'filtroAire', label: 'Filtro de Aire', nota: 'filtroAireNota' },
                         { key: 'filtroHabitaculo', label: 'Filtro de Habitáculo', nota: 'filtroHabitaculoNota' },
                         { key: 'filtroCombustible', label: 'Filtro de Combustible', nota: 'filtroCombustibleNota' },
-                        { key: 'aditivo', label: 'Aditivo', nota: 'aditivoNota' },
-                        { key: 'refrigerante', label: 'Refrigerante', nota: 'refrigeranteNota' },
-                        { key: 'diferencial', label: 'Diferencial', nota: 'diferencialNota' },
-                        { key: 'caja', label: 'Caja', nota: 'cajaNota' },
-                        { key: 'engrase', label: 'Engrase', nota: 'engraseNota' }
-                      ].map((servicio) => (
-                        formData[servicio.key as keyof typeof formData] && (
-                          <div key={servicio.key} className="bg-white p-3 rounded-md border border-green-300">
-                            <p className="text-sm font-medium text-gray-500">{servicio.label}:</p>
-                            <p className="text-base text-green-600 font-semibold">
-                              ✓ {String(formData[servicio.nota as keyof typeof formData] || 'Sí')}
-                            </p>
-                          </div>
-                        )
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
-                {formData.observaciones && (
-                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                    <h3 className="text-lg font-medium text-gray-900 mb-3 border-b border-gray-300 pb-2">Observaciones</h3>
-                    <div className="bg-white p-4 rounded-md border border-gray-200">
-                      <p className="text-base text-gray-700 whitespace-pre-line">{formData.observaciones}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardBody>
-          </Card>
-        )}
+                       { key: 'aditivo', label: 'Aditivo', nota: 'aditivoNota' },
+                       { key: 'refrigerante', label: 'Refrigerante', nota: 'refrigeranteNota' },
+                       { key: 'diferencial', label: 'Diferencial', nota: 'diferencialNota' },
+                       { key: 'caja', label: 'Caja', nota: 'cajaNota' },
+                       { key: 'engrase', label: 'Engrase', nota: 'engraseNota' }
+                     ].map((servicio) => (
+                       formData[servicio.key as keyof typeof formData] && (
+                         <div key={servicio.key} className="bg-green-50 p-3 rounded-md">
+                           <p className="text-sm font-medium text-gray-500">{servicio.label}:</p>
+                           <p className="text-base text-green-600 font-semibold">
+                             ✓ {String(formData[servicio.nota as keyof typeof formData] || 'Sí')}
+                           </p>
+                         </div>
+                       )
+                     ))}
+                   </div>
+                 )}
+               </div>
+               
+               {formData.observaciones && (
+                 <div>
+                   <h3 className="text-lg font-medium text-gray-900 mb-3 border-b pb-2">Observaciones</h3>
+                   <div className="bg-gray-50 p-4 rounded-md">
+                     <p className="text-base text-gray-700 whitespace-pre-line">{formData.observaciones}</p>
+                   </div>
+                 </div>
+               )}
+             </div>
+           </CardBody>
+         </Card>
+       )}
 
-        {/* Botones de navegación mejorados */}
-        <div className="flex justify-between mt-8">
-          {currentStep === 'cliente' ? (
-            <Button
-              type="button"
-              color="secondary"
-              variant="outline"
-              onClick={() => navigate('/cambios-aceite')}
-              icon={<ChevronLeftIcon className="h-5 w-5" />}
-              className="hover:shadow-lg transition-shadow"
-            >
-              Cancelar
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              color="secondary"
-              variant="outline"
-              onClick={goToPreviousStep}
-              icon={<ChevronLeftIcon className="h-5 w-5" />}
-              className="hover:shadow-lg transition-shadow"
-            >
-              Anterior
-            </Button>
-          )}
-          
-          {currentStep !== 'resumen' ? (
-            <Button
-              type="button"
-              color="primary"
-              onClick={goToNextStep}
-              icon={<ChevronRightIcon className="h-5 w-5" />}
-              className="hover:shadow-lg transition-shadow"
-            >
-              Siguiente
-            </Button>
-          ) : (
-            <Button
-              type="submit"
-              color="primary"
-              disabled={saving || (isCloning && formData.kmActuales === 0)}
-              icon={saving ? <Spinner size="sm" color="white" className="mr-2" /> : <PlusIcon className="h-5 w-5" />}
-              className="hover:shadow-lg transition-shadow disabled:opacity-50"
-            >
-              {saving 
-                ? (isEditing ? 'Guardando cambios...' : isCloning ? 'Duplicando servicio...' : 'Registrando cambio...') 
-                : (isEditing ? 'Guardar Cambios' : isCloning ? 'Duplicar Servicio' : 'Registrar Cambio')
-              }
-            </Button>
-          )}
-        </div>
+       {/* Botones de navegación */}
+       <div className="flex justify-between mt-8">
+         {currentStep === 'cliente' ? (
+           <Button
+             type="button"
+             color="secondary"
+             variant="outline"
+             onClick={() => navigate('/cambios-aceite')}
+             icon={<ChevronLeftIcon className="h-5 w-5" />}
+           >
+             Cancelar
+           </Button>
+         ) : (
+           <Button
+             type="button"
+             color="secondary"
+             variant="outline"
+             onClick={goToPreviousStep}
+             icon={<ChevronLeftIcon className="h-5 w-5" />}
+           >
+             Anterior
+           </Button>
+         )}
+         
+         {currentStep !== 'resumen' ? (
+           <Button
+             type="button"
+             color="primary"
+             onClick={goToNextStep}
+             icon={<ChevronRightIcon className="h-5 w-5" />}
+           >
+             Siguiente
+           </Button>
+         ) : (
+           <Button
+             type="submit"
+             color="primary"
+             disabled={saving || (isCloning && formData.kmActuales === 0)}
+             icon={saving ? <Spinner size="sm" color="white" className="mr-2" /> : <PlusIcon className="h-5 w-5" />}
+           >
+             {saving 
+               ? (isEditing ? 'Guardando cambios...' : isCloning ? 'Duplicando servicio...' : 'Registrando cambio...') 
+               : (isEditing ? 'Guardar Cambios' : isCloning ? 'Duplicar Servicio' : 'Registrar Cambio')
+             }
+           </Button>
+         )}
+       </div>
 
-        {/* Validación final para clonación mejorada */}
-        {currentStep === 'resumen' && isCloning && formData.kmActuales === 0 && (
-          <div className="mt-4 p-4 bg-red-50 border-2 border-red-200 rounded-lg">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Datos incompletos</h3>
-                <div className="mt-2 text-sm text-red-700">
-                  <p>Debe completar el kilometraje actual del vehículo antes de poder guardar el servicio duplicado.</p>
-                </div>
-                <div className="mt-4">
-                  <div className="-mx-2 -my-1.5 flex">
-                    <Button
-                      type="button"
-                      color="error"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentStep('vehiculo')}
-                      className="hover:shadow-md transition-shadow"
-                    >
-                      Ir a completar datos
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </form>
-    </PageContainer>
-  );
+       {/* Validación final para clonación */}
+       {currentStep === 'resumen' && isCloning && formData.kmActuales === 0 && (
+         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-md">
+           <div className="flex">
+             <div className="flex-shrink-0">
+               <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+               </svg>
+             </div>
+             <div className="ml-3">
+               <h3 className="text-sm font-medium text-red-800">Datos incompletos</h3>
+               <div className="mt-2 text-sm text-red-700">
+                 <p>Debe completar el kilometraje actual del vehículo antes de poder guardar el servicio duplicado.</p>
+               </div>
+               <div className="mt-4">
+                 <div className="-mx-2 -my-1.5 flex">
+                   <Button
+                     type="button"
+                     color="error"
+                     variant="outline"
+                     size="sm"
+                     onClick={() => setCurrentStep('vehiculo')}
+                   >
+                     Ir a completar datos
+                   </Button>
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
+       )}
+     </form>
+   </PageContainer>
+ );
 };
 
 export default OilChangeFormPage;
