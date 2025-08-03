@@ -1499,3 +1499,24 @@ export const fixCreatedAtFieldsForAll = async (lubricentroId: string): Promise<n
     throw error;
   }
 };
+
+export const markAsNotified = async (
+  oilChangeId: string, 
+  userId: string,
+  notes?: string
+): Promise<void> => {
+  try {
+    const oilChangeRef = doc(db, 'oilChanges', oilChangeId);
+    
+    await updateDoc(oilChangeRef, {
+      notificado: true,
+      fechaNotificacion: new Date(),
+      usuarioNotificacion: userId,
+      notasNotificacion: notes || '',
+      updatedAt: new Date()
+    });
+  } catch (error) {
+    console.error('Error al marcar como notificado:', error);
+    throw error;
+  }
+};

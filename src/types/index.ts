@@ -171,6 +171,10 @@ export interface OilChange {
   // Metadata (existentes)
   createdAt: Date;
   updatedAt?: Date;
+
+    notificado?: boolean;           // ✅ NUEVO: indica si ya se notificó al cliente
+  fechaNotificacion?: Date;       // ✅ NUEVO: cuándo se notificó
+  usuarioNotificacion?: string;   // ✅ NUEVO: quién marcó la notificación
 }
 
 // Estadísticas para dashboards

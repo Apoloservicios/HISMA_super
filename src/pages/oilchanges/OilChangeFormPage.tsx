@@ -136,8 +136,14 @@ const OilChangeFormPage: React.FC = () => {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+  const { name, value } = e.target;
+  
+  // ✅ NUEVA VALIDACIÓN PARA CELULAR - Solo números, espacios, guiones, paréntesis y +
+  if (name === 'celular') {
+    // Permitir solo números y caracteres telefónicos básicos
+    const phoneValue = value.replace(/[^0-9\s\-\(\)\+]/g, '');
     
+    // Limpiar errores de validación existentes
     if (validationErrors[name]) {
       setValidationErrors(prev => {
         const newErrors = { ...prev };
@@ -146,52 +152,42 @@ const OilChangeFormPage: React.FC = () => {
       });
     }
     
-    setFormData(prev => {
-      if (name === 'kmActuales') {
-        const kmValue = parseInt(value, 10) || 0;
-        return { 
-          ...prev, 
-          [name]: kmValue, 
-          kmProximo: kmValue > 0 ? kmValue + 10000 : 0
-        };
-      } 
-      
-      if (name === 'dominioVehiculo') {
-        return { ...prev, [name]: value.toUpperCase() };
-      }
-      
-      if (name === 'perioricidad_servicio') {
-        const meses = parseInt(value, 10) || 3;
-        const serviceDate = prev.fechaServicio || new Date();
-        const nextDate = calculateNextChangeDate(serviceDate, meses);
-        
-        return { 
-          ...prev, 
-          [name]: meses, 
-          fechaProximoCambio: nextDate 
-        };
-      }
-      
-      if (name === 'fechaServicio') {
-        const newServiceDate = value ? new Date(value + 'T12:00:00') : new Date();
-        const periodicity = prev.perioricidad_servicio || 3;
-        const nextDate = calculateNextChangeDate(newServiceDate, periodicity);
-        
-        return {
-          ...prev,
-          [name]: newServiceDate,
-          fechaProximoCambio: nextDate
-        };
-      }
-      
-      if (name === 'fecha' || name === 'fechaProximoCambio') {
-        const newDate = value ? new Date(value + 'T12:00:00') : new Date();
-        return { ...prev, [name]: newDate };
-      }
-      
-      return { ...prev, [name]: value };
+    setFormData(prev => ({ ...prev, [name]: phoneValue }));
+    return;
+  }
+  
+  // Resto del código de manejo de cambios...
+  if (validationErrors[name]) {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[name];
+      return newErrors;
     });
-  };
+  }
+  
+  setFormData(prev => {
+    if (name === 'kmActuales') {
+      const kmValue = parseInt(value, 10) || 0;
+      return { 
+        ...prev, 
+        [name]: kmValue, 
+        kmProximo: kmValue > 0 ? kmValue + 10000 : 0
+      };
+    }
+    
+    // ✅ SOLUCIÓN 2: Arreglar input de cantidad de aceite
+    if (name === 'cantidadAceite') {
+      // Permitir valores decimales y asegurar que se pueda escribir libremente
+      const numericValue = parseFloat(value) || 0;
+      return { ...prev, [name]: numericValue };
+    }
+    
+    return { 
+      ...prev, 
+      [name]: name === 'dominioVehiculo' ? value.toUpperCase() : value 
+    };
+  });
+};
   
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
@@ -379,6 +375,15 @@ const OilChangeFormPage: React.FC = () => {
       } else if (!isValidKilometraje(formData.kmActuales)) {
         errors.kmActuales = 'El kilometraje debe ser un número positivo';
       }
+            // ✅ NUEVA VALIDACIÓN PARA CELULAR
+        if (formData.celular && formData.celular.trim()) {
+          if (!/^[\d\s\-\(\)\+]+$/.test(formData.celular.trim())) {
+            errors.celular = 'El teléfono solo puede contener números, espacios, guiones, paréntesis y el signo +';
+          }
+          if (formData.celular.replace(/\D/g, '').length < 7) {
+            errors.celular = 'El teléfono debe tener al menos 7 dígitos';
+          }
+        }
     } else if (currentStep === 'aceite') {
       if (!formData.marcaAceite?.trim()) {
         errors.marcaAceite = 'La marca del aceite es obligatoria';
@@ -1087,17 +1092,43 @@ const handleSubmit = async (e: React.FormEvent) => {
                     )}
                   </div>
                   
-                  <ImprovedInput
-                    label="Cantidad (litros)"
-                    name="cantidadAceite"
-                    type="number"
-                    value={formData.cantidadAceite || 4}
-                    onChange={handleChange}
-                    placeholder="Litros de aceite"
-                    required
-                    error={validationErrors.cantidadAceite}
-                    helperText="Ingrese un valor mayor a 0"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cantidad (litros) *
+                    </label>
+                    <input
+                      type="number"
+                      name="cantidadAceite"
+                      value={formData.cantidadAceite || ''}
+                      onChange={handleChange}
+                      onFocus={(e) => e.target.select()} // Seleccionar todo al hacer foco
+                      placeholder="Ej: 4.5"
+                      min="0.5"
+                      max="20"
+                      step="0.5"
+                      className={`
+                        block w-full px-3 py-2 border rounded-md shadow-sm 
+                        focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
+                        ${validationErrors.cantidadAceite 
+                          ? 'border-red-300 text-red-900 placeholder-red-300 bg-red-50' 
+                          : 'border-gray-300 hover:border-gray-400 bg-white'
+                        }
+                        transition-colors duration-200
+                      `}
+                      required
+                    />
+                    {validationErrors.cantidadAceite && (
+                      <div className="mt-1 flex items-center">
+                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-sm text-red-600">{validationErrors.cantidadAceite}</p>
+                      </div>
+                    )}
+                    <p className="mt-1 text-xs text-gray-500">
+                      Ingrese la cantidad en litros (ej: 4, 4.5, 5.5)
+                    </p>
+                  </div>
                 </div>
               </CardBody>
             </Card>
