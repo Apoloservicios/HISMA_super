@@ -145,26 +145,41 @@ const CompleteOilChangePage: React.FC = () => {
     }
     
     try {
-      setSaving(true);
-      setError(null);
-      
-      await completeOilChange(id, {
-        ...formData,
-        fechaServicio: new Date(formData.fechaServicio),
-        usuarioCompletado: userProfile.id
-      });
-      
-      setSuccess('Cambio de aceite completado correctamente.');
-      setTimeout(() => {
-        navigate('/cambios-aceite/pendientes');
-      }, 1500);
-      
-    } catch (err) {
-      console.error('Error al completar el cambio de aceite:', err);
-      setError('Error al completar el servicio. Por favor, intente nuevamente.');
-    } finally {
-      setSaving(false);
-    }
+  setLoading(true);
+  setError(null);
+
+  // Verificar que el userProfile esté disponible
+  if (!userProfile?.id) {
+    throw new Error('Usuario no identificado');
+  }
+
+  // Preparar datos de completado
+  const completionData = {
+    ...formData,
+    fechaServicio: new Date(formData.fechaServicio),
+    usuarioCompletado: userProfile.id,
+    // Agregar campos que puedan faltar
+    marcaAceite: formData.marcaAceite || '',
+    tipoAceite: formData.tipoAceite || '',
+    sae: formData.sae || '',
+    cantidadAceite: formData.cantidadAceite || 0,
+    perioricidad_servicio: formData.perioricidad_servicio || 6
+  };
+
+  // Llamar a la función con los 3 parámetros requeridos
+  await completeOilChange(id, completionData, userProfile.id);
+
+  setSuccess('Cambio de aceite completado correctamente.');
+  setTimeout(() => {
+    navigate('/cambios-aceite/pendientes');
+  }, 1500);
+
+} catch (err: any) {
+  console.error('Error al completar cambio de aceite:', err);
+  setError(err.message || 'Error al completar el cambio de aceite');
+} finally {
+  setLoading(false);
+}
   };
   
   if (loading) {

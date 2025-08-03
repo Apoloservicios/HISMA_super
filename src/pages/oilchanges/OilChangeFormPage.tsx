@@ -486,106 +486,210 @@ const OilChangeFormPage: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   // PARTE 7: FUNCIÓN DE SUBMIT
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateFullForm()) {
-      return;
-    }
-    
-    setSaving(true);
-    setError(null);
-    
-    try {
-      if (isEditing && id) {
-        const updateData: Partial<OilChange> = {
-          ...formData,
-          estado: 'completo' as OilChangeStatus,
-          fechaCompletado: new Date(),
-          usuarioCompletado: userProfile?.id || '',
-          fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
-          fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
-          fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
-          updatedAt: new Date()
-        };
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  // Validar formulario antes de continuar
+  if (!validateFullForm()) {
+    setError('Por favor, complete todos los campos obligatorios.');
+    return;
+  }
+  
+  setSaving(true);
+  setError(null);
+  setSuccess(null);
+  
+  try {
+    if (isEditing && id) {
+      // ===== MODO EDICIÓN =====
+      console.log('🔄 Actualizando cambio de aceite existente...');
+      
+      const updateData: Partial<OilChange> = {
+        // Datos básicos del cliente
+        nombreCliente: formData.nombreCliente,
+        celular: formData.celular || '',
         
-        await updateOilChange(id, updateData);
-        setSuccess('Cambio de aceite actualizado correctamente');
+        // Datos del vehículo
+        dominioVehiculo: formData.dominioVehiculo?.toUpperCase(),
+        marcaVehiculo: formData.marcaVehiculo,
+        modeloVehiculo: formData.modeloVehiculo,
+        tipoVehiculo: formData.tipoVehiculo,
+        añoVehiculo: formData.añoVehiculo,
+        kmActuales: formData.kmActuales,
+        kmProximo: formData.kmProximo,
         
-        setTimeout(() => {
-          navigate('/cambios-aceite');
-        }, 1500);
+        // Datos del aceite
+        marcaAceite: formData.marcaAceite,
+        tipoAceite: formData.tipoAceite,
+        sae: formData.sae,
+        cantidadAceite: formData.cantidadAceite,
+        perioricidad_servicio: formData.perioricidad_servicio,
         
-      } else {
-        const newData: Omit<OilChange, 'id' | 'createdAt'> = {
-          ...formData,
-          lubricentroId: formData.lubricentroId || userProfile?.lubricentroId || '',
-          lubricentroNombre: formData.lubricentroNombre || '',
-          nroCambio: formData.nroCambio || '',
-          nombreCliente: formData.nombreCliente || '',
-          dominioVehiculo: formData.dominioVehiculo || '',
-          marcaVehiculo: formData.marcaVehiculo || '',
-          modeloVehiculo: formData.modeloVehiculo || '',
-          tipoVehiculo: formData.tipoVehiculo || 'auto',
-          kmActuales: formData.kmActuales || 0,
-          kmProximo: formData.kmProximo || 0,
-          perioricidad_servicio: formData.perioricidad_servicio || 6,
-          marcaAceite: formData.marcaAceite || '',
-          tipoAceite: formData.tipoAceite || '',
-          sae: formData.sae || '',
-          cantidadAceite: formData.cantidadAceite || 0,
-          
-          estado: 'completo' as OilChangeStatus,
-          fechaCompletado: new Date(),
-          usuarioCompletado: userProfile?.id || '',
-          fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
-          fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
-          fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
-          
-          nombreOperario: formData.nombreOperario || '',
-          operatorId: formData.operatorId || userProfile?.id || '',
-          
-          celular: formData.celular || '',
-          añoVehiculo: formData.añoVehiculo,
-          observaciones: formData.observaciones || '',
-          
-          filtroAceite: formData.filtroAceite || false,
-          filtroAceiteNota: formData.filtroAceiteNota || '',
-          filtroAire: formData.filtroAire || false,
-          filtroAireNota: formData.filtroAireNota || '',
-          filtroHabitaculo: formData.filtroHabitaculo || false,
-          filtroHabitaculoNota: formData.filtroHabitaculoNota || '',
-          filtroCombustible: formData.filtroCombustible || false,
-          filtroCombustibleNota: formData.filtroCombustibleNota || '',
-          aditivo: formData.aditivo || false,
-          aditivoNota: formData.aditivoNota || '',
-          refrigerante: formData.refrigerante || false,
-          refrigeranteNota: formData.refrigeranteNota || '',
-          diferencial: formData.diferencial || false,
-          diferencialNota: formData.diferencialNota || '',
-          caja: formData.caja || false,
-          cajaNota: formData.cajaNota || '',
-          engrase: formData.engrase || false,
-          engraseNota: formData.engraseNota || '',
-          
-          fechaCreacion: new Date(),
-          usuarioCreacion: userProfile?.id || ''
-        };
+        // Fechas
+        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
+        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
         
-        await createOilChange(newData);
-        setSuccess('Cambio de aceite registrado correctamente');
+        // Estado
+        estado: 'completo' as OilChangeStatus,
+        fechaCompletado: new Date(),
+        usuarioCompletado: userProfile?.id || '',
         
-        setTimeout(() => {
-          navigate('/cambios-aceite');
-        }, 1500);
+        // Operario
+        nombreOperario: formData.nombreOperario || '',
+        operatorId: formData.operatorId || userProfile?.id || '',
+        
+        // Servicios adicionales
+        filtroAceite: Boolean(formData.filtroAceite),
+        filtroAceiteNota: formData.filtroAceiteNota || '',
+        filtroAire: Boolean(formData.filtroAire),
+        filtroAireNota: formData.filtroAireNota || '',
+        filtroHabitaculo: Boolean(formData.filtroHabitaculo),
+        filtroHabitaculoNota: formData.filtroHabitaculoNota || '',
+        filtroCombustible: Boolean(formData.filtroCombustible),
+        filtroCombustibleNota: formData.filtroCombustibleNota || '',
+        aditivo: Boolean(formData.aditivo),
+        aditivoNota: formData.aditivoNota || '',
+        refrigerante: Boolean(formData.refrigerante),
+        refrigeranteNota: formData.refrigeranteNota || '',
+        diferencial: Boolean(formData.diferencial),
+        diferencialNota: formData.diferencialNota || '',
+        caja: Boolean(formData.caja),
+        cajaNota: formData.cajaNota || '',
+        engrase: Boolean(formData.engrase),
+        engraseNota: formData.engraseNota || '',
+        
+        // Observaciones
+        observaciones: formData.observaciones || '',
+        
+        // Timestamp de actualización
+        updatedAt: new Date()
+      };
+      
+      await updateOilChange(id, updateData);
+      setSuccess('Cambio de aceite actualizado correctamente');
+      console.log('✅ Cambio de aceite actualizado exitosamente');
+      
+    } else {
+      // ===== MODO CREACIÓN =====
+      console.log('🔄 Creando nuevo cambio de aceite...');
+      
+      // Verificar datos del usuario
+      if (!userProfile?.lubricentroId) {
+        throw new Error('No se encontró el ID del lubricentro del usuario');
       }
-    } catch (err) {
-      console.error('Error:', err);
-      setError('Error al guardar. Por favor, intente nuevamente.');
-    } finally {
-      setSaving(false);
+      
+      // Preparar datos completos para crear
+      const createData = {
+        // IDs y referencias
+        lubricentroId: userProfile.lubricentroId,
+        lubricentroNombre: '', // ✅ CORREGIDO: String vacío en lugar de userProfile.lubricentroNombre
+        nroCambio: '', // Se generará automáticamente en el servicio
+        
+        // Datos del cliente
+        nombreCliente: formData.nombreCliente || '',
+        celular: formData.celular || '',
+        
+        // Datos del vehículo
+        dominioVehiculo: (formData.dominioVehiculo || '').toUpperCase(),
+        marcaVehiculo: formData.marcaVehiculo || '',
+        modeloVehiculo: formData.modeloVehiculo || '',
+        tipoVehiculo: formData.tipoVehiculo || 'Automóvil',
+        añoVehiculo: formData.añoVehiculo || undefined,
+        kmActuales: formData.kmActuales || 0,
+        kmProximo: formData.kmProximo || ((formData.kmActuales || 0) + 10000),
+        
+        // Datos del aceite
+        marcaAceite: formData.marcaAceite || '',
+        tipoAceite: formData.tipoAceite || '',
+        sae: formData.sae || '',
+        cantidadAceite: formData.cantidadAceite || 0,
+        perioricidad_servicio: formData.perioricidad_servicio || 6,
+        
+        // Fechas
+        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
+        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fechaProximoCambio: formData.fechaProximoCambio ? 
+          new Date(formData.fechaProximoCambio) : 
+          (() => {
+            const nextDate = new Date();
+            nextDate.setMonth(nextDate.getMonth() + (formData.perioricidad_servicio || 6));
+            return nextDate;
+          })(),
+        
+        // Estado y control
+        estado: 'completo' as OilChangeStatus,
+        fechaCreacion: new Date(),
+        fechaCompletado: new Date(),
+        usuarioCreacion: userProfile.id || '',
+        usuarioCompletado: userProfile.id || '',
+        
+        // Operario
+        nombreOperario: formData.nombreOperario || userProfile.nombre || userProfile.email || '',
+        operatorId: formData.operatorId || userProfile.id || '',
+        
+        // Servicios adicionales - Convertir a boolean explícitamente
+        filtroAceite: Boolean(formData.filtroAceite),
+        filtroAceiteNota: formData.filtroAceiteNota || '',
+        filtroAire: Boolean(formData.filtroAire),
+        filtroAireNota: formData.filtroAireNota || '',
+        filtroHabitaculo: Boolean(formData.filtroHabitaculo),
+        filtroHabitaculoNota: formData.filtroHabitaculoNota || '',
+        filtroCombustible: Boolean(formData.filtroCombustible),
+        filtroCombustibleNota: formData.filtroCombustibleNota || '',
+        aditivo: Boolean(formData.aditivo),
+        aditivoNota: formData.aditivoNota || '',
+        refrigerante: Boolean(formData.refrigerante),
+        refrigeranteNota: formData.refrigeranteNota || '',
+        diferencial: Boolean(formData.diferencial),
+        diferencialNota: formData.diferencialNota || '',
+        caja: Boolean(formData.caja),
+        cajaNota: formData.cajaNota || '',
+        engrase: Boolean(formData.engrase),
+        engraseNota: formData.engraseNota || '',
+        
+        // Observaciones
+        observaciones: formData.observaciones || '',
+        
+        // Campos adicionales que pueden ser requeridos
+        fechaEnviado: undefined,
+        usuarioEnviado: undefined,
+        notasCompletado: undefined,
+        notasEnviado: undefined
+      };
+      
+      console.log('📝 Datos preparados para crear:', createData);
+      
+      // ✅ FORZAR TIPO Y CREAR - SOLUCIÓN DEFINITIVA
+      const serviceId = await createOilChange(createData as any);
+      
+      setSuccess('Cambio de aceite registrado correctamente');
+      console.log(`✅ Cambio de aceite creado exitosamente con ID: ${serviceId}`);
     }
-  };
+    
+    // Redirigir después de éxito
+    setTimeout(() => {
+      navigate('/cambios-aceite');
+    }, 1500);
+    
+  } catch (err: any) {
+    console.error('❌ Error en handleSubmit:', err);
+    
+    // Mostrar error específico
+    let errorMessage = 'Error al guardar. Por favor, intente nuevamente.';
+    
+    if (err.message) {
+      errorMessage = err.message;
+    } else if (typeof err === 'string') {
+      errorMessage = err;
+    }
+    
+    setError(errorMessage);
+    
+  } finally {
+    setSaving(false);
+  }
+};
   // PARTE 8: FUNCIONES DE FORMATO
   const formatDateForInput = (date: Date | undefined): string => {
     if (!date) return '';

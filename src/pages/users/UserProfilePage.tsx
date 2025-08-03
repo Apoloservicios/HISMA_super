@@ -478,7 +478,7 @@ const UserProfilePage: React.FC = () => {
                     </p>
                     <ul className="text-sm text-gray-600 list-disc list-inside mb-3">
                       <li>Utiliza una imagen con fondo transparente (PNG)</li>
-                      <li>Tamaño recomendado: 500x200 píxeles</li>
+                      <li>Tamaño recomendado: 500x300 píxeles</li>
                       <li>Mantén un tamaño de archivo menor a 2MB</li>
                     </ul>
                     <p className="text-sm text-gray-600">

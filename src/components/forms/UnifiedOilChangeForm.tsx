@@ -1,4 +1,4 @@
-// src/components/forms/UnifiedOilChangeForm.tsx
+// src/components/forms/UnifiedOilChangeForm.tsx - VERSIÓN CON DEBUG Y CORRECCIÓN
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardBody, Button, Alert } from '../ui';
 import { autocompleteOptions } from '../../services/validationService';
@@ -58,7 +58,7 @@ export interface UnifiedFormData {
 interface UnifiedOilChangeFormProps {
   mode: 'create' | 'precarga' | 'complete';
   initialData?: Partial<UnifiedFormData>;
-  existingOilChange?: OilChange; // Para modo completar
+  existingOilChange?: OilChange;
   onSubmit: (data: UnifiedFormData) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
@@ -66,7 +66,7 @@ interface UnifiedOilChangeFormProps {
   subtitle?: string;
 }
 
-export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
+const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
   mode,
   initialData = {},
   existingOilChange,
@@ -76,13 +76,14 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
   title,
   subtitle
 }) => {
+  // Estado del formulario
   const [formData, setFormData] = useState<UnifiedFormData>({
     nombreCliente: '',
     celular: '',
     dominioVehiculo: '',
     marcaVehiculo: '',
     modeloVehiculo: '',
-    tipoVehiculo: 'auto',
+    tipoVehiculo: 'Automóvil',
     añoVehiculo: new Date().getFullYear(),
     kmActuales: 0,
     observaciones: '',
@@ -90,7 +91,7 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
     marcaAceite: '',
     tipoAceite: '',
     sae: '',
-    cantidadAceite: 4,
+    cantidadAceite: 0,
     perioricidad_servicio: 6,
     filtroAceite: false,
     filtroAceiteNota: '',
@@ -115,10 +116,31 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
   });
 
   const [errors, setErrors] = useState<string[]>([]);
+  const [showDebug, setShowDebug] = useState(false);
 
-  // Cargar datos iniciales cuando cambia el prop
+  // ✅ DEBUG - Verificar autocompleteOptions al cargar
   useEffect(() => {
-    if (existingOilChange) {
+    console.log('🔍 DEBUG - autocompleteOptions:', autocompleteOptions);
+    console.log('🔍 DEBUG - todasMarcasVehiculos length:', autocompleteOptions.todasMarcasVehiculos?.length);
+    console.log('🔍 DEBUG - todasMarcasVehiculos:', autocompleteOptions.todasMarcasVehiculos);
+    
+    // Si todasMarcasVehiculos está vacío, intentar regenerarlo
+    if (!autocompleteOptions.todasMarcasVehiculos || autocompleteOptions.todasMarcasVehiculos.length === 0) {
+      console.log('⚠️ todasMarcasVehiculos está vacío, regenerando...');
+      autocompleteOptions.todasMarcasVehiculos = Array.from(
+        new Set([
+          ...autocompleteOptions.marcasVehiculos,
+          ...autocompleteOptions.marcasMotos,
+          ...autocompleteOptions.marcasCamiones
+        ])
+      ).sort();
+      console.log('✅ Regenerado todasMarcasVehiculos:', autocompleteOptions.todasMarcasVehiculos.length);
+    }
+  }, []);
+
+  // Inicializar datos del servicio existente
+  useEffect(() => {
+    if (existingOilChange && mode === 'complete') {
       setFormData(prev => ({
         ...prev,
         nombreCliente: existingOilChange.nombreCliente,
@@ -129,27 +151,25 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
         tipoVehiculo: existingOilChange.tipoVehiculo,
         añoVehiculo: existingOilChange.añoVehiculo,
         kmActuales: existingOilChange.kmActuales,
-        observaciones: existingOilChange.observaciones || '',
-        // Para completar, mantener datos del servicio si existen
-        marcaAceite: existingOilChange.marcaAceite || '',
-        tipoAceite: existingOilChange.tipoAceite || '',
-        sae: existingOilChange.sae || '',
-        cantidadAceite: existingOilChange.cantidadAceite || 4,
-        perioricidad_servicio: existingOilChange.perioricidad_servicio || 6,
+        observaciones: existingOilChange.observaciones || ''
       }));
     }
-  }, [existingOilChange]);
+  }, [existingOilChange, mode]);
 
-  // Manejar cambios en inputs
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  // ✅ MANEJO DE CAMBIOS CON VALIDACIÓN DE TELÉFONO
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     
+    // ✅ CORRECCIÓN: Validar campo teléfono - solo números y caracteres telefónicos
+    if (name === 'celular') {
+      const phoneValue = value.replace(/[^0-9\s\-\(\)\+]/g, ''); // Solo números y caracteres telefónicos
+      setFormData(prev => ({ ...prev, [name]: phoneValue }));
+      return;
+    }
+    
     if (type === 'checkbox') {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData(prev => ({
-        ...prev,
-        [name]: checked
-      }));
+      const target = e.target as HTMLInputElement;
+      setFormData(prev => ({ ...prev, [name]: target.checked }));
     } else if (type === 'number') {
       setFormData(prev => ({
         ...prev,
@@ -158,7 +178,7 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
     } else {
       setFormData(prev => ({
         ...prev,
-        [name]: value
+        [name]: name === 'dominioVehiculo' ? value.toUpperCase() : value
       }));
     }
   };
@@ -167,7 +187,7 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
   const validateForm = (): string[] => {
     const errors: string[] = [];
 
-    // Validaciones básicas (siempre requeridas)
+    // Validaciones básicas
     if (!formData.nombreCliente.trim()) {
       errors.push('El nombre del cliente es obligatorio');
     }
@@ -200,6 +220,11 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
       }
     }
 
+    // ✅ VALIDACIÓN DE TELÉFONO SI ESTÁ PRESENTE
+    if (formData.celular && !/^[\d\s\-\(\)\+]+$/.test(formData.celular.trim())) {
+      errors.push('El teléfono solo puede contener números, espacios, guiones, paréntesis y el signo +');
+    }
+
     return errors;
   };
 
@@ -223,11 +248,11 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
       case 'precarga':
         return {
           title: title || 'Precarga de Servicio',
-          subtitle: subtitle || 'Registro rápido desde mostrador',
+          subtitle: subtitle || 'Registro rápido desde mostrador3333332',
           submitText: 'Guardar Precarga',
           icon: <ClockIcon className="h-5 w-5" />,
           showServiceDetails: false,
-          infoMessage: 'Complete los datos básicos del cliente y vehículo. El servicio quedará en estado "Pendiente" para completar después.'
+          infoMessage: '11Complete los datos básicos del cliente y vehículo. El servicio quedará en estado "Pendiente" para completar después.'
         };
       case 'complete':
         return {
@@ -252,85 +277,100 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
 
   const config = getModeConfig();
 
+  // ✅ CREAR LISTA DE MARCAS COMBINADA COMO FALLBACK
+  const allVehicleBrands = React.useMemo(() => {
+    if (autocompleteOptions.todasMarcasVehiculos && autocompleteOptions.todasMarcasVehiculos.length > 0) {
+      return autocompleteOptions.todasMarcasVehiculos;
+    }
+    
+    // Fallback: combinar manualmente
+    return Array.from(
+      new Set([
+        ...(autocompleteOptions.marcasVehiculos || []),
+        ...(autocompleteOptions.marcasMotos || []),
+        ...(autocompleteOptions.marcasCamiones || [])
+      ])
+    ).sort();
+  }, []);
+
   return (
     <div className="space-y-6">
-      {/* Mensaje informativo */}
-      {config.infoMessage && (
-        <Card>
-          <CardBody>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex">
-                <InformationCircleIcon className="h-5 w-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" />
-                <div>
-                  <h3 className="text-sm font-medium text-blue-800">
-                    {config.title}
-                  </h3>
-                  <p className="text-sm text-blue-700 mt-1">
-                    {config.infoMessage}
-                  </p>
-                </div>
+      {/* Header del formulario */}
+      <Card>
+        <CardHeader 
+          title={config.title}
+          subtitle={config.subtitle}
+          action={
+            <div className="flex-shrink-0">
+              <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                {config.icon}
               </div>
             </div>
-          </CardBody>
-        </Card>
-      )}
+          }
+        />
+        <CardBody>
+          <div className="flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <InformationCircleIcon className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800">
+              <p>{config.infoMessage}</p>
+            </div>
+          </div>
 
-      {/* Errores */}
-      {errors.length > 0 && (
-        <Alert type="error" className="mb-6">
-          <ul className="list-disc list-inside">
-            {errors.map((error, index) => (
-              <li key={index}>{error}</li>
-            ))}
-          </ul>
-        </Alert>
-      )}
-
-      {/* Información del servicio existente (modo completar) */}
-      {mode === 'complete' && existingOilChange && (
-        <Card>
-          <CardHeader title="Información del Servicio" />
-          <CardBody>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Cliente</h4>
-                <p className="text-sm text-gray-600">{existingOilChange.nombreCliente}</p>
-                {existingOilChange.celular && (
-                  <p className="text-sm text-gray-500">{existingOilChange.celular}</p>
-                )}
-              </div>
-              
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Vehículo</h4>
-                <p className="text-sm text-gray-600">
-                  {existingOilChange.marcaVehiculo} {existingOilChange.modeloVehiculo}
-                </p>
-                <p className="text-sm text-gray-500">
-                  {existingOilChange.dominioVehiculo} - {existingOilChange.kmActuales.toLocaleString()} km
-                </p>
-              </div>
-              
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Estado</h4>
-                <div className="flex items-center">
-                  <ClockIcon className="h-5 w-5 text-yellow-500 mr-2" />
-                  <span className="text-sm text-yellow-700">Pendiente de completar</span>
+          {/* ✅ BOTÓN DE DEBUG TEMPORAL */}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setShowDebug(!showDebug)}
+              className="text-xs text-gray-500 underline"
+            >
+              {showDebug ? 'Ocultar' : 'Mostrar'} Debug de Marcas
+            </button>
+            
+            {showDebug && (
+              <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                <p><strong>todasMarcasVehiculos:</strong> {allVehicleBrands.length} marcas</p>
+                <p><strong>Primeras 5:</strong> {allVehicleBrands.slice(0, 5).join(', ')}</p>
+                <div className="mt-2">
+                  <label className="block">Prueba aquí:</label>
+                  <input
+                    type="text"
+                    placeholder="Empieza a escribir Toyota..."
+                    list="debug-test"
+                    className="block w-full px-2 py-1 border border-gray-300 rounded"
+                  />
+                  <datalist id="debug-test">
+                    {allVehicleBrands.map((marca: string) => (
+                      <option key={marca} value={marca} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
-            </div>
-          </CardBody>
-        </Card>
-      )}
+            )}
+          </div>
+        </CardBody>
+      </Card>
 
       {/* Formulario principal */}
-      <form onSubmit={handleSubmit}>
-        {/* Datos del cliente y vehículo */}
-        <Card className="mb-6">
-          <CardHeader title="Información del Cliente y Vehículo" />
-          <CardBody>
+      <Card>
+        <CardBody>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Errores */}
+            {errors.length > 0 && (
+              <Alert type="error" className="mb-6">
+                <div>
+                  <h4 className="font-medium mb-2">Errores en el formulario:</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    {errors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              </Alert>
+            )}
+
             {/* Cliente */}
-            <div className="mb-6">
-              <h4 className="text-lg font-medium text-gray-900 mb-4">Datos del Cliente</h4>
+            <div>
+              <h4 className="text-lg font-medium text-gray-900 mb-4">Información del Cliente</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -357,10 +397,13 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                     name="celular"
                     value={formData.celular}
                     onChange={handleInputChange}
-                    placeholder="Número de contacto"
+                    placeholder="Número de contacto (solo números)"
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     disabled={mode === 'complete'}
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Solo números, espacios, guiones, paréntesis y signo +
+                  </p>
                 </div>
               </div>
             </div>
@@ -387,7 +430,7 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Marca *
+                    Marca * <span className="text-xs text-gray-500">({allVehicleBrands.length} opciones)</span>
                   </label>
                   <input
                     type="text"
@@ -395,13 +438,14 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                     value={formData.marcaVehiculo}
                     onChange={handleInputChange}
                     placeholder="Toyota, Ford, etc."
-                    list="marcas-vehiculo"
+                    list="marcas-vehiculo-unified"
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     required
                     disabled={mode === 'complete'}
                   />
-                  <datalist id="marcas-vehiculo">
-                    {autocompleteOptions.marcasVehiculos.map((marca: string) => (
+                  {/* ✅ CORRECCIÓN: Usar allVehicleBrands y ID único */}
+                  <datalist id="marcas-vehiculo-unified">
+                    {allVehicleBrands.map((marca: string) => (
                       <option key={marca} value={marca} />
                     ))}
                   </datalist>
@@ -434,12 +478,12 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     disabled={mode === 'complete'}
                   >
-                    <option value="auto">Automóvil</option>
-                    <option value="camioneta">Camioneta</option>
-                    <option value="suv">SUV</option>
-                    <option value="pickup">Pick Up</option>
-                    <option value="camion">Camión</option>
-                    <option value="moto">Motocicleta</option>
+                    <option value="Automóvil">Automóvil</option>
+                    <option value="SUV/Camioneta">SUV/Camioneta</option>
+                    <option value="Camión">Camión</option>
+                    <option value="Moto">Moto</option>
+                    <option value="Maquinaria">Maquinaria</option>
+                    <option value="Otro">Otro</option>
                   </select>
                 </div>
                 
@@ -452,9 +496,9 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                     name="añoVehiculo"
                     value={formData.añoVehiculo || ''}
                     onChange={handleInputChange}
-                    min="1950"
-                    max={new Date().getFullYear() + 1}
                     placeholder="2020"
+                    min="1900"
+                    max={new Date().getFullYear() + 1}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     disabled={mode === 'complete'}
                   />
@@ -469,63 +513,57 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                     name="kmActuales"
                     value={formData.kmActuales}
                     onChange={handleInputChange}
+                    placeholder="150000"
                     min="0"
-                    placeholder="50000"
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     required
+                    disabled={mode === 'complete'}
                   />
                 </div>
               </div>
             </div>
-          </CardBody>
-        </Card>
 
-        {/* Datos del servicio (solo para create y complete) */}
-        {config.showServiceDetails && (
-          <Card className="mb-6">
-            <CardHeader title="Datos del Servicio Realizado" />
-            <CardBody>
-              {/* Fecha y periodicidad */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Fecha del Servicio *
-                  </label>
-                  <div className="relative">
-                    <CalendarDaysIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            {/* Datos del servicio - solo si es necesario */}
+            {config.showServiceDetails && (
+              <div>
+                <h4 className="text-lg font-medium text-gray-900 mb-4">Datos del Servicio</h4>
+                
+                {/* Fecha de servicio y perioricidad */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Fecha de Servicio *
+                    </label>
                     <input
                       type="date"
                       name="fechaServicio"
                       value={formData.fechaServicio}
                       onChange={handleInputChange}
-                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       required
                     />
                   </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Periodicidad (meses) *
+                    </label>
+                    <select
+                      name="perioricidad_servicio"
+                      value={formData.perioricidad_servicio}
+                      onChange={handleInputChange}
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      required
+                    >
+                      <option value={3}>3 meses</option>
+                      <option value={6}>6 meses</option>
+                      <option value={12}>12 meses</option>
+                    </select>
+                  </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Periodicidad (meses) *
-                  </label>
-                  <select
-                    name="perioricidad_servicio"
-                    value={formData.perioricidad_servicio}
-                    onChange={handleInputChange}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                    required
-                  >
-                    <option value={3}>3 meses</option>
-                    <option value={6}>6 meses</option>
-                    <option value={12}>12 meses</option>
-                  </select>
-                </div>
-              </div>
 
-              {/* Datos del aceite */}
-              <div>
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Datos del Aceite</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Datos del aceite */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Marca del Aceite *
@@ -535,13 +573,13 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                       name="marcaAceite"
                       value={formData.marcaAceite}
                       onChange={handleInputChange}
-                      placeholder="Shell, Mobil, Castrol..."
+                      placeholder="Shell, Mobil, etc."
                       list="marcas-aceite"
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       required
                     />
                     <datalist id="marcas-aceite">
-                      {autocompleteOptions.marcasAceite.map((marca: string) => (
+                      {(autocompleteOptions.marcasAceite || []).map((marca: string) => (
                         <option key={marca} value={marca} />
                       ))}
                     </datalist>
@@ -559,9 +597,9 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                       required
                     >
                       <option value="">Seleccionar...</option>
-                      <option value="Mineral">Mineral</option>
-                      <option value="Semi-sintético">Semi-sintético</option>
-                      <option value="Sintético">Sintético</option>
+                      {(autocompleteOptions.tiposAceite || []).map((tipo: string) => (
+                        <option key={tipo} value={tipo}>{tipo}</option>
+                      ))}
                     </select>
                   </div>
                   
@@ -574,14 +612,14 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                       name="sae"
                       value={formData.sae}
                       onChange={handleInputChange}
-                      placeholder="10W-40, 5W-30..."
-                      list="sae-opciones"
+                      placeholder="5W-30, 10W-40, etc."
+                      list="viscosidad"
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       required
                     />
-                    <datalist id="sae-opciones">
-                      {autocompleteOptions.viscosidad.map((sae: string) => (
-                        <option key={sae} value={sae} />
+                    <datalist id="viscosidad">
+                      {(autocompleteOptions.viscosidad || []).map((visc: string) => (
+                        <option key={visc} value={visc} />
                       ))}
                     </datalist>
                   </div>
@@ -595,125 +633,190 @@ export const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
                       name="cantidadAceite"
                       value={formData.cantidadAceite}
                       onChange={handleInputChange}
-                      min="0.5"
-                      max="20"
-                      step="0.5"
                       placeholder="4"
+                      min="0"
+                      step="0.5"
                       className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                       required
                     />
                   </div>
                 </div>
-              </div>
 
-              {/* Servicios adicionales */}
-              <div className="mt-6">
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Servicios Adicionales</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {[
-                    { key: 'filtroAceite', label: 'Filtro de Aceite' },
-                    { key: 'filtroAire', label: 'Filtro de Aire' },
-                    { key: 'filtroHabitaculo', label: 'Filtro de Habitáculo' },
-                    { key: 'filtroCombustible', label: 'Filtro de Combustible' },
-                    { key: 'aditivo', label: 'Aditivo' },
-                    { key: 'refrigerante', label: 'Refrigerante' },
-                    { key: 'diferencial', label: 'Diferencial' },
-                    { key: 'caja', label: 'Caja' },
-                    { key: 'engrase', label: 'Engrase' }
-                  ].map((service) => (
-                    <div key={service.key} className="space-y-2">
-                      <div className="flex items-center">
+                {/* Servicios adicionales */}
+                <div>
+                  <h5 className="text-md font-medium text-gray-900 mb-4">Servicios Adicionales</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Filtros */}
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
                         <input
                           type="checkbox"
-                          id={service.key}
-                          name={service.key}
-                          checked={formData[service.key as keyof UnifiedFormData] as boolean}
+                          name="filtroAceite"
+                          checked={formData.filtroAceite}
                           onChange={handleInputChange}
-                          className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                         />
-                        <label htmlFor={service.key} className="ml-2 text-sm font-medium text-gray-700">
-                          {service.label}
-                        </label>
+                        <label className="text-sm text-gray-700">Filtro de Aceite</label>
                       </div>
                       
-                      {formData[service.key as keyof UnifiedFormData] && (
+                      <div className="flex items-center space-x-3">
                         <input
-                          type="text"
-                          name={`${service.key}Nota`}
-                          value={formData[`${service.key}Nota` as keyof UnifiedFormData] as string}
+                          type="checkbox"
+                          name="filtroAire"
+                          checked={formData.filtroAire}
                           onChange={handleInputChange}
-                          placeholder={`Detalles del ${service.label.toLowerCase()}...`}
-                          className="block w-full px-3 py-2 text-sm border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                         />
-                      )}
+                        <label className="text-sm text-gray-700">Filtro de Aire</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="filtroHabitaculo"
+                          checked={formData.filtroHabitaculo}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Filtro de Habitáculo</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="filtroCombustible"
+                          checked={formData.filtroCombustible}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Filtro de Combustible</label>
+                      </div>
                     </div>
-                  ))}
+
+                    {/* Otros servicios */}
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="aditivo"
+                          checked={formData.aditivo}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Aditivo</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="refrigerante"
+                          checked={formData.refrigerante}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Refrigerante</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="diferencial"
+                          checked={formData.diferencial}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Diferencial</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="caja"
+                          checked={formData.caja}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Caja de Cambios</label>
+                      </div>
+                      
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          name="engrase"
+                          checked={formData.engrase}
+                          onChange={handleInputChange}
+                          className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <label className="text-sm text-gray-700">Engrase General</label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </CardBody>
-          </Card>
-        )}
+            )}
 
-        {/* Observaciones */}
-        <Card className="mb-6">
-          <CardHeader title="Observaciones" />
-          <CardBody>
-            <div className="space-y-4">
+            {/* Observaciones */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Observaciones
+              </label>
+              <textarea
+                name="observaciones"
+                value={formData.observaciones}
+                onChange={handleInputChange}
+                placeholder="Observaciones adicionales..."
+                rows={3}
+                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                disabled={mode === 'complete'}
+              />
+            </div>
+
+            {/* Notas de completado - solo para modo complete */}
+            {mode === 'complete' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Observaciones Generales
+                  Notas del Completado
                 </label>
                 <textarea
-                  name="observaciones"
-                  value={formData.observaciones}
+                  name="notasCompletado"
+                  value={formData.notasCompletado}
                   onChange={handleInputChange}
+                  placeholder="Notas adicionales sobre el servicio realizado..."
                   rows={3}
-                  placeholder="Observaciones sobre el vehículo, estado del aceite, etc..."
                   className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
-              
-              {mode === 'complete' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notas de Completado
-                  </label>
-                  <textarea
-                    name="notasCompletado"
-                    value={formData.notasCompletado}
-                    onChange={handleInputChange}
-                    rows={2}
-                    placeholder="Notas adicionales sobre la completación del servicio..."
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                  />
-                </div>
-              )}
-            </div>
-          </CardBody>
-        </Card>
+            )}
 
-        {/* Botones de acción */}
-        <div className="flex justify-end space-x-4">
-          <Button
-            type="button"
-            color="secondary"
-            variant="outline"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            Cancelar
-          </Button>
-          
-          <Button
-            type="submit"
-            color="primary"
-            disabled={loading}
-            icon={loading ? undefined : config.icon}
-          >
-            {loading ? 'Procesando...' : config.submitText}
-          </Button>
-        </div>
-      </form>
+            {/* Botones */}
+            <div className="flex justify-end space-x-4 pt-6 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                color="primary"
+                disabled={loading}
+                className="min-w-[140px]"
+              >
+                {loading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Guardando...</span>
+                  </div>
+                ) : (
+                  config.submitText
+                )}
+              </Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
     </div>
   );
 };

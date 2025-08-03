@@ -1,5 +1,5 @@
-// src/pages/oilchanges/QuickOilChangeFormPage.tsx
-import React, { useState } from 'react';
+// src/pages/oilchanges/QuickOilChangeFormPage.tsx - VERSIÓN CORREGIDA
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -12,9 +12,11 @@ import {
   Spinner 
 } from '../../components/ui';
 import { createPendingOilChange } from '../../services/oilChangeService';
+import { autocompleteOptions } from '../../services/validationService'; // ✅ AGREGAR IMPORT
 import { 
   ClockIcon, 
-  PlusIcon 
+  PlusIcon,
+  InformationCircleIcon // ✅ AGREGAR IMPORT
 } from '@heroicons/react/24/outline';
 
 const QuickOilChangeFormPage: React.FC = () => {
@@ -25,6 +27,7 @@ const QuickOilChangeFormPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+ 
   
   // Datos del formulario simplificado
   const [formData, setFormData] = useState({
@@ -33,15 +36,45 @@ const QuickOilChangeFormPage: React.FC = () => {
     dominioVehiculo: '',
     marcaVehiculo: '',
     modeloVehiculo: '',
-    tipoVehiculo: 'auto',
+    tipoVehiculo: 'Automóvil', // ✅ CAMBIAR DE 'auto' A 'Automóvil'
     añoVehiculo: new Date().getFullYear(),
     kmActuales: 0,
     observaciones: ''
   });
+
+  // ✅ DEBUG Y FALLBACK PARA MARCAS
+  const allVehicleBrands = React.useMemo(() => {
+    if (autocompleteOptions.todasMarcasVehiculos && autocompleteOptions.todasMarcasVehiculos.length > 0) {
+      return autocompleteOptions.todasMarcasVehiculos;
+    }
+    
+    // Fallback: combinar manualmente
+    return Array.from(
+      new Set([
+        ...(autocompleteOptions.marcasVehiculos || []),
+        ...(autocompleteOptions.marcasMotos || []),
+        ...(autocompleteOptions.marcasCamiones || [])
+      ])
+    ).sort();
+  }, []);
+
+  // ✅ DEBUG AL CARGAR
+  useEffect(() => {
+    console.log('🔍 QuickForm DEBUG - autocompleteOptions:', autocompleteOptions);
+    console.log('🔍 QuickForm DEBUG - allVehicleBrands length:', allVehicleBrands.length);
+    console.log('🔍 QuickForm DEBUG - primeras 5 marcas:', allVehicleBrands.slice(0, 5));
+  }, [allVehicleBrands]);
   
-  // Manejar cambios en el formulario
+  // ✅ MANEJAR CAMBIOS CON VALIDACIÓN DE TELÉFONO
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
+    
+    // ✅ VALIDAR TELÉFONO - solo números y caracteres telefónicos
+    if (name === 'celular') {
+      const phoneValue = value.replace(/[^0-9\s\-\(\)\+]/g, '');
+      setFormData(prev => ({ ...prev, [name]: phoneValue }));
+      return;
+    }
     
     if (type === 'number') {
       setFormData(prev => ({
@@ -79,6 +112,11 @@ const QuickOilChangeFormPage: React.FC = () => {
     if (formData.kmActuales <= 0) {
       errors.push('El kilometraje actual debe ser mayor a 0');
     }
+
+    // ✅ VALIDACIÓN DE TELÉFONO
+    if (formData.celular && !/^[\d\s\-\(\)\+]+$/.test(formData.celular.trim())) {
+      errors.push('El teléfono solo puede contener números, espacios, guiones, paréntesis y el signo +');
+    }
     
     return errors;
   };
@@ -92,25 +130,35 @@ const QuickOilChangeFormPage: React.FC = () => {
       return;
     }
     
-    // Validar
     const validationErrors = validateForm();
     if (validationErrors.length > 0) {
       setError(validationErrors.join(', '));
       return;
     }
     
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    
     try {
-      setSaving(true);
-      setError(null);
-      
-      await createPendingOilChange({
-        ...formData,
+      const oilChangeData = {
         lubricentroId: userProfile.lubricentroId,
+        nombreCliente: formData.nombreCliente,
+        celular: formData.celular,
+        dominioVehiculo: formData.dominioVehiculo,
+        marcaVehiculo: formData.marcaVehiculo,
+        modeloVehiculo: formData.modeloVehiculo,
+        tipoVehiculo: formData.tipoVehiculo,
+        añoVehiculo: formData.añoVehiculo,
+        kmActuales: formData.kmActuales,
+        observaciones: formData.observaciones,
         usuarioCreacion: userProfile.id,
-        operatorName: `${userProfile.nombre} ${userProfile.apellido}`
-      });
+        operatorName: userProfile.nombre || userProfile.email
+      };
       
-      setSuccess('Cambio de aceite precargado correctamente. El servicio queda pendiente para completar.');
+      await createPendingOilChange(oilChangeData);
+      
+      setSuccess('¡Precarga guardada exitosamente! El servicio quedó en estado "Pendiente".');
       
       // Limpiar formulario
       setFormData({
@@ -119,20 +167,20 @@ const QuickOilChangeFormPage: React.FC = () => {
         dominioVehiculo: '',
         marcaVehiculo: '',
         modeloVehiculo: '',
-        tipoVehiculo: 'auto',
+        tipoVehiculo: 'Automóvil',
         añoVehiculo: new Date().getFullYear(),
         kmActuales: 0,
         observaciones: ''
       });
       
-      // Redirigir después de un momento
+      // Redirigir después de 2 segundos
       setTimeout(() => {
         navigate('/cambios-aceite/pendientes');
       }, 2000);
       
-    } catch (err) {
-      console.error('Error al crear el cambio pendiente:', err);
-      setError('Error al guardar los datos. Por favor, intente nuevamente.');
+    } catch (err: any) {
+      console.error('Error al crear precarga:', err);
+      setError(err.message || 'Error al guardar la precarga. Por favor, intente nuevamente.');
     } finally {
       setSaving(false);
     }
@@ -140,48 +188,27 @@ const QuickOilChangeFormPage: React.FC = () => {
   
   return (
     <PageContainer
-      title="Precarga de Servicio"
-      subtitle="Registro rápido desde mostrador"
-      action={
-        <Button
-          color="secondary"
-          variant="outline"
-          onClick={() => navigate('/cambios-aceite/pendientes')}
-          icon={<ClockIcon className="h-5 w-5" />}
-        >
-          Ver Pendientes
-        </Button>
-      }
+      title="Precarga Rápida"
+      subtitle="Registro desde mostrador para completar después"
     >
-      {error && (
-        <Alert type="error" className="mb-6" dismissible onDismiss={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      
-      {success && (
-        <Alert type="success" className="mb-6">
-          {success}
-        </Alert>
-      )}
-      
-      {/* Información sobre el proceso */}
-      <Card className="mb-6">
+      {/* Información importante */}
+      <Card>
+        <CardHeader title="Información Importante" />
         <CardBody>
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex">
-              <ClockIcon className="h-5 w-5 text-blue-400 mt-0.5 mr-3 flex-shrink-0" />
-              <div>
-                <h3 className="text-sm font-medium text-blue-800">
-                  Precarga de Servicio
-                </h3>
-                <p className="text-sm text-blue-700 mt-1">
-                  Complete los datos básicos del cliente y vehículo. El servicio quedará en estado "Pendiente" 
-                  para que el mecánico pueda tomarlo y completar los detalles del cambio de aceite.
-                </p>
-              </div>
+          <div className="flex items-start space-x-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex-shrink-0">
+              <ClockIcon className="h-5 w-5 text-blue-600" />
+            </div>
+            <div className="text-sm text-blue-800">
+              <p className="font-medium">¿Qué es la precarga rápida?</p>
+              <p className="mt-1">
+                Esta función permite registrar rápidamente los datos básicos del cliente y vehículo desde el mostrador. 
+                El servicio quedará en estado "Pendiente" para que el mecánico pueda tomarlo y completar los detalles del cambio de aceite.
+              </p>
             </div>
           </div>
+
+          
         </CardBody>
       </Card>
       
@@ -190,6 +217,20 @@ const QuickOilChangeFormPage: React.FC = () => {
         <CardHeader title="Datos del Cliente y Vehículo" />
         <CardBody>
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Mostrar errores */}
+            {error && (
+              <Alert type="error" className="mb-4">
+                {error}
+              </Alert>
+            )}
+            
+            {/* Mostrar éxito */}
+            {success && (
+              <Alert type="success" className="mb-4">
+                {success}
+              </Alert>
+            )}
+
             {/* Datos del cliente */}
             <div>
               <h4 className="text-lg font-medium text-gray-900 mb-4">Información del Cliente</h4>
@@ -218,9 +259,12 @@ const QuickOilChangeFormPage: React.FC = () => {
                     name="celular"
                     value={formData.celular}
                     onChange={handleInputChange}
-                    placeholder="Número de contacto"
+                    placeholder="Número de contacto (solo números)"
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Solo números, espacios, guiones, paréntesis y signo +
+                  </p>
                 </div>
               </div>
             </div>
@@ -246,17 +290,24 @@ const QuickOilChangeFormPage: React.FC = () => {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Marca *
+                    Marca * <span className="text-xs text-gray-500">({allVehicleBrands.length} opciones)</span>
                   </label>
                   <input
                     type="text"
                     name="marcaVehiculo"
                     value={formData.marcaVehiculo}
                     onChange={handleInputChange}
-                    placeholder="Ford, Chevrolet, etc."
+                    placeholder="Ford, Chevrolet, Toyota, etc."
+                    list="marcas-vehiculo-quick" // ✅ AGREGAR DATALIST
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     required
                   />
+                  {/* ✅ AGREGAR DATALIST CON TODAS LAS MARCAS */}
+                  <datalist id="marcas-vehiculo-quick">
+                    {allVehicleBrands.map((marca: string) => (
+                      <option key={marca} value={marca} />
+                    ))}
+                  </datalist>
                 </div>
                 
                 <div>
@@ -268,7 +319,7 @@ const QuickOilChangeFormPage: React.FC = () => {
                     name="modeloVehiculo"
                     value={formData.modeloVehiculo}
                     onChange={handleInputChange}
-                    placeholder="Focus, Corsa, etc."
+                    placeholder="Focus, Corsa, Corolla, etc."
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     required
                   />
@@ -284,12 +335,12 @@ const QuickOilChangeFormPage: React.FC = () => {
                     onChange={handleInputChange}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   >
-                    <option value="auto">Auto</option>
-                    <option value="suv">SUV</option>
-                    <option value="pickup">Pickup</option>
-                    <option value="utilitario">Utilitario</option>
-                    <option value="camion">Camión</option>
-                    <option value="moto">Moto</option>
+                    <option value="Automóvil">Automóvil</option>
+                    <option value="SUV/Camioneta">SUV/Camioneta</option>
+                    <option value="Camión">Camión</option>
+                    <option value="Moto">Moto</option>
+                    <option value="Maquinaria">Maquinaria</option>
+                    <option value="Otro">Otro</option>
                   </select>
                 </div>
                 
@@ -302,7 +353,8 @@ const QuickOilChangeFormPage: React.FC = () => {
                     name="añoVehiculo"
                     value={formData.añoVehiculo}
                     onChange={handleInputChange}
-                    min="1980"
+                    placeholder="2020"
+                    min="1900"
                     max={new Date().getFullYear() + 1}
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
@@ -317,8 +369,8 @@ const QuickOilChangeFormPage: React.FC = () => {
                     name="kmActuales"
                     value={formData.kmActuales}
                     onChange={handleInputChange}
+                    placeholder="150000"
                     min="0"
-                    placeholder="Ej: 50000"
                     className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                     required
                   />
@@ -335,8 +387,8 @@ const QuickOilChangeFormPage: React.FC = () => {
                 name="observaciones"
                 value={formData.observaciones}
                 onChange={handleInputChange}
+                placeholder="Observaciones adicionales sobre el vehículo o cliente..."
                 rows={3}
-                placeholder="Notas adicionales sobre el vehículo o servicio solicitado..."
                 className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
               />
             </div>
@@ -345,21 +397,29 @@ const QuickOilChangeFormPage: React.FC = () => {
             <div className="flex justify-end space-x-4 pt-6 border-t">
               <Button
                 type="button"
-                color="secondary"
                 variant="outline"
                 onClick={() => navigate('/cambios-aceite')}
                 disabled={saving}
               >
                 Cancelar
               </Button>
-              
               <Button
                 type="submit"
                 color="primary"
                 disabled={saving}
-                icon={saving ? undefined : <PlusIcon className="h-5 w-5" />}
+                className="min-w-[160px]"
               >
-                {saving ? 'Guardando...' : 'Precargar Servicio'}
+                {saving ? (
+                  <div className="flex items-center space-x-2">
+                    <Spinner size="sm" color="white" />
+                    <span>Guardando...</span>
+                  </div>
+                ) : (
+                  <>
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    Guardar Precarga
+                  </>
+                )}
               </Button>
             </div>
           </form>
