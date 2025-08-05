@@ -202,7 +202,7 @@ const OilChangeFormPage: React.FC = () => {
         let targetLubricentroId: string = '';
 
         if (isEditing && id) {
-          console.log('🔄 Cargando servicio para editar:', id);
+       
           const oilChangeData = await getOilChangeById(id);
           
           if (!oilChangeData) {
@@ -231,7 +231,7 @@ const OilChangeFormPage: React.FC = () => {
           });
 
           setLubricentro(lubricentroData);
-          console.log('✅ Servicio cargado correctamente para edición');
+ 
           return;
         }
 
@@ -506,8 +506,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   
   try {
     if (isEditing && id) {
-      // ===== MODO EDICIÓN =====
-      console.log('🔄 Actualizando cambio de aceite existente...');
+ 
       
       const updateData: Partial<OilChange> = {
         // Datos básicos del cliente
@@ -573,11 +572,11 @@ const handleSubmit = async (e: React.FormEvent) => {
       
       await updateOilChange(id, updateData);
       setSuccess('Cambio de aceite actualizado correctamente');
-      console.log('✅ Cambio de aceite actualizado exitosamente');
+ 
       
     } else {
       // ===== MODO CREACIÓN =====
-      console.log('🔄 Creando nuevo cambio de aceite...');
+
       
       // Verificar datos del usuario
       if (!userProfile?.lubricentroId) {
@@ -663,13 +662,10 @@ const handleSubmit = async (e: React.FormEvent) => {
         notasEnviado: undefined
       };
       
-      console.log('📝 Datos preparados para crear:', createData);
-      
-      // ✅ FORZAR TIPO Y CREAR - SOLUCIÓN DEFINITIVA
-      const serviceId = await createOilChange(createData as any);
+     const serviceId = await createOilChange(createData as any);
       
       setSuccess('Cambio de aceite registrado correctamente');
-      console.log(`✅ Cambio de aceite creado exitosamente con ID: ${serviceId}`);
+
     }
     
     // Redirigir después de éxito
@@ -678,7 +674,7 @@ const handleSubmit = async (e: React.FormEvent) => {
     }, 1500);
     
   } catch (err: any) {
-    console.error('❌ Error en handleSubmit:', err);
+
     
     // Mostrar error específico
     let errorMessage = 'Error al guardar. Por favor, intente nuevamente.';

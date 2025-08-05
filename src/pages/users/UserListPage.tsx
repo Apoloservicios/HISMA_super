@@ -77,27 +77,27 @@ const CreateUserModal: React.FC<{
 
   // ✅ FUNCIÓN PARA BOTÓN CLICK DEL MODAL
   const handleModalSubmit = async () => {
-    console.log('🔄 Iniciando creación de usuario...', formData); // ✅ DEBUG
+
     setError(null);
 
     // Validar coincidencia de contraseñas
     if (formData.password !== formData.confirmPassword) {
-      console.log('❌ Error: Contraseñas no coinciden'); // ✅ DEBUG
+     
       setError('Las contraseñas no coinciden');
       return;
     }
 
     // Validar longitud de contraseña
     if (formData.password.length < 6) {
-      console.log('❌ Error: Contraseña muy corta'); // ✅ DEBUG
+  
       setError('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
     try {
-      console.log('✅ Validaciones pasadas, llamando onSubmit...'); // ✅ DEBUG
+     
       await onSubmit(formData);
-      console.log('✅ Usuario creado exitosamente'); // ✅ DEBUG
+   
       // Resetear formulario
       setFormData({
         nombre: '',
@@ -108,7 +108,7 @@ const CreateUserModal: React.FC<{
       });
       onClose();
     } catch (err: any) {
-      console.error('❌ Error al crear usuario:', err); // ✅ DEBUG
+     
       setError(err.message || 'Error al crear el usuario');
     }
   };
@@ -404,9 +404,9 @@ const UserListPage: React.FC = () => {
   
   // Crear nuevo usuario
   const handleCreateUser = async (userData: any) => {
-    console.log('🔄 handleCreateUser llamado con:', userData); // ✅ DEBUG
+  
     if (!userProfile?.lubricentroId || !lubricentro) {
-      console.log('❌ Error: No hay lubricentroId o lubricentro'); // ✅ DEBUG
+   
       return;
     }
     
@@ -418,13 +418,12 @@ const UserListPage: React.FC = () => {
         ? SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan].maxUsers 
         : 2;
       
-      console.log(`📊 Usuarios activos: ${activeUsers}, Máximo: ${maxUsers}`); // ✅ DEBUG
+   
       
       if (activeUsers >= maxUsers) {
         throw new Error(`Has alcanzado el límite de ${maxUsers} usuarios permitidos según tu plan ${lubricentro.subscriptionPlan?.toUpperCase() || 'BÁSICO'}`);
       }
       
-      console.log('✅ Límites OK, creando usuario...'); // ✅ DEBUG
       
       // ✅ CAMBIO PRINCIPAL: Usar createUser en lugar de inviteUser
       await createUser(userData.email, userData.password, {
@@ -436,7 +435,7 @@ const UserListPage: React.FC = () => {
         lubricentroId: userProfile.lubricentroId
       });
       
-      console.log('✅ Usuario invitado, recargando datos...'); // ✅ DEBUG
+
       // Recargar usuarios y lubricentro
       const [usersData, lubricentroData] = await Promise.all([
         getUsersByLubricentro(userProfile.lubricentroId),
@@ -446,10 +445,10 @@ const UserListPage: React.FC = () => {
       setUsers(usersData);
       setFilteredUsers(usersData);
       setLubricentro(lubricentroData);
-      console.log('✅ Datos recargados exitosamente'); // ✅ DEBUG
+     
       
     } catch (err: any) {
-      console.error('❌ Error en handleCreateUser:', err); // ✅ DEBUG
+
       throw new Error(err.message || 'Error al crear el usuario');
     } finally {
       setProcessingCreate(false);

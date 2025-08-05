@@ -53,7 +53,7 @@ export interface Lubricentro {
   subscriptionPlan?: SubscriptionPlanType | string; // ✅ Acepta planes dinámicos
   subscriptionStartDate?: Date;
   subscriptionEndDate?: Date;
-  subscriptionRenewalType?: 'monthly' | 'semiannual' | 'service'; // ✅ Agregado 'service'
+  subscriptionRenewalType?: 'monthly' | 'semiannual' | 'annual' | 'service'; // ✅ Agregado 'service'
   contractEndDate?: Date;         
   billingCycleEndDate?: Date;     
   lastPaymentDate?: Date;         
@@ -210,10 +210,10 @@ export const isValidPlan = (plan: string | undefined): boolean => {
 /**
  * Obtiene el tipo de suscripción basado en el estado del lubricentro
  */
-export const getSubscriptionType = (lubricentro: Lubricentro): 'trial' | 'service' | 'monthly' | 'inactive' => {
+export const getSubscriptionType = (lubricentro: Lubricentro): 'trial' | 'annual' | 'monthly' | 'inactive' => {
   if (lubricentro.estado === 'trial') return 'trial';
   if (lubricentro.estado !== 'activo') return 'inactive';
-  if (lubricentro.subscriptionRenewalType === 'service') return 'service';
+  if (lubricentro.subscriptionRenewalType === 'annual') return 'annual';
   return 'monthly';
 };
 
@@ -228,7 +228,7 @@ export const getAvailableServices = (lubricentro: Lubricentro): number | null =>
       const trialLimit = 10; // TRIAL_LIMITS.SERVICES
       return Math.max(0, trialLimit - (lubricentro.servicesUsedThisMonth || 0));
       
-    case 'service':
+    case 'annual':
       return lubricentro.servicesRemaining || 0;
       
     case 'monthly':
@@ -255,7 +255,7 @@ export const canUseService = (lubricentro: Lubricentro): boolean => {
       const trialLimit = 10;
       return (lubricentro.servicesUsedThisMonth || 0) < trialLimit;
       
-    case 'service':
+    case 'annual':
       return (lubricentro.servicesRemaining || 0) > 0;
       
     case 'monthly':
@@ -323,7 +323,7 @@ export const getServiceUsageProgress = (lubricentro: Lubricentro): {
         remaining: Math.max(0, trialLimit - trialUsed)
       };
       
-    case 'service':
+    case 'annual':
       const totalContracted = lubricentro.totalServicesContracted || 0;
       const servicesUsed = lubricentro.servicesUsed || 0;
       return {

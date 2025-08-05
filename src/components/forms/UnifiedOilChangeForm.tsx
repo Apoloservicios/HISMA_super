@@ -120,13 +120,9 @@ const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
 
   // ✅ DEBUG - Verificar autocompleteOptions al cargar
   useEffect(() => {
-    console.log('🔍 DEBUG - autocompleteOptions:', autocompleteOptions);
-    console.log('🔍 DEBUG - todasMarcasVehiculos length:', autocompleteOptions.todasMarcasVehiculos?.length);
-    console.log('🔍 DEBUG - todasMarcasVehiculos:', autocompleteOptions.todasMarcasVehiculos);
     
     // Si todasMarcasVehiculos está vacío, intentar regenerarlo
     if (!autocompleteOptions.todasMarcasVehiculos || autocompleteOptions.todasMarcasVehiculos.length === 0) {
-      console.log('⚠️ todasMarcasVehiculos está vacío, regenerando...');
       autocompleteOptions.todasMarcasVehiculos = Array.from(
         new Set([
           ...autocompleteOptions.marcasVehiculos,
@@ -134,7 +130,6 @@ const UnifiedOilChangeForm: React.FC<UnifiedOilChangeFormProps> = ({
           ...autocompleteOptions.marcasCamiones
         ])
       ).sort();
-      console.log('✅ Regenerado todasMarcasVehiculos:', autocompleteOptions.todasMarcasVehiculos.length);
     }
   }, []);
 

@@ -2,6 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+
+// Importar funciones de Firebase
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+
+// Componentes UI
 import { 
   PageContainer, 
   Card, 
@@ -13,6 +19,7 @@ import {
   Badge
 } from '../../components/ui';
 
+// Servicios
 import { 
   getAllLubricentros, 
   updateLubricentroStatus, 
@@ -20,8 +27,12 @@ import {
   getLubricentroById
 } from '../../services/lubricentroService';
 
+// Tipos
 import { Lubricentro, LubricentroStatus } from '../../types';
 import { SUBSCRIPTION_PLANS, SubscriptionPlanType } from '../../types/subscription';
+
+// Modal de edición
+import SuperAdminEditLubricentroModal from '../../components/SuperAdminEditLubricentroModal';
 
 // Iconos
 import { 
@@ -37,19 +48,16 @@ import {
   CreditCardIcon,
   CalendarDaysIcon,
   WrenchIcon,
-  WrenchScrewdriverIcon 
+  WrenchScrewdriverIcon,
+  PencilIcon 
 } from '@heroicons/react/24/outline';
 
+// Estado para almacenar los planes dinámicos
+let cachedPlans: any[] = [];
+let plansLastFetched = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
-
-
-// Función utilitaria para validar planes
-const isValidSubscriptionPlan = (plan: string | undefined): boolean => {
-  if (!plan) return false;
-  return ['starter', 'basic', 'premium', 'enterprise'].includes(plan as SubscriptionPlanType);
-};
-
-// Interfaces para props de componentes
+// Interfaces
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -61,165 +69,191 @@ interface ExtendTrialModalProps extends ModalProps {
   onConfirm: (days: number) => Promise<void>;
 }
 
+interface StatsType {
+  total: number;
+  activos: number;
+  inactivos: number;
+  trial: number;
+  expiring7Days: number;
+}
 
-// Función mejorada para obtener nombre del plan
-const getPlanDisplayName = (lubricentro: Lubricentro): string => {
+// ================================
+// FUNCIONES UTILITARIAS
+// ================================
+
+// Función de debug
+const debugLubricentroData = (lubricentro: Lubricentro, context: string) => {
+  console.log(`🔍 DEBUG [${context}] - Lubricentro: ${lubricentro.fantasyName}`);
+  console.log('📋 Datos completos:', {
+    id: lubricentro.id,
+    fantasyName: lubricentro.fantasyName,
+    estado: lubricentro.estado,
+    subscriptionPlan: lubricentro.subscriptionPlan,
+    subscriptionRenewalType: lubricentro.subscriptionRenewalType,
+    servicesUsed: lubricentro.servicesUsed,
+    servicesUsedThisMonth: lubricentro.servicesUsedThisMonth,
+    totalServicesContracted: lubricentro.totalServicesContracted,
+    trialEndDate: lubricentro.trialEndDate,
+    subscriptionEndDate: lubricentro.subscriptionEndDate,
+    createdAt: lubricentro.createdAt
+  });
+};
+
+// Función para obtener todos los planes desde Firebase
+const fetchAllPlansFromFirebase = async (): Promise<any[]> => {
+  try {
+    const now = Date.now();
+    if (cachedPlans.length > 0 && (now - plansLastFetched) < CACHE_DURATION) {
+      console.log('📋 Usando planes en cache');
+      return cachedPlans;
+    }
+
+    console.log('🔄 Cargando planes desde Firebase...');
+    
+    const plansSnapshot = await getDocs(collection(db, 'subscription_plans'));
+    const plans = plansSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    cachedPlans = plans;
+    plansLastFetched = now;
+    
+    console.log(`✅ ${plans.length} planes cargados desde Firebase:`, plans.map(p => p.id));
+    return plans;
+  } catch (error) {
+    console.error('❌ Error al cargar planes desde Firebase:', error);
+    return [];
+  }
+};
+
+// Función para obtener el nombre del plan
+const getDynamicPlanName = (lubricentro: Lubricentro): string => {
   if (!lubricentro.subscriptionPlan) return 'Sin Plan';
   
-  // Primero intentar con SUBSCRIPTION_PLANS (planes estáticos)
-  const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
-  if (staticPlan) {
-    return staticPlan.name;
+  console.log(`🔍 Plan para ${lubricentro.fantasyName}: "${lubricentro.subscriptionPlan}"`);
+  
+  if (lubricentro.totalServicesContracted) {
+    const totalServices = lubricentro.totalServicesContracted;
+    const displayName = `PLAN${totalServices}`;
+    console.log(`🎯 Plan con servicios contratados: ${displayName}`);
+    return displayName;
   }
   
-  // Mapeo para planes dinámicos comunes
-  const dynamicPlanNames: Record<string, string> = {
-    'PLAN 100': 'Plan 100 Servicios',
-    'PLAN_100': 'Plan 100 Servicios',
-    'plan_100': 'Plan 100 Servicios',
-    'PLAN 200': 'Plan 200 Servicios',
-    'PLAN_200': 'Plan 200 Servicios',
-    'plan_200': 'Plan 200 Servicios',
-    'PLAN_BASICO': 'Plan Básico',
-    'plan_basico': 'Plan Básico',
-    'PLAN_PREMIUM': 'Plan Premium',
-    'plan_premium': 'Plan Premium',
-    'PLAN_ENTERPRISE': 'Plan Empresarial',
-    'plan_enterprise': 'Plan Empresarial'
+  const friendlyNames: Record<string, string> = {
+    'starter': 'Plan Iniciante',
+    'basic': 'Plan Básico',
+    'premium': 'Plan Premium',
+    'enterprise': 'Plan Empresarial',
+    'P100': 'PLAN100',
+    'Plan50': 'PLAN50',
+    'PLAN250': 'PLAN250'
   };
   
-  return dynamicPlanNames[lubricentro.subscriptionPlan] || 
-         lubricentro.subscriptionPlan.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 
-         'Plan Personalizado';
+  const displayName = friendlyNames[lubricentro.subscriptionPlan] || lubricentro.subscriptionPlan;
+  console.log(`🎯 Plan final: "${displayName}"`);
+  
+  return displayName;
 };
 
-
-
-
-
-
-// Función mejorada para obtener información de servicios
-const getServiceDisplayInfo = (lubricentro: Lubricentro): { 
-  current: number; 
-  total: number | string; 
-  percentage: number;
-  description: string;
-} => {
-  // Para lubricentros en trial
-  if (lubricentro.estado === 'trial') {
-    const trialLimit = 10;
-    const currentServices = lubricentro.servicesUsedThisMonth || 0;
-    return {
-      current: currentServices,
-      total: trialLimit,
-      percentage: Math.min(100, (currentServices / trialLimit) * 100),
-      description: 'Período de prueba'
-    };
-  }
-  
-  // Para planes por servicios
-  if (lubricentro.subscriptionRenewalType === 'service') {
-    const totalContracted = lubricentro.totalServicesContracted || 0;
-    const servicesUsed = lubricentro.servicesUsed || 0;
-    return {
-      current: servicesUsed,
-      total: totalContracted,
-      percentage: totalContracted > 0 ? Math.min(100, (servicesUsed / totalContracted) * 100) : 0,
-      description: 'Plan por servicios'
-    };
-  }
-  
-  // Para planes mensuales/semestrales
-  if (lubricentro.subscriptionPlan) {
-    const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
-    if (staticPlan && staticPlan.maxMonthlyServices !== null) {
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      return {
-        current: currentServices,
-        total: staticPlan.maxMonthlyServices,
-        percentage: Math.min(100, (currentServices / staticPlan.maxMonthlyServices) * 100),
-        description: 'Este mes'
-      };
-    }
-  }
-  
-  // Plan ilimitado o sin información
-  const currentServices = lubricentro.servicesUsedThisMonth || 0;
-  return {
-    current: currentServices,
-    total: 'Ilimitado',
-    percentage: 0,
-    description: 'Plan ilimitado'
-  };
+// Función para verificar si expira en 7 días
+const isExpiringIn7Days = (lubricentro: Lubricentro): boolean => {
+  if (!lubricentro.subscriptionEndDate) return false;
+  const endDate = new Date(lubricentro.subscriptionEndDate);
+  const now = new Date();
+  const diffTime = endDate.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays <= 7 && diffDays >= 0;
 };
 
-// Componente para extender período de prueba
-const ExtendTrialModal: React.FC<ExtendTrialModalProps> = ({ isOpen, onClose, onConfirm, lubricentro, loading }) => {
-  const [days, setDays] = useState<number>(7);
+// Funciones para badges
+const getStatusVariant = (estado: string): 'success' | 'warning' | 'error' | 'info' => {
+  switch (estado) {
+    case 'activo':
+      return 'success';
+    case 'trial':
+      return 'warning';
+    case 'inactivo':
+      return 'error';
+    default:
+      return 'info';
+  }
+};
 
-  if (!lubricentro) return null;
+const getStatusText = (estado: string): string => {
+  switch (estado) {
+    case 'activo':
+      return 'Activo';
+    case 'trial':
+      return 'Período de Prueba';
+    case 'inactivo':
+      return 'Inactivo';
+    default:
+      return estado;
+  }
+};
 
-  const handleSubmit = () => {
-    onConfirm(days);
+// ================================
+// COMPONENTE MODAL EXTEND TRIAL
+// ================================
+
+const ExtendTrialModal: React.FC<ExtendTrialModalProps> = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  lubricentro,
+  loading
+}) => {
+  const [days, setDays] = useState(7);
+
+  if (!isOpen || !lubricentro) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onConfirm(days);
   };
 
   return (
-    <div className={`fixed inset-0 z-50 overflow-y-auto ${isOpen ? '' : 'hidden'}`}>
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
-          <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={onClose}></div>
-        </div>
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <div className="sm:flex sm:items-start">
-              <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                <ClockIcon className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Extender Periodo de Prueba
-                </h3>
-                <div className="mt-2">
-                  <p className="text-sm text-gray-500">
-                    Extender el periodo de prueba para {lubricentro.fantasyName}.
-                  </p>
-                  <div className="mt-4">
-                    <label htmlFor="days" className="block text-sm font-medium text-gray-700">
-                      Días a extender
-                    </label>
-                    <input
-                      type="number"
-                      name="days"
-                      id="days"
-                      className="mt-1 focus:ring-primary-500 focus:border-primary-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-                      value={days}
-                      onChange={(e) => setDays(parseInt(e.target.value) || 7)}
-                      min={1}
-                      max={30}
-                    />
-                  </div>
-                  {lubricentro.trialEndDate && (
-                    <div className="mt-4 p-3 bg-blue-50 rounded-md">
-                      <p className="text-sm text-blue-800">
-                        <span className="font-medium">Fecha actual:</span> {' '}
-                        {new Date(lubricentro.trialEndDate).toLocaleDateString()}
-                      </p>
-                      <p className="text-sm text-blue-800 mt-1">
-                        <span className="font-medium">Nueva fecha:</span> {' '}
-                        {new Date(new Date(lubricentro.trialEndDate).getTime() + (days * 24 * 60 * 60 * 1000)).toLocaleDateString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">
+          Extender Período de Prueba
+        </h3>
+        
+        <p className="text-sm text-gray-600 mb-4">
+          Lubricentro: <strong>{lubricentro.fantasyName}</strong>
+        </p>
+        
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Días a extender
+            </label>
+            <input
+              type="number"
+              value={days}
+              onChange={(e) => setDays(parseInt(e.target.value) || 7)}
+              min="1"
+              max="365"
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+            />
           </div>
-          <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button
+          
+          <div className="flex justify-end space-x-3">
+            <Button
               type="button"
-              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm"
-              onClick={handleSubmit}
+              variant="outline"
+              color="secondary"
+              onClick={onClose}
+              disabled={loading}
+            >
+              Cancelar
+            </Button>
+            
+            <Button
+              type="submit"
+              variant="solid"
+              color="primary"
               disabled={loading}
             >
               {loading ? (
@@ -228,43 +262,25 @@ const ExtendTrialModal: React.FC<ExtendTrialModalProps> = ({ isOpen, onClose, on
                   Procesando...
                 </>
               ) : (
-                'Extender Periodo'
+                'Extender Período'
               )}
-            </button>
-            <button
-              type="button"
-              className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-              onClick={onClose}
-            >
-              Cancelar
-            </button>
+            </Button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
 };
 
-// Status Badge component
-const StatusBadge: React.FC<{ status: LubricentroStatus }> = ({ status }) => {
-  switch (status) {
-    case 'activo':
-      return <Badge color="success" text="Activo" />;
-    case 'trial':
-      return <Badge color="warning" text="Prueba" />;
-    case 'inactivo':
-      return <Badge color="error" text="Inactivo" />;
-    default:
-      return <Badge color="default" text={status} />;
-  }
-};
+// ================================
+// COMPONENTE PRINCIPAL
+// ================================
 
-// Dashboard principal
 const SuperAdminDashboard: React.FC = () => {
   const { userProfile } = useAuth();
   const navigate = useNavigate();
   
-  // Estados para los datos
+  // Estados principales
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [lubricentros, setLubricentros] = useState<Lubricentro[]>([]);
@@ -279,8 +295,12 @@ const SuperAdminDashboard: React.FC = () => {
   const [isExtendTrialModalOpen, setIsExtendTrialModalOpen] = useState<boolean>(false);
   const [processingAction, setProcessingAction] = useState<boolean>(false);
   
+  // Estados para el modal de edición
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedLubricentroForEdit, setSelectedLubricentroForEdit] = useState<Lubricentro | null>(null);
+  
   // Estadísticas
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<StatsType>({
     total: 0,
     activos: 0,
     inactivos: 0,
@@ -288,858 +308,568 @@ const SuperAdminDashboard: React.FC = () => {
     expiring7Days: 0
   });
   
-  // Estados adicionales
   const [expiringSoon, setExpiringSoon] = useState<Lubricentro[]>([]);
   const [serviceOverLimit, setServiceOverLimit] = useState<Lubricentro[]>([]);
   
-  // Cargar datos iniciales
+  // ================================
+  // EFFECTS
+  // ================================
+  
   useEffect(() => {
     loadLubricentros();
   }, []);
   
-  // Aplicar filtros y búsqueda
   useEffect(() => {
     applyFilters();
   }, [searchTerm, activeTab, lubricentros]);
+
+  // ================================
+  // FUNCIONES PRINCIPALES
+  // ================================
   
-  // Cargar lubricentros
+  // Función para cargar lubricentros
   const loadLubricentros = async () => {
     try {
       setLoading(true);
       setError(null);
       
+      console.log('📡 Cargando lubricentros desde getAllLubricentros()...');
       const data = await getAllLubricentros();
+      console.log('📊 Datos recibidos:', data.length, 'lubricentros');
       
-      // Identificar lubricentros con planes inválidos
-      const invalidPlanLubricentros = data.filter(
-        (l: Lubricentro) => l.subscriptionPlan && !isValidSubscriptionPlan(l.subscriptionPlan)
+      const validPlans = await fetchAllPlansFromFirebase();
+      const validPlanIds = validPlans.map(p => p.id);
+      
+      console.log('📋 Planes válidos en Firebase:', validPlanIds);
+      
+      const invalidPlanLubricentros = data.filter((l: Lubricentro) => 
+        l.subscriptionPlan && !validPlanIds.includes(l.subscriptionPlan)
       );
       
       if (invalidPlanLubricentros.length > 0) {
-        console.warn('⚠️ ATENCIÓN: Se encontraron lubricentros con planes de suscripción inválidos:');
+        console.warn('⚠️ ATENCIÓN: Se encontraron lubricentros con planes que NO existen en la colección subscription_plans:');
         invalidPlanLubricentros.forEach((l: Lubricentro) => {
           console.warn(`- ${l.fantasyName} (ID: ${l.id}): Plan "${l.subscriptionPlan}"`);
         });
-        console.warn('Los planes válidos son: starter, basic, premium, enterprise');
-        console.warn('Por favor, corrija estos valores en la base de datos.');
+      } else {
+        console.log('✅ Todos los planes de lubricentros son válidos');
       }
       
+      data.forEach((lubricentro: Lubricentro, index: number) => {
+        debugLubricentroData(lubricentro, `Dashboard-${index + 1}`);
+      });
+      
       setLubricentros(data);
+      calculateStats(data);
       
-      // Calcular estadísticas
-      const activos = data.filter(l => l.estado === 'activo').length;
-      const inactivos = data.filter(l => l.estado === 'inactivo').length;
-      const trial = data.filter(l => l.estado === 'trial').length;
-      
-      // Calcular lubricentros que expiran en los próximos 7 días
-      const now = new Date();
-      const in7Days = new Date(now);
-      in7Days.setDate(in7Days.getDate() + 7);
-      
-      const expiringLubricentros = data.filter(l => 
-        l.estado === 'trial' && 
-        l.trialEndDate && 
-        new Date(l.trialEndDate) > now &&
-        new Date(l.trialEndDate) <= in7Days
-      );
-      setExpiringSoon(expiringLubricentros);
-      
-      // Encontrar lubricentros cerca del límite de servicios
-      const nearLimitLubricentros = data.filter((l: Lubricentro) => {
-        if (l.estado === 'trial') {
-          const trialLimit = 10; // Trial limit is 10 services
-          const currentServices = l.servicesUsedThisMonth || 0;
-          return currentServices >= (trialLimit * 0.8); // 80% or more of limit
-        }
-        
-        if (l.estado === 'activo' && l.subscriptionPlan) {
-          // Verificar que el plan es uno de los válidos
-          const validPlans: SubscriptionPlanType[] = ['starter', 'basic', 'premium', 'enterprise'];
-          
-          // Si el plan no es válido, no incluirlo
-          if (!validPlans.includes(l.subscriptionPlan as SubscriptionPlanType)) {
-            return false;
-          }
-          
-          const planId = l.subscriptionPlan as SubscriptionPlanType;
-          const plan = SUBSCRIPTION_PLANS[planId];
-          
-          // Si es un plan ilimitado o no existe, no incluirlo
-          if (!plan || plan.maxMonthlyServices === null) {
-            return false;
-          }
-          
-          const currentServices = l.servicesUsedThisMonth || 0;
-          return currentServices >= (plan.maxMonthlyServices * 0.8); // 80% or more of limit
-        }
-        
-        return false;
-      });
-      setServiceOverLimit(nearLimitLubricentros);
-      
-      setStats({
-        total: data.length,
-        activos,
-        inactivos,
-        trial,
-        expiring7Days: expiringLubricentros.length
-      });
+      console.log('🎉 Carga de lubricentros completada exitosamente');
       
     } catch (err) {
-      console.error('Error al cargar lubricentros:', err);
+      console.error('❌ Error al cargar lubricentros:', err);
       setError('Error al cargar la lista de lubricentros');
     } finally {
       setLoading(false);
     }
   };
-  
-  // Aplicar filtros y búsqueda
+
+  // Función para refrescar un lubricentro específico
+  const refreshLubricentroData = async (lubricentroId: string) => {
+    try {
+      console.log(`🔄 Refrescando datos para lubricentro: ${lubricentroId}`);
+      
+      const updatedLubricentro = await getLubricentroById(lubricentroId);
+      
+      setLubricentros(prevLubricentros => 
+        prevLubricentros.map(l => 
+          l.id === lubricentroId ? updatedLubricentro : l
+        )
+      );
+      
+      console.log('✅ Datos del lubricentro refrescados');
+    } catch (error) {
+      console.error('❌ Error al refrescar lubricentro:', error);
+    }
+  };
+
+  // Función para calcular estadísticas
+  const calculateStats = (data: Lubricentro[]) => {
+    const newStats = {
+      total: data.length,
+      activos: data.filter(l => l.estado === 'activo').length,
+      inactivos: data.filter(l => l.estado === 'inactivo').length,
+      trial: data.filter(l => l.estado === 'trial').length,
+      expiring7Days: data.filter(l => isExpiringIn7Days(l)).length
+    };
+    
+    setStats(newStats);
+    setExpiringSoon(data.filter(l => isExpiringIn7Days(l)));
+    
+    const overLimit = data.filter(l => {
+      if (l.subscriptionRenewalType === 'service') {
+        return (l.servicesRemaining || 0) <= 5;
+      }
+      return false;
+    });
+    
+    setServiceOverLimit(overLimit);
+  };
+
+  // Función para aplicar filtros
   const applyFilters = () => {
     let filtered = [...lubricentros];
     
-    // Filtro por estado
-    if (activeTab === 'activo') {
-      filtered = filtered.filter(l => l.estado === 'activo');
-    } else if (activeTab === 'trial') {
-      filtered = filtered.filter(l => l.estado === 'trial');
-    } else if (activeTab === 'inactivo') {
-      filtered = filtered.filter(l => l.estado === 'inactivo');
-    } else if (activeTab === 'expirando') {
-      // Filtrar por período de prueba a punto de expirar (próximos 7 días)
-      const now = new Date();
-      const in7Days = new Date(now);
-      in7Days.setDate(in7Days.getDate() + 7);
-      
-      filtered = filtered.filter(l => 
-        l.estado === 'trial' && 
-        l.trialEndDate && 
-        new Date(l.trialEndDate) > now &&
-        new Date(l.trialEndDate) <= in7Days
-      );
-    }
-    
-    // Aplicar búsqueda
-    if (searchTerm.trim()) {
+    if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(l => 
+      filtered = filtered.filter(l =>
         l.fantasyName.toLowerCase().includes(term) ||
         l.responsable.toLowerCase().includes(term) ||
-        l.domicilio.toLowerCase().includes(term) ||
+        l.email.toLowerCase().includes(term) ||
         l.cuit.includes(term)
       );
     }
     
+    if (activeTab !== 'todos') {
+      filtered = filtered.filter(l => l.estado === activeTab);
+    }
+    
     setFilteredLubricentros(filtered);
   };
-  
-  // Preparar cambio de estado
-  const prepareChangeStatus = (lubricentro: Lubricentro, status: LubricentroStatus) => {
-    setSelectedLubricentro(lubricentro);
-    handleChangeStatus(lubricentro.id, status);
+
+  // Función para abrir el modal de edición
+  const handleEditLubricentro = (lubricentro: Lubricentro) => {
+    console.log('🔧 Abriendo modal de edición para:', lubricentro.fantasyName);
+    setSelectedLubricentroForEdit(lubricentro);
+    setEditModalOpen(true);
   };
-  
-  // Manejar cambio de estado
-  const handleChangeStatus = async (lubricentroId: string, newStatus: LubricentroStatus) => {
-    try {
-      setProcessingAction(true);
-      await updateLubricentroStatus(lubricentroId, newStatus);
-      
-      // Actualizar la lista de lubricentros
-      loadLubricentros();
-    } catch (err) {
-      console.error('Error al cambiar el estado del lubricentro:', err);
-      setError('Error al cambiar el estado del lubricentro');
-    } finally {
-      setProcessingAction(false);
-    }
+
+  // Función para manejar el éxito de la edición
+  const handleEditSuccess = () => {
+    console.log('✅ Edición exitosa, recargando datos...');
+    setEditModalOpen(false);
+    setSelectedLubricentroForEdit(null);
+    loadLubricentros();
   };
-  
-  // Preparar extensión de período de prueba
-  const prepareExtendTrial = (lubricentro: Lubricentro) => {
+
+  // Función para extender trial
+  const handleExtendTrial = (lubricentro: Lubricentro) => {
     setSelectedLubricentro(lubricentro);
     setIsExtendTrialModalOpen(true);
   };
-  
-  // Manejar extensión de período de prueba
-  const handleExtendTrial = async (days: number) => {
+
+  // Función para confirmar extensión de trial
+  const confirmExtendTrial = async (days: number) => {
     if (!selectedLubricentro) return;
     
     try {
       setProcessingAction(true);
       await extendTrialPeriod(selectedLubricentro.id, days);
-      
-      // Actualizar la lista de lubricentros
-      loadLubricentros();
-      
+      await loadLubricentros();
       setIsExtendTrialModalOpen(false);
-    } catch (err) {
-      console.error('Error al extender el período de prueba:', err);
+      setSelectedLubricentro(null);
+    } catch (error) {
+      console.error('Error al extender período de prueba:', error);
       setError('Error al extender el período de prueba');
     } finally {
       setProcessingAction(false);
     }
   };
 
-
-  // Ver detalles del lubricentro
-  const viewLubricentroDetails = async (id: string) => {
+  // Función para cambiar estado
+  const handleStatusToggle = async (lubricentro: Lubricentro) => {
     try {
-      const lubricentro = await getLubricentroById(id);
-      setSelectedLubricentro(lubricentro);
-      navigate(`/superadmin/lubricentros/${id}`);
-    } catch (err) {
-      console.error('Error al obtener detalles del lubricentro:', err);
-      setError('Error al obtener detalles del lubricentro');
+      setLoading(true);
+      const newStatus = lubricentro.estado === 'activo' ? 'inactivo' : 'activo';
+      await updateLubricentroStatus(lubricentro.id, newStatus);
+      await loadLubricentros();
+    } catch (error) {
+      console.error('Error al cambiar estado:', error);
+      setError('Error al cambiar el estado del lubricentro');
+    } finally {
+      setLoading(false);
     }
   };
-  
-  // Formatear fecha
-  const formatDate = (date: Date | string | undefined): string => {
-    if (!date) return 'No disponible';
-    return new Date(date).toLocaleDateString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-  
-  // Calcular días restantes
-  const getDaysRemaining = (endDate: Date | string | undefined): number => {
-    if (!endDate) return 0;
+
+  // Función para renderizar tarjeta de lubricentro
+  const renderLubricentroCard = (lubricentro: Lubricentro) => {
+    const planName = getDynamicPlanName(lubricentro);
+    const isExpiring = isExpiringIn7Days(lubricentro);
     
-    const end = new Date(endDate);
-    const now = new Date();
-    const diffTime = end.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    return diffDays > 0 ? diffDays : 0;
-  };
-  
-  // Calcular porcentaje de uso de servicios
-  const getServiceUsagePercentage = (lubricentro: Lubricentro): number => {
-    if (lubricentro.estado === 'trial') {
-      const trialLimit = 10; // Trial limit is 10 services
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      return Math.min(100, (currentServices / trialLimit) * 100);
-    }
-    
-    if (lubricentro.estado === 'activo' && lubricentro.subscriptionPlan) {
-      // Verificar que el plan es uno de los válidos
-      const validPlans: SubscriptionPlanType[] = ['starter', 'basic', 'premium', 'enterprise'];
-      
-      // Si el plan no es válido, no mostrar porcentaje
-      if (!validPlans.includes(lubricentro.subscriptionPlan as SubscriptionPlanType)) {
-        console.warn(`Plan no válido: ${lubricentro.subscriptionPlan}`);
-        return 0;
-      }
-      
-      const planId = lubricentro.subscriptionPlan as SubscriptionPlanType;
-      const plan = SUBSCRIPTION_PLANS[planId];
-      
-      // Si es un plan ilimitado, no mostrar porcentaje
-      if (!plan || plan.maxMonthlyServices === null) {
-        return 0;
-      }
-      
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      return Math.min(100, (currentServices / plan.maxMonthlyServices) * 100);
-    }
-    
-    return 0;
-  };
-  
-
-
-
-// Función para obtener el nombre correcto del plan
-const getCorrectPlanName = (lubricentro: Lubricentro): string => {
-  if (!lubricentro.subscriptionPlan) return 'Sin Plan';
-  
-  // Mapeo completo incluyendo planes dinámicos
-  const allPlanNames: Record<string, string> = {
-    // Planes estáticos
-    'starter': 'Plan Iniciante',
-    'basic': 'Plan Básico', 
-    'premium': 'Plan Premium',
-    'enterprise': 'Plan Empresarial',
-    
-    // Planes dinámicos (AGREGAR SEGÚN LOS QUE TENGAS)
-    'PLAN50': 'PLAN50',
-    'Plan50': 'PLAN50',
-    'plan50': 'PLAN50',
-    'PLAN 50': 'PLAN50',
-    'PLAN100': 'PLAN100',
-    'Plan100': 'PLAN100',
-    'plan100': 'PLAN100',
-    'PLAN 100': 'PLAN100'
-  };
-  
-  return allPlanNames[lubricentro.subscriptionPlan] || 
-         lubricentro.subscriptionPlan || 
-         'Plan Personalizado';
-};
-
-    // Función para obtener información correcta de servicios
-    const getCorrectServiceInfo = (lubricentro: Lubricentro): string => {
-      // Para lubricentros en trial
-      if (lubricentro.estado === 'trial') {
-        const trialLimit = 10;
-        const currentServices = lubricentro.servicesUsedThisMonth || 0;
-        return `${currentServices}/${trialLimit}`;
-      }
-      
-      // Para planes por servicios (como PLAN50)
-      if (lubricentro.subscriptionRenewalType === 'service' || 
-          ['PLAN50', 'Plan50', 'plan50', 'PLAN 50'].includes(lubricentro.subscriptionPlan || '')) {
-        const totalContracted = lubricentro.totalServicesContracted || 50; // Default para PLAN50
-        const servicesUsed = lubricentro.servicesUsed || 0;
-        return `${servicesUsed}/${totalContracted}`;
-      }
-      
-      // Para planes mensuales estáticos
-      if (lubricentro.subscriptionPlan && SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS]) {
-        const plan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
-        const currentServices = lubricentro.servicesUsedThisMonth || 0;
-        const total = plan.maxMonthlyServices || 'Ilimitado';
-        return typeof total === 'number' ? `${currentServices}/${total}` : `${currentServices}/Ilimitado`;
-      }
-      
-      // Fallback
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      return `${currentServices}/N/A`;
-    };
-  
-  
-
-
-
-  if (loading && lubricentros.length === 0) {
     return (
-      <div className="flex justify-center items-center h-80">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
-      </div>
+      <Card key={lubricentro.id} className="hover:shadow-lg transition-shadow">
+        <CardBody className="p-4">
+          {/* Header con nombre y estado */}
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex-1">
+              <h3 className="font-semibold text-lg text-gray-900 mb-1">
+                {lubricentro.fantasyName}
+              </h3>
+              <p className="text-sm text-gray-600 mb-2">
+                {lubricentro.responsable} • {lubricentro.cuit}
+              </p>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              {/* Badge de estado */}
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                getStatusVariant(lubricentro.estado) === 'success' ? 'bg-green-100 text-green-800' :
+                getStatusVariant(lubricentro.estado) === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                getStatusVariant(lubricentro.estado) === 'error' ? 'bg-red-100 text-red-800' :
+                'bg-blue-100 text-blue-800'
+              }`}>
+                {getStatusText(lubricentro.estado)}
+              </span>
+              
+              {/* Badge de expiración si aplica */}
+              {isExpiring && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  Expira Pronto
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Información de contacto */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3 text-sm">
+            <div className="flex items-center text-gray-600">
+              <span className="font-medium">Email:</span>
+              <span className="ml-1 truncate">{lubricentro.email}</span>
+            </div>
+            <div className="flex items-center text-gray-600">
+              <span className="font-medium">Teléfono:</span>
+              <span className="ml-1">{lubricentro.phone}</span>
+            </div>
+            <div className="md:col-span-2 flex items-center text-gray-600">
+              <span className="font-medium">Dirección:</span>
+              <span className="ml-1">{lubricentro.domicilio}</span>
+            </div>
+          </div>
+
+          {/* Información de suscripción */}
+          <div className="bg-gray-50 rounded-lg p-3 mb-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+              <div>
+                <span className="font-medium text-gray-700">Plan:</span>
+                <div className="text-blue-600 font-semibold">{planName}</div>
+              </div>
+              
+              <div>
+                <span className="font-medium text-gray-700">Servicios:</span>
+                <div className="text-gray-900">
+                  {lubricentro.servicesUsed || 0} / {lubricentro.totalServicesContracted || 0}
+                </div>
+              </div>
+              
+              <div>
+                <span className="font-medium text-gray-700">Este Mes:</span>
+                <div className="text-gray-900">{lubricentro.servicesUsedThisMonth || 0}</div>
+              </div>
+              
+              <div>
+                <span className="font-medium text-gray-700">Restantes:</span>
+                <div className={`font-semibold ${
+                  (lubricentro.servicesRemaining || 0) < 10 ? 'text-red-600' : 'text-green-600'
+                }`}>
+                  {lubricentro.servicesRemaining || 0}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Fechas importantes */}
+          <div className="text-xs text-gray-500 mb-3">
+            {lubricentro.subscriptionEndDate && (
+              <div>
+                <CalendarDaysIcon className="w-3 h-3 inline mr-1" />
+                Vence: {new Date(lubricentro.subscriptionEndDate).toLocaleDateString('es-AR')}
+              </div>
+            )}
+          </div>
+
+          {/* Botones de acción */}
+          <div className="flex space-x-2">
+            {/* Botón de editar */}
+            <Button
+              variant="outline"
+              color="primary"
+              size="sm"
+              onClick={() => handleEditLubricentro(lubricentro)}
+              className="flex-1"
+            >
+              <PencilIcon className="w-4 h-4 mr-1" />
+              Editar
+            </Button>
+
+            {/* Botón de extender período de prueba */}
+            {lubricentro.estado === 'trial' && (
+              <Button
+                variant="outline"
+                color="warning"
+                size="sm"
+                onClick={() => handleExtendTrial(lubricentro)}
+                className="flex-1"
+              >
+                <ClockIcon className="w-4 h-4 mr-1" />
+                Extender Trial
+              </Button>
+            )}
+
+            {/* Botón de cambiar estado */}
+            <Button
+              variant={lubricentro.estado === 'activo' ? 'outline' : 'solid'}
+              color={lubricentro.estado === 'activo' ? 'error' : 'success'}
+              size="sm"
+              onClick={() => handleStatusToggle(lubricentro)}
+              className="flex-1"
+            >
+              {lubricentro.estado === 'activo' ? (
+                <>
+                  <XMarkIcon className="w-4 h-4 mr-1" />
+                  Desactivar
+                </>
+              ) : (
+                <>
+                  <CheckIcon className="w-4 h-4 mr-1" />
+                  Activar
+                </>
+              )}
+            </Button>
+          </div>
+        </CardBody>
+      </Card>
+    );
+  };
+
+  // ================================
+  // RENDER
+  // ================================
+
+  if (!userProfile || userProfile.role !== 'superadmin') {
+    return (
+      <PageContainer title="Acceso Denegado">
+        <Alert type="error">
+          No tienes permisos para acceder a esta sección.
+        </Alert>
+      </PageContainer>
     );
   }
-  
+
   return (
     <PageContainer
-      title="Gestión de Lubricentro"
-      subtitle="Administración de lubricentros registrados en el sistema"
-      action={
-        <Button
-          color="primary"
-          icon={<PlusIcon className="h-5 w-5" />}
-          onClick={() => navigate('/superadmin/lubricentros/nuevo')}
-        >
-          Nuevo Lubricentro4
-        </Button>
-      }
+      title="Panel de Super Administrador"
+      subtitle="Gestión completa del sistema"
     >
+      {/* Alertas */}
       {error && (
         <Alert type="error" className="mb-6" dismissible onDismiss={() => setError(null)}>
           {error}
         </Alert>
       )}
-      
-      {/* Stat Cards */}
-      <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-3 lg:grid-cols-5">
+
+      {/* Estadísticas principales */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5 mb-6">
         <Card>
-          <CardBody>
+          <CardBody className="p-5">
             <div className="flex items-center">
-              <div className="rounded-full p-3 bg-primary-100 mr-4">
-                <BuildingOfficeIcon className="h-6 w-6 text-primary-600" />
+              <div className="flex-shrink-0">
+                <BuildingOfficeIcon className="h-6 w-6 text-gray-400" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total</p>
-                <p className="text-2xl font-semibold text-gray-800">{stats.total}</p>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    Total Lubricentros
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {stats.total}
+                  </dd>
+                </dl>
               </div>
             </div>
           </CardBody>
         </Card>
-        
+
         <Card>
-          <CardBody>
+          <CardBody className="p-5">
             <div className="flex items-center">
-              <div className="rounded-full p-3 bg-green-100 mr-4">
-                <CheckIcon className="h-6 w-6 text-green-600" />
+              <div className="flex-shrink-0">
+                <CheckIcon className="h-6 w-6 text-green-400" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Activos</p>
-                <p className="text-2xl font-semibold text-gray-800">{stats.activos}</p>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    Activos
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {stats.activos}
+                  </dd>
+                </dl>
               </div>
             </div>
           </CardBody>
         </Card>
-        
+
         <Card>
-          <CardBody>
+          <CardBody className="p-5">
             <div className="flex items-center">
-              <div className="rounded-full p-3 bg-yellow-100 mr-4">
-                <ClockIcon className="h-6 w-6 text-yellow-600" />
+              <div className="flex-shrink-0">
+                <ClockIcon className="h-6 w-6 text-yellow-400" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">En Prueba</p>
-                <p className="text-2xl font-semibold text-gray-800">{stats.trial}</p>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    En Prueba
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {stats.trial}
+                  </dd>
+                </dl>
               </div>
             </div>
           </CardBody>
         </Card>
-        
+
         <Card>
-          <CardBody>
+          <CardBody className="p-5">
             <div className="flex items-center">
-              <div className="rounded-full p-3 bg-red-100 mr-4">
-                <XMarkIcon className="h-6 w-6 text-red-600" />
+              <div className="flex-shrink-0">
+                <XMarkIcon className="h-6 w-6 text-red-400" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Inactivos</p>
-                <p className="text-2xl font-semibold text-gray-800">{stats.inactivos}</p>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    Inactivos
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {stats.inactivos}
+                  </dd>
+                </dl>
               </div>
             </div>
           </CardBody>
         </Card>
-        
+
         <Card>
-          <CardBody>
+          <CardBody className="p-5">
             <div className="flex items-center">
-              <div className="rounded-full p-3 bg-orange-100 mr-4">
-                <CalendarDaysIcon className="h-6 w-6 text-orange-600" />
+              <div className="flex-shrink-0">
+                <CalendarDaysIcon className="h-6 w-6 text-orange-400" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-gray-600">Por Expirar</p>
-                <p className="text-2xl font-semibold text-gray-800">{stats.expiring7Days}</p>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    Expiran Pronto
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    {stats.expiring7Days}
+                  </dd>
+                </dl>
               </div>
             </div>
           </CardBody>
         </Card>
       </div>
-      
-      {/* Search and Filters */}
+
+      {/* Controles de filtrado */}
       <Card className="mb-6">
-        <CardBody>
-          <div className="flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
+        <CardBody className="p-4">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Buscador */}
             <div className="flex-1">
-              <div className="relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-                </div>
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
+                  placeholder="Buscar por nombre, responsable, email o CUIT..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por nombre, responsable, CUIT o dirección"
-                  className="focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
-            <div className="w-full sm:w-48">
-              <select
-                value={activeTab}
-                onChange={(e) => setActiveTab(e.target.value)}
-                className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
-              >
-                <option value="todos">Todos los estados</option>
-                <option value="activo">Activos</option>
-                <option value="trial">En Prueba</option>
-                <option value="inactivo">Inactivos</option>
-                <option value="expirando">Por Expirar</option>
-              </select>
+
+            {/* Filtros por tabs */}
+            <div className="flex space-x-1">
+              {[
+                { id: 'todos', label: 'Todos', count: stats.total },
+                { id: 'activo', label: 'Activos', count: stats.activos },
+                { id: 'trial', label: 'Prueba', count: stats.trial },
+                { id: 'inactivo', label: 'Inactivos', count: stats.inactivos }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-2 rounded-md text-sm font-medium ${
+                    activeTab === tab.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              ))}
             </div>
+
+            {/* Botón de recarga */}
             <Button
-              color="primary"
               variant="outline"
-              icon={<ArrowPathIcon className="h-5 w-5" />}
+              color="secondary"
               onClick={loadLubricentros}
+              disabled={loading}
             >
-              Actualizar
+              <ArrowPathIcon className="w-4 h-4 mr-2" />
+              {loading ? 'Cargando...' : 'Actualizar'}
             </Button>
           </div>
         </CardBody>
       </Card>
-      
-      {/* Alerts Section */}
-      {expiringSoon.length > 0 && (
-        <Alert type="warning" className="mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <CalendarDaysIcon className="h-5 w-5 text-yellow-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
-                Periodos de Prueba por Vencer
-              </h3>
-              <div className="mt-2 text-sm text-yellow-700">
-                <p>
-                  Hay {expiringSoon.length} lubricentros con período de prueba por vencer en los próximos 7 días.
-                </p>
-              </div>
-            </div>
-          </div>
-        </Alert>
+
+      {/* Lista de lubricentros */}
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <Spinner size="lg" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+          {filteredLubricentros.map(renderLubricentroCard)}
+        </div>
       )}
-      
-      {serviceOverLimit.length > 0 && (
-        <Alert type="warning" className="mb-6">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <WrenchIcon className="h-5 w-5 text-yellow-400" />
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">
-                Límite de Servicios
-              </h3>
-              <div className="mt-2 text-sm text-yellow-700">
-                <p>
-                  Hay {serviceOverLimit.length} lubricentros que están cerca o han alcanzado su límite mensual de servicios.
-                </p>
-              </div>
-            </div>
-          </div>
-        </Alert>
-      )}
-      
-      {/* Lubricentros Table */}
-      <Card>
-        <CardHeader 
-          title={`Lubricentros ${activeTab !== 'todos' ? (activeTab === 'trial' ? 'en Prueba' : activeTab === 'activo' ? 'Activos' : activeTab === 'inactivo' ? 'Inactivos' : 'Por Expirar') : ''}`} 
-          subtitle={`Mostrando ${filteredLubricentros.length} ${filteredLubricentros.length === 1 ? 'lubricentro' : 'lubricentros'}`}
-        />
-          <CardBody>
-          {filteredLubricentros.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lubricentro
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Plan
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Servicios
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha de Registro
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fin de Suscripción
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredLubricentros.map((lubricentro) => {
-                    const serviceInfo = getCorrectServiceInfo(lubricentro);
-                    
-                    return (
-                      <tr key={lubricentro.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {lubricentro.fantasyName}
-                              </div>
-                              <div className="text-sm text-gray-500">
-                                {lubricentro.responsable}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <StatusBadge status={lubricentro.estado} />
-                        </td>
-                       <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                           
-                           
-                            {getCorrectPlanName(lubricentro)}
-                          </div>
-                          {lubricentro.subscriptionRenewalType && (
-                            <div className="text-xs text-gray-500">
-                              {lubricentro.subscriptionRenewalType === 'monthly' ? 'Mensual' :
-                              lubricentro.subscriptionRenewalType === 'semiannual' ? 'Semestral' :
-                              lubricentro.subscriptionRenewalType === 'service' ? 'Por servicios' :
-                              lubricentro.subscriptionRenewalType}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
-                            {getCorrectServiceInfo(lubricentro)}
-                          </div>
-                        {/*   {serviceInfo.current > 0 && typeof serviceInfo.total === 'number' && (
-                            <div className="w-24 bg-gray-200 rounded-full h-1.5 mt-1">
-                              <div 
-                                className={`h-1.5 rounded-full ${
-                                  (serviceInfo.current / serviceInfo.total) * 100 >= 90 ? 'bg-red-500' : 
-                                  (serviceInfo.current / serviceInfo.total) * 100 >= 75 ? 'bg-yellow-500' : 
-                                  'bg-green-500'
-                                }`}
-                                style={{ width: `${Math.min(100, (serviceInfo.current / serviceInfo.total) * 100)}%` }}
-                              ></div>
-                            </div>
-                          )} */}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(lubricentro.createdAt).toLocaleDateString('es-ES')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {lubricentro.estado === 'trial' && lubricentro.trialEndDate ? (
-                            <div>
-                              <div className="text-sm text-gray-900">
-                                {new Date(lubricentro.trialEndDate).toLocaleDateString('es-ES')}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {getDaysRemaining(lubricentro.trialEndDate) > 0 
-                                  ? `${getDaysRemaining(lubricentro.trialEndDate)} días restantes` 
-                                  : 'Expirado'}
-                              </div>
-                            </div>
-                          ) : lubricentro.subscriptionEndDate ? (
-                            <div>
-                              <div className="text-sm text-gray-900">
-                                {new Date(lubricentro.subscriptionEndDate).toLocaleDateString('es-ES')}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                Fin de suscripción
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-gray-400">N/A</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              color="primary"
-                              onClick={() => navigate(`/superadmin/lubricentros/${lubricentro.id}`)}
-                            >
-                              Ver
-                            </Button>
-                            <Button
-                              size="sm"
-                              color="secondary"
-                              onClick={() => navigate(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
-                            >
-                              Suscripción
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <div className="mx-auto h-12 w-12 text-gray-400 mb-4">
-                <BuildingOfficeIcon className="h-12 w-12" />
-              </div>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay lubricentros</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                {searchTerm || activeTab !== 'todos' 
-                  ? 'No se encontraron lubricentros con los filtros aplicados.' 
-                  : 'No hay lubricentros registrados en el sistema.'}
-              </p>
-            </div>
-          )}
-        </CardBody>
-      </Card>
-      
-      {/* Section: Lubricentros por Expirar */}
-      {expiringSoon.length > 0 && (
-        <Card className="mt-6">
-          <CardHeader 
-            title="Periodos de Prueba por Vencer" 
-            subtitle={`${expiringSoon.length} lubricentros con prueba por vencer en los próximos 7 días`}
-          />
-          <CardBody>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lubricentro
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Fecha de Vencimiento
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Días Restantes
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {expiringSoon.map((lubricentro) => {
-                    const daysRemaining = getDaysRemaining(lubricentro.trialEndDate);
-                    return (
-                      <tr key={lubricentro.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {lubricentro.fantasyName}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{formatDate(lubricentro.trialEndDate)}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <Badge 
-                            color={daysRemaining <= 2 ? 'error' : daysRemaining <= 5 ? 'warning' : 'info'}
-                            text={`${daysRemaining} días`}
-                          />
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              color="warning"
-                              onClick={() => prepareExtendTrial(lubricentro)}
-                            >
-                              Extender Prueba
-                            </Button>
-                            <Button
-                              size="sm"
-                              color="success"
-                              onClick={() => prepareChangeStatus(lubricentro, 'activo')}
-                            >
-                              Activar
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+
+      {/* Mensaje si no hay resultados */}
+      {!loading && filteredLubricentros.length === 0 && (
+        <Card>
+          <CardBody className="text-center py-12">
+            <BuildingOfficeIcon className="mx-auto h-12 w-12 text-gray-400" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900">
+              No se encontraron lubricentros
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {searchTerm || activeTab !== 'todos'
+                ? 'Intenta cambiar los filtros de búsqueda'
+                : 'Comienza creando un nuevo lubricentro'
+              }
+            </p>
           </CardBody>
         </Card>
       )}
-      
-      {/* Section: Lubricentros cerca del límite de servicios */}
-      {serviceOverLimit.length > 0 && (
-        <Card className="mt-6">
-          <CardHeader 
-            title="Servicios Cercanos al Límite" 
-            subtitle={`${serviceOverLimit.length} lubricentros próximos a alcanzar su límite de servicios mensuales`}
-          />
-          <CardBody>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Lubricentro
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Servicios Usados
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Límite
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                    {serviceOverLimit.map((lubricentro) => {
-                      const serviceInfo = getServiceDisplayInfo(lubricentro);
-                      
-                      return (
-                        <tr key={lubricentro.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <div className="ml-4">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {lubricentro.fantasyName}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {lubricentro.responsable}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <StatusBadge status={lubricentro.estado} />
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              {getCorrectPlanName(lubricentro)}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {serviceInfo.description}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-900">
-                                {getCorrectServiceInfo(lubricentro)}
-                              </div>
-                            </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              {getCorrectServiceInfo(lubricentro).split('/')[1] || 'N/A'}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex space-x-2">
-                              <Button
-                                size="sm"
-                                color="primary"
-                                onClick={() => navigate(`/superadmin/lubricentros/suscripcion/${lubricentro.id}`)}
-                              >
-                                Gestionar Plan
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </CardBody>
-        </Card>
-      )}
-      
-      {/* Administrative Actions */}
+
+      {/* Botones de acciones administrativas */}
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
         <Button 
           color="primary" 
           size="lg" 
           fullWidth 
-          icon={<BuildingOfficeIcon className="h-5 w-5" />} 
           onClick={() => navigate('/superadmin/lubricentros')}
         >
+          <BuildingOfficeIcon className="h-5 w-5 mr-2" />
           Gestión de Lubricentros
         </Button>
         
-        {/* NUEVO BOTÓN */}
         <Button 
           color="secondary" 
           size="lg" 
           fullWidth 
-          icon={<WrenchScrewdriverIcon className="h-5 w-5" />} 
           onClick={() => navigate('/superadmin/servicios')}
         >
+          <WrenchScrewdriverIcon className="h-5 w-5 mr-2" />
           Todos los Servicios
         </Button>
         
@@ -1147,9 +877,9 @@ const getCorrectPlanName = (lubricentro: Lubricentro): string => {
           color="secondary" 
           size="lg" 
           fullWidth 
-          icon={<UserGroupIcon className="h-5 w-5" />} 
           onClick={() => navigate('/usuarios')}
         >
+          <UserGroupIcon className="h-5 w-5 mr-2" />
           Gestionar Usuarios
         </Button>
         
@@ -1157,9 +887,9 @@ const getCorrectPlanName = (lubricentro: Lubricentro): string => {
           color="success" 
           size="lg" 
           fullWidth 
-          icon={<ChartBarIcon className="h-5 w-5" />} 
           onClick={() => navigate('/superadmin/reportes')}
         >
+          <ChartBarIcon className="h-5 w-5 mr-2" />
           Estadísticas Globales
         </Button>
         
@@ -1167,20 +897,34 @@ const getCorrectPlanName = (lubricentro: Lubricentro): string => {
           color="info" 
           size="lg" 
           fullWidth 
-          icon={<CreditCardIcon className="h-5 w-5" />} 
-          onClick={() => navigate('/superadmin/lubricentros')}
+          onClick={() => navigate('/superadmin/planes')}
         >
+          <CreditCardIcon className="h-5 w-5 mr-2" />
           Planes y Suscripciones
         </Button>
       </div>
       
-      {/* Trial Extension Modal */}
+      {/* Modal para Extender Período de Prueba */}
       <ExtendTrialModal
         isOpen={isExtendTrialModalOpen}
-        onClose={() => setIsExtendTrialModalOpen(false)}
-        onConfirm={handleExtendTrial}
+        onClose={() => {
+          setIsExtendTrialModalOpen(false);
+          setSelectedLubricentro(null);
+        }}
+        onConfirm={confirmExtendTrial}
         lubricentro={selectedLubricentro}
         loading={processingAction}
+      />
+
+      {/* Modal de Edición de Lubricentro */}
+      <SuperAdminEditLubricentroModal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setSelectedLubricentroForEdit(null);
+        }}
+        lubricentro={selectedLubricentroForEdit}
+        onSuccess={handleEditSuccess}
       />
     </PageContainer>
   );

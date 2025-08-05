@@ -366,8 +366,7 @@ export const searchOilChangesMultiField = async (
       return [];
     }
 
-    console.log(`🔍 Búsqueda multi-campo para: "${term}"`);
-    
+       
     // Obtener TODOS los cambios del lubricentro (sin filtros)
     const q = query(
       collection(db, COLLECTION_NAME),
@@ -400,7 +399,7 @@ export const searchOilChangesMultiField = async (
              matchesMarca || matchesModelo || matchesNroCambio;
     }).slice(0, pageSize);
     
-    console.log(`✅ Búsqueda multi-campo: ${results.length} resultados encontrados`);
+   
     
     return results;
   } catch (error) {
@@ -414,7 +413,7 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
   try {
     const dominio = dominioVehiculo.toUpperCase();
     
-    console.log(`🔍 Buscando cambios para dominio: "${dominio}"`);
+    
     
     // Consulta simple sin orderBy
     const q = query(
@@ -424,7 +423,7 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
     
     const querySnapshot = await getDocs(q);
     
-    console.log(`🔍 Resultados encontrados para dominio "${dominio}": ${querySnapshot.docs.length}`);
+
     
     // Convertir documentos a objetos OilChange
     const results = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
@@ -496,7 +495,7 @@ export const canCreateService = async (lubricentroId: string): Promise<{
 // ✅ FUNCIÓN CORREGIDA: Crear cambio de aceite Y actualizar contadores del lubricentro
 export const createOilChange = async (data: OilChange): Promise<string> => {
   try {
-    console.log('🔄 Creando cambio de aceite:', data.estado);
+ 
     
     // Generar número de cambio si no existe
     if (!data.nroCambio) {
@@ -517,12 +516,12 @@ export const createOilChange = async (data: OilChange): Promise<string> => {
     
     // 1. CREAR EL SERVICIO
     const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
-    console.log('✅ Servicio creado con ID:', docRef.id);
+  
     
     // 2. ACTUALIZAR CONTADORES DEL LUBRICENTRO (SOLO SI ES COMPLETO)
     if (baseData.estado === 'completo') {
       try {
-        console.log('🔄 Actualizando contadores del lubricentro:', data.lubricentroId);
+      
         
         // Obtener datos actuales del lubricentro
         const currentLubricentro = await getLubricentroById(data.lubricentroId);
@@ -547,14 +546,13 @@ export const createOilChange = async (data: OilChange): Promise<string> => {
           // Solo actualizar servicesRemaining si el lubricentro tiene plan por servicios
           if (currentLubricentro.totalServicesContracted && currentLubricentro.totalServicesContracted > 0) {
             updateData.servicesRemaining = newServicesRemaining;
-            console.log(`📊 Servicios actualizados: ${currentServicesUsed} → ${newServicesUsed}`);
-            console.log(`📊 Servicios restantes: ${currentServicesRemaining} → ${newServicesRemaining}`);
+         
           }
           
           // Actualizar el lubricentro
           await updateLubricentro(data.lubricentroId, updateData);
           
-          console.log('✅ Contadores del lubricentro actualizados correctamente');
+          
         }
         
       } catch (updateError) {
@@ -563,7 +561,7 @@ export const createOilChange = async (data: OilChange): Promise<string> => {
         // El servicio se creó correctamente, solo falló la actualización de contadores
       }
     } else {
-      console.log('ℹ️ Servicio creado como pendiente, contadores actualizados inmediatamente');
+      
     }
     
     return docRef.id;
@@ -897,11 +895,11 @@ export const createPendingOilChange = async (data: {
     
     // 1. CREAR EL SERVICIO
     const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedData);
-    console.log('✅ Servicio pendiente creado con ID:', docRef.id);
+  
     
     // 2. ✅ NUEVO: ACTUALIZAR CONTADORES INMEDIATAMENTE PARA SERVICIOS PRECARGADOS
     try {
-      console.log('🔄 Actualizando contadores del lubricentro para servicio precargado:', data.lubricentroId);
+      
       
       // Obtener datos actuales del lubricentro
       const currentLubricentro = await getLubricentroById(data.lubricentroId);
@@ -926,14 +924,13 @@ export const createPendingOilChange = async (data: {
         // Solo actualizar servicesRemaining si el lubricentro tiene plan por servicios
         if (currentLubricentro.totalServicesContracted && currentLubricentro.totalServicesContracted > 0) {
           updateData.servicesRemaining = newServicesRemaining;
-          console.log(`📊 Servicios actualizados: ${currentServicesUsed} → ${newServicesUsed}`);
-          console.log(`📊 Servicios restantes: ${currentServicesRemaining} → ${newServicesRemaining}`);
+          
         }
         
         // Actualizar el lubricentro
         await updateLubricentro(data.lubricentroId, updateData);
         
-        console.log('✅ Contadores del lubricentro actualizados para servicio precargado');
+       
       }
       
     } catch (updateError) {
@@ -1000,7 +997,7 @@ export const completeOilChange = async (
     // ✅ SOLO ACTUALIZAR CONTADORES SI EL SERVICIO NO ESTABA YA COMPLETO
     // Y NO ERA UN SERVICIO PENDIENTE (porque los pendientes ya actualizaron contadores)
     if (!wasAlreadyCompleted && !wasPending) {
-      console.log('🔄 Servicio completado desde estado inicial - actualizando contadores');
+
       
       try {
         // Obtener datos actuales del lubricentro
@@ -1026,14 +1023,13 @@ export const completeOilChange = async (
           // Solo actualizar servicesRemaining si el lubricentro tiene plan por servicios
           if (currentLubricentro.totalServicesContracted && currentLubricentro.totalServicesContracted > 0) {
             lubricentroUpdateData.servicesRemaining = newServicesRemaining;
-            console.log(`📊 Servicios actualizados: ${currentServicesUsed} → ${newServicesUsed}`);
-            console.log(`📊 Servicios restantes: ${currentServicesRemaining} → ${newServicesRemaining}`);
+      ;
           }
           
           // Actualizar el lubricentro
           await updateLubricentro(currentService.lubricentroId, lubricentroUpdateData);
           
-          console.log('✅ Contadores del lubricentro actualizados para servicio completado');
+    
         }
         
       } catch (updateError) {
@@ -1041,9 +1037,9 @@ export const completeOilChange = async (
         console.warn('El servicio se completó pero no se pudieron actualizar los contadores');
       }
     } else if (wasPending) {
-      console.log('ℹ️ Servicio completado desde estado pendiente - contadores ya actualizados en la precarga');
+    
     } else {
-      console.log('ℹ️ Servicio ya estaba completo - no se actualizan contadores');
+    
     }
     
   } catch (error) {
@@ -1420,7 +1416,7 @@ export const getOilChangesByDateRange = async (
 // También agrega esta función al final del archivo para corregir datos inconsistentes
 export const fixCreatedAtFields = async (lubricentroId: string) => {
   try {
-    console.log('🔧 Iniciando corrección de campos createdAt...');
+
     
     const q = query(
       collection(db, COLLECTION_NAME),
@@ -1449,7 +1445,7 @@ export const fixCreatedAtFields = async (lubricentroId: string) => {
       }
     }
     
-    console.log(`✅ Se corrigieron ${fixedCount} registros`);
+
     return fixedCount;
   } catch (error) {
     console.error('❌ Error al corregir campos createdAt:', error);
@@ -1459,7 +1455,7 @@ export const fixCreatedAtFields = async (lubricentroId: string) => {
 
 export const fixCreatedAtFieldsForAll = async (lubricentroId: string): Promise<number> => {
   try {
-    console.log('🔧 Corrigiendo campos createdAt problemáticos...');
+  
     
     const q = query(
       collection(db, COLLECTION_NAME),
@@ -1487,12 +1483,12 @@ export const fixCreatedAtFieldsForAll = async (lubricentroId: string): Promise<n
           updatedAt: new Date()
         });
         
-        console.log(`✅ Corregido registro ${data.nroCambio}: ${fallbackDate}`);
+        
         fixedCount++;
       }
     }
     
-    console.log(`✅ Se corrigieron ${fixedCount} registros`);
+
     return fixedCount;
   } catch (error) {
     console.error('❌ Error al corregir campos createdAt:', error);

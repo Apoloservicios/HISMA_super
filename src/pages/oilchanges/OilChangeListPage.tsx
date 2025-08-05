@@ -118,7 +118,7 @@ const loadOilChanges = async (reset: boolean = false) => {
       // ✅ CORREGIDO: Usar búsqueda multi-campo
       setIsSearching(true);
       
-      console.log(`🔍 Iniciando búsqueda para: "${debouncedSearch}"`);
+ 
       
       // Intentar la nueva función multi-campo primero
       try {
@@ -128,7 +128,7 @@ const loadOilChanges = async (reset: boolean = false) => {
           50 // Buscar más resultados
         );
         
-        console.log(`✅ Búsqueda completada: ${searchResults.length} resultados`);
+  
         setOilChanges(searchResults);
         setTotalCount(searchResults.length); // ✅ NUEVO: Actualizar total para búsqueda
         setHasMore(false);
@@ -147,7 +147,6 @@ const loadOilChanges = async (reset: boolean = false) => {
         // Usar la función de búsqueda local existente
         const filteredResults = performLocalSearch(debouncedSearch, allChanges);
         
-        console.log(`✅ Búsqueda local completada: ${filteredResults.length} resultados`);
         setOilChanges(filteredResults);
         setTotalCount(filteredResults.length); // ✅ NUEVO: Actualizar total para búsqueda local
         setHasMore(false);
@@ -241,7 +240,7 @@ setIsStale(false);
 
   // Función para manejar edición
 const handleEdit = (id: string) => {
-  console.log('🔧 Navegando a editar cambio:', id);
+
   navigate(`/cambios-aceite/editar/${id}`);
 };
 
@@ -336,25 +335,20 @@ const handleEdit = (id: string) => {
 
   // Efecto para la búsqueda
   useEffect(() => {
-    console.log('🎬 EFECTO DE BÚSQUEDA ACTIVADO:', { 
-      debouncedSearchTerm, 
-      searchTerm,
-      iguales: debouncedSearchTerm === searchTerm 
-    });
+   
     
     if (debouncedSearchTerm !== searchTerm) return;
     
-    console.log('✅ EJECUTANDO loadOilChanges con reset=true');
     loadOilChanges(true);
   }, [debouncedSearchTerm]);
   // 5️⃣ EFECTO PARA DETECTAR NAVEGACIÓN - Agregar después de los useEffect existentes
 // ✅ Recargar cuando se navega a la página desde otra ruta
 useEffect(() => {
-  console.log('🔄 Navegación detectada - Verificando si necesita refrescar...');
+  
   
   // Solo recargar si venimos de otra página
   if (location.pathname === '/cambios-aceite') {
-    console.log('✅ En página de historial - Recargando datos frescos...');
+ 
     loadOilChanges(true);
   }
 }, [location.pathname]);
@@ -364,7 +358,7 @@ useEffect(() => {
 useEffect(() => {
   const staleTimer = setTimeout(() => {
     if (!searchTerm.trim()) {
-      console.log('⏰ Datos marcados como posiblemente desactualizados');
+      
       setIsStale(true);
     }
   }, 300000); // 2 minutos
@@ -376,7 +370,7 @@ useEffect(() => {
 useEffect(() => {
   const handleFocus = () => {
     if (!searchTerm.trim() && !loading) {
-      console.log('🔄 Ventana enfocada - Recargando datos...');
+  
       loadOilChanges(true);
     }
   };
@@ -535,8 +529,7 @@ useEffect(() => {
                     color={isStale ? "warning" : "primary"}
                     size="sm"
                     onClick={() => {
-                      console.log('🔄 Actualizando manualmente...');
-                      loadOilChanges(true);
+                                        loadOilChanges(true);
                     }}
                     disabled={loading}
                     icon={<ArrowPathIcon className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />}

@@ -7,6 +7,7 @@ import SuperAdminDashboard from './SuperAdminDashboard';
 import HybridOwnerDashboard from './HybridOwnerDashboard';
 import UserDashboard from './UserDashboard';
 
+
 // Componente de carga
 const LoadingScreen = () => (
   <div className="flex justify-center items-center min-h-screen">

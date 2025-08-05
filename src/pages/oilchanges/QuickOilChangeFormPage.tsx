@@ -58,12 +58,7 @@ const QuickOilChangeFormPage: React.FC = () => {
     ).sort();
   }, []);
 
-  // ✅ DEBUG AL CARGAR
-  useEffect(() => {
-    console.log('🔍 QuickForm DEBUG - autocompleteOptions:', autocompleteOptions);
-    console.log('🔍 QuickForm DEBUG - allVehicleBrands length:', allVehicleBrands.length);
-    console.log('🔍 QuickForm DEBUG - primeras 5 marcas:', allVehicleBrands.slice(0, 5));
-  }, [allVehicleBrands]);
+
   
   // ✅ MANEJAR CAMBIOS CON VALIDACIÓN DE TELÉFONO
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {

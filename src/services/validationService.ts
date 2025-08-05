@@ -103,7 +103,9 @@ autocompleteOptions.todasMarcasVehiculos = Array.from(
 // Tipos de vehículo
 export const tiposVehiculo = [
   'Automóvil',
-  'SUV/Camioneta',
+   'SUV',
+  'Camioneta',
+  'Utilitario',
   'Camión',
   'Moto',
   'Maquinaria',
