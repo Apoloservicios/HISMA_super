@@ -6,7 +6,8 @@ import { PageContainer, Card, CardHeader, CardBody, Button, Alert, Spinner } fro
 import { DashboardService } from '../../services/dashboardService';
 import { Lubricentro, OilChangeStats, User, OilChange } from '../../types';
 import { getSubscriptionPlans } from '../../services/hybridSubscriptionService';
-import { SubscriptionPlan } from '../../types/subscription';
+import { SubscriptionPlan , SUBSCRIPTION_PLANS } from '../../types/subscription';
+import PaymentButton from '../../components/payment/PaymentButton';
 
 // Recharts - Carga condicional
 import {
@@ -17,7 +18,8 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer
+  ResponsiveContainer,
+  
 } from 'recharts';
 
 // Iconos
@@ -32,7 +34,7 @@ import {
   WrenchIcon,
   ExclamationTriangleIcon,
   CreditCardIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,CheckCircleIcon
 } from '@heroicons/react/24/outline';
 
 // Componente de carga rápida
@@ -67,6 +69,28 @@ interface SubscriptionInfo {
   isExpiring: boolean;
   isLimitReached: boolean;
 }
+
+
+
+const getPlanPriceForPayment = (planType: string, billingType: 'monthly' | 'semiannual'): number => {
+  // Buscar en planes estáticos primero
+  const staticPlan = SUBSCRIPTION_PLANS[planType as keyof typeof SUBSCRIPTION_PLANS];
+  if (staticPlan) {
+    return billingType === 'monthly' ? staticPlan.price.monthly : staticPlan.price.semiannual;
+  }
+  
+  // Precios por defecto para planes dinámicos
+  const defaultPrices: Record<string, { monthly: number; semiannual: number }> = {
+    'basic': { monthly: 5000, semiannual: 27000 },
+    'premium': { monthly: 9000, semiannual: 48000 },
+    'enterprise': { monthly: 15000, semiannual: 81000 },
+  };
+  
+  const prices = defaultPrices[planType] || defaultPrices['basic'];
+  return billingType === 'monthly' ? prices.monthly : prices.semiannual;
+};
+
+
 
 // 🔧 Función mejorada para obtener información de suscripción
 const getSubscriptionInfo = (
@@ -205,157 +229,219 @@ const getSubscriptionInfo = (
   };
 };
 
-// 🆕 Componente mejorado para información de suscripción
-const SubscriptionInfoCard: React.FC<{ 
-  subscriptionInfo: SubscriptionInfo;
-  lubricentro: Lubricentro;
-}> = React.memo(({ subscriptionInfo, lubricentro }) => {
-  if (!subscriptionInfo.isTrialPeriod && !subscriptionInfo.isExpiring && !subscriptionInfo.isLimitReached) {
-    return null; // No mostrar si todo está normal
-  }
-
-  const {
-    planName,
-    isTrialPeriod,
-    daysRemaining,
-    servicesRemaining,
+const SubscriptionInfoCard: React.FC<{ subscriptionInfo: SubscriptionInfo; lubricentro: Lubricentro }> = React.memo(({ 
+  subscriptionInfo, 
+  lubricentro 
+}) => {
+  const { 
+    planName, 
+    isTrialPeriod, 
+    userLimit, 
+    currentUsers, 
+    serviceLimit, 
+    currentServices, 
+    servicesRemaining, 
+    daysRemaining, 
+    planType,
     isExpiring,
-    isLimitReached,
-    serviceLimit,
-    currentServices,
-    planType
+    isLimitReached
   } = subscriptionInfo;
 
-  const getCardColor = () => {
-    if (isLimitReached) return 'border-red-200 bg-red-50';
-    if (isExpiring) return 'border-orange-200 bg-orange-50';
-    return 'border-blue-200 bg-blue-50';
-  };
-
-  const getIconColor = () => {
-    if (isLimitReached) return 'text-red-600';
-    if (isExpiring) return 'text-orange-600';
-    return 'text-blue-600';
-  };
+  // Determinar si necesita mostrar botones de pago
+  const needsPayment = isTrialPeriod && (isExpiring || isLimitReached) || 
+                      lubricentro.estado === 'inactivo' || 
+                      (planType === 'service' && isLimitReached);
 
   return (
-    <Card className={`mb-6 ${getCardColor()}`}>
-      <CardHeader 
-        title={isTrialPeriod ? "Período de Prueba Gratuita" : "Estado de Suscripción"} 
-        subtitle={`Plan actual: ${planName}`}
-      />
+    <Card className="mb-6">
       <CardBody>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Días restantes (solo para trial) */}
-          {isTrialPeriod && daysRemaining !== undefined && (
-            <div className={`p-4 rounded-lg ${isExpiring ? 'bg-orange-100' : 'bg-blue-100'}`}>
-              <div className="flex items-center">
-                <CalendarDaysIcon className={`h-6 w-6 mr-2 ${getIconColor()}`} />
-                <div>
-                  <h3 className={`font-medium ${isExpiring ? 'text-orange-700' : 'text-blue-700'}`}>
-                    Días Restantes
-                  </h3>
-                  <p className={`text-2xl font-bold ${isExpiring ? 'text-orange-800' : 'text-blue-800'}`}>
-                    {daysRemaining}
-                  </p>
+        {/* Contenido existente de la tarjeta de suscripción */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className={`rounded-full p-3 ${
+                isLimitReached ? 'bg-red-100' :
+                isExpiring ? 'bg-orange-100' : 'bg-green-100'
+              }`}>
+                <ShieldCheckIcon className={`h-6 w-6 ${
+                  isLimitReached ? 'text-red-600' :
+                  isExpiring ? 'text-orange-600' : 'text-green-600'
+                }`} />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {planName}
+                </h3>
+                <div className="flex items-center space-x-4 text-sm text-gray-600">
+                  <span>
+                    Usuarios: {currentUsers}/{userLimit}
+                  </span>
+                  <span>
+                    Servicios: {currentServices}/{serviceLimit || '∞'}
+                    {servicesRemaining !== null && (
+                      <span className="ml-1">
+                        ({servicesRemaining} restantes)
+                      </span>
+                    )}
+                  </span>
+                  {daysRemaining !== undefined && (
+                    <span>
+                      Días restantes: {daysRemaining}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Servicios */}
-          <div className={`p-4 rounded-lg ${isLimitReached ? 'bg-red-100' : isExpiring ? 'bg-orange-100' : 'bg-green-100'}`}>
-            <div className="flex items-center">
-              <WrenchIcon className={`h-6 w-6 mr-2 ${isLimitReached ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-green-600'}`} />
-              <div>
-                <h3 className={`font-medium ${isLimitReached ? 'text-red-700' : isExpiring ? 'text-orange-700' : 'text-green-700'}`}>
-                  {planType === 'service' ? 'Servicios Restantes' : 'Servicios Disponibles'}
-                </h3>
-                <p className={`text-2xl font-bold ${isLimitReached ? 'text-red-800' : isExpiring ? 'text-orange-800' : 'text-green-800'}`}>
-                  {servicesRemaining !== null ? servicesRemaining : '∞'}
-                </p>
-                {serviceLimit && (
-                  <p className={`text-sm mt-1 ${isLimitReached ? 'text-red-600' : isExpiring ? 'text-orange-600' : 'text-green-600'}`}>
-                    {planType === 'service' 
-                      ? `de ${serviceLimit} totales` 
-                      : `de ${serviceLimit} este mes`
-                    }
-                  </p>
-                )}
+            
+            <div className="text-right">
+              <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                isLimitReached ? 'bg-red-100 text-red-800' :
+                isExpiring ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'
+              }`}>
+                {isLimitReached ? 'Límite Alcanzado' :
+                 isExpiring ? 'Requiere Atención' : 'Activo'}
               </div>
             </div>
           </div>
-
-          {/* Progreso visual */}
-          {serviceLimit && (
-            <div className="p-4 rounded-lg bg-gray-100">
-              <div className="flex items-center mb-2">
-                <ChartBarIcon className="h-6 w-6 mr-2 text-gray-600" />
-                <div>
-                  <h3 className="font-medium text-gray-700">Uso de Servicios</h3>
-                  <p className="text-2xl font-bold text-gray-800">{currentServices}</p>
-                  <p className="text-xs text-gray-600 mt-1">de {serviceLimit} {planType === 'service' ? 'contratados' : 'mensuales'}</p>
-                </div>
-              </div>
-              <div className="mt-2 bg-gray-200 rounded-full h-2">
-                <div 
-                  className={`h-2 rounded-full ${
-                    (currentServices / serviceLimit) * 100 >= 90 ? 'bg-red-500' : 
-                    (currentServices / serviceLimit) * 100 >= 75 ? 'bg-orange-500' : 'bg-green-500'
-                  }`}
-                  style={{ width: `${Math.min(100, (currentServices / serviceLimit) * 100)}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Alertas y acciones */}
-        {(isExpiring || isLimitReached) && (
-          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start">
-              <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mt-0.5 mr-3" />
-              <div className="flex-1">
-                <h4 className="text-sm font-medium text-yellow-800">
-                  {isLimitReached ? 'Límite Alcanzado' : 'Atención Requerida'}
+        {/* Mostrar advertencias y botones de pago cuando sea necesario */}
+        {needsPayment && (
+          <div className="mt-4 p-4 rounded-lg border-l-4 border-l-orange-400 bg-orange-50">
+            <div className="flex items-start space-x-3">
+              <ExclamationTriangleIcon className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-grow">
+                <h4 className="font-semibold text-orange-900 mb-2">
+                  {isTrialPeriod && isExpiring ? '⏰ Tu período de prueba está por vencer' :
+                   isTrialPeriod && isLimitReached ? '🚫 Límite de servicios alcanzado' :
+                   lubricentro.estado === 'inactivo' ? '❌ Cuenta inactiva' :
+                   '⚠️ Acción requerida'}
                 </h4>
-                <div className="mt-2 text-sm text-yellow-700">
+                
+                <div className="text-sm text-orange-800 mb-3">
+                  {isTrialPeriod && isExpiring && (
+                    <p className="mb-2">
+                      Tu período de prueba vence en {daysRemaining} día{daysRemaining !== 1 ? 's' : ''}. 
+                      Activa una suscripción para continuar usando todas las funcionalidades.
+                    </p>
+                  )}
+                  {isLimitReached && planType === 'trial' && (
+                    <p className="mb-2">
+                      Has alcanzado el límite de {serviceLimit} servicios del período de prueba.
+                    </p>
+                  )}
                   {isLimitReached && planType === 'service' && (
                     <p className="mb-2">
-                      Has utilizado todos los servicios contratados en tu plan.
+                      Has utilizado todos los servicios de tu plan. Renueva para continuar.
                     </p>
                   )}
-                  {isLimitReached && planType === 'monthly' && (
+                  {lubricentro.estado === 'inactivo' && (
                     <p className="mb-2">
-                      Has alcanzado el límite de servicios para este mes.
+                      Tu cuenta está inactiva. Reactiva tu suscripción para continuar.
                     </p>
                   )}
-                  {isTrialPeriod && isExpiring && !isLimitReached && (
-                    <p className="mb-2">
-                      Tu período de prueba vence en {daysRemaining} día{daysRemaining !== 1 ? 's' : ''}.
-                    </p>
-                  )}
-                  <p>Contacta a nuestro equipo para obtener ayuda.</p>
                 </div>
-                <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                  <Button
-                    size="sm"
-                    color="warning"
-                    onClick={() => window.location.href = `mailto:soporte@hisma.com.ar?subject=Soporte para ${lubricentro.fantasyName}`}
-                  >
-                    Contactar Soporte
-                  </Button>
+
+                {/* Botones de pago */}
+                <div className="space-y-3">
+                  {/* Para período de prueba o cuenta inactiva - mostrar planes principales */}
+                  {(isTrialPeriod || lubricentro.estado === 'inactivo') && (
+                    <div>
+                      <h5 className="font-medium text-orange-900 mb-2">Elige tu plan:</h5>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Plan Básico */}
+                        <div className="p-3 border border-orange-200 rounded-lg bg-white">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-gray-900">Plan Básico</span>
+                            <span className="text-sm text-gray-600">Mensual</span>
+                          </div>
+                          <PaymentButton
+                            planType="basic"
+                            planName="Básico"
+                            amount={getPlanPriceForPayment('basic', 'monthly')}
+                            billingType="monthly"
+                            className="w-full"
+                          />
+                        </div>
+
+                        {/* Plan Premium */}
+                        <div className="p-3 border border-orange-200 rounded-lg bg-white">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium text-gray-900">Plan Premium</span>
+                            <span className="text-sm text-gray-600">Mensual</span>
+                          </div>
+                          <PaymentButton
+                            planType="premium"
+                            planName="Premium"
+                            amount={getPlanPriceForPayment('premium', 'monthly')}
+                            billingType="monthly"
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Opción semestral */}
+                      <div className="mt-3 text-center">
+                        <p className="text-xs text-orange-700 mb-2">
+                          💡 Ahorra con la facturación semestral
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <PaymentButton
+                            planType="basic"
+                            planName="Básico (6 meses)"
+                            amount={getPlanPriceForPayment('basic', 'semiannual')}
+                            billingType="semiannual"
+                            className="w-full"
+                          />
+                          <PaymentButton
+                            planType="premium"
+                            planName="Premium (6 meses)"
+                            amount={getPlanPriceForPayment('premium', 'semiannual')}
+                            billingType="semiannual"
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Para planes por servicios agotados */}
                   {planType === 'service' && isLimitReached && (
+                    <div>
+                      <h5 className="font-medium text-orange-900 mb-2">Renovar servicios:</h5>
+                      <PaymentButton
+                        planType={lubricentro.subscriptionPlan || 'service'}
+                        planName="Renovar Plan de Servicios"
+                        amount={15000} // Precio por defecto, se puede ajustar
+                        billingType="monthly"
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+
+                  {/* Botón de contacto de soporte */}
+                  <div className="pt-3 border-t border-orange-200">
                     <Button
                       size="sm"
-                      color="primary"
-                      onClick={() => window.location.href = `mailto:ventas@hisma.com.ar?subject=Renovar plan de servicios - ${lubricentro.fantasyName}`}
+                      variant="outline"
+                      onClick={() => window.location.href = `mailto:soporte@hisma.com.ar?subject=Consulta sobre suscripción - ${lubricentro.fantasyName}`}
+                      className="w-full"
                     >
-                      Renovar Plan
+                      ¿Necesitas ayuda? Contactar Soporte
                     </Button>
-                  )}
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mostrar información adicional para cuentas activas */}
+        {lubricentro.estado === 'activo' && !needsPayment && (
+          <div className="mt-4 p-3 rounded-lg bg-green-50 border border-green-200">
+            <div className="flex items-center text-green-800">
+              <CheckCircleIcon className="h-4 w-4 mr-2" />
+              <span className="text-sm font-medium">Suscripción activa y funcionando correctamente</span>
             </div>
           </div>
         )}

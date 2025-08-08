@@ -389,3 +389,29 @@ export const searchLubricentros = async (searchTerm: string): Promise<Lubricentr
     throw error;
   }
 };
+
+/**
+ * Obtener lubricentro por subscription ID de MercadoPago
+ */
+export const getLubricentroBySubscriptionId = async (subscriptionId: string): Promise<Lubricentro | null> => {
+  try {
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      where('subscriptionId', '==', subscriptionId),
+      limit(1)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return null;
+    }
+    
+    const doc = querySnapshot.docs[0];
+    return convertFirestoreLubricentro(doc);
+    
+  } catch (error) {
+    console.error('Error al obtener lubricentro por subscription ID:', error);
+    throw error;
+  }
+};
