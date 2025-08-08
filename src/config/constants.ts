@@ -47,8 +47,8 @@ export const TRIAL_MESSAGES = {
 
 // Configuración de la aplicación
 export const APP_CONFIG = {
-  SUPPORT_EMAIL: 'soporte@hisma.com.ar',
-  SUPPORT_WHATSAPP: '+5491112345678',
+  SUPPORT_EMAIL: 'info@hisma.com.ar',
+  SUPPORT_WHATSAPP: '+5492604515854',
   COMPANY_NAME: 'HISMA',
   PAGINATION_SIZE: 10,
   MAX_FILE_SIZE: 5 * 1024 * 1024, // 5MB

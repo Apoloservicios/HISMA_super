@@ -67,6 +67,10 @@ import QuickOilChangeFormPage from './pages/oilchanges/QuickOilChangeFormPage';
 
 import SuperAdminServicesPage from './pages/superadmin/SuperAdminServicesPage';
 import SuperAdminServiceDetailPage from './pages/superadmin/SuperAdminServiceDetailPage';
+import PaymentSuccessPage from './pages/payment/PaymentSuccessPage';
+import PaymentPendingPage from './pages/payment/PaymentPendingPage';
+import PaymentFailurePage from './pages/payment/PaymentFailurePage';
+
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -89,6 +93,9 @@ const App: React.FC = () => {
               {/* Rutas públicas */}
               <Route path="/" element={<HomePage />} />
               <Route path="/consulta-historial" element={<PublicHistoryPage />} />
+              <Route path="/payment/success" element={<PaymentSuccessPage />} />
+              <Route path="/payment/failure" element={<PaymentFailurePage />} />
+              <Route path="/payment/pending" element={<PaymentPendingPage />} />
               
               {/* Rutas de autenticación con AuthLayout */}
               <Route element={<AuthLayout />}>

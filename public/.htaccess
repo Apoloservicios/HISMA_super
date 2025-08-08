@@ -1,27 +1,43 @@
-# SPA Routing (tu código actual)
-Options -MultiViews
+# ============ FORZAR HTTPS (CRÍTICO PARA MERCADOPAGO) ============
 RewriteEngine On
+
+# Forzar HTTPS (MercadoPago lo requiere)
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Forzar SIN www (cambia si necesitas CON www)
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^(.*)$ https://%1%{REQUEST_URI} [R=301,L]
+
+# ============ SPA ROUTING PARA REACT ============
+Options -MultiViews
 RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^ index.html [QSA,L]
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
 
-# NUEVAS OPTIMIZACIONES - Agregar debajo:
-
-# Cache static assets para mejorar velocidad
+# ============ CACHE OPTIMIZADO PARA REACT BUILD ============
 <IfModule mod_expires.c>
   ExpiresActive on
   
-  # CSS y JS - 1 año
-  ExpiresByType text/css "access plus 1 year"
-  ExpiresByType application/javascript "access plus 1 year"
-  ExpiresByType application/x-javascript "access plus 1 year"
+  # Archivos con hash de React build - Cache largo (1 año)
+  <FilesMatch "\.[a-f0-9]{8}\.(css|js)$">
+    ExpiresDefault "access plus 1 year"
+  </FilesMatch>
   
-  # Imágenes - 1 año
-  ExpiresByType image/png "access plus 1 year"
-  ExpiresByType image/jpg "access plus 1 year"
-  ExpiresByType image/jpeg "access plus 1 year"
-  ExpiresByType image/gif "access plus 1 year"
-  ExpiresByType image/svg+xml "access plus 1 year"
-  ExpiresByType image/webp "access plus 1 year"
+  # CSS y JS normales - 1 mes
+  ExpiresByType text/css "access plus 1 month"
+  ExpiresByType application/javascript "access plus 1 month"
+  ExpiresByType application/x-javascript "access plus 1 month"
+  
+  # Imágenes - 6 meses
+  ExpiresByType image/png "access plus 6 months"
+  ExpiresByType image/jpg "access plus 6 months"
+  ExpiresByType image/jpeg "access plus 6 months"
+  ExpiresByType image/gif "access plus 6 months"
+  ExpiresByType image/svg+xml "access plus 6 months"
+  ExpiresByType image/webp "access plus 6 months"
+  ExpiresByType image/ico "access plus 6 months"
+  ExpiresByType image/x-icon "access plus 6 months"
   
   # Fuentes - 1 año
   ExpiresByType font/woff "access plus 1 year"
@@ -29,33 +45,76 @@ RewriteRule ^ index.html [QSA,L]
   ExpiresByType application/font-woff "access plus 1 year"
   ExpiresByType application/font-woff2 "access plus 1 year"
   
-  # HTML - 1 hora (para actualizaciones rápidas)
+  # Manifest - Sin cache
+  ExpiresByType application/manifest+json "access plus 0 seconds"
+  
+  # HTML - 1 hora
   ExpiresByType text/html "access plus 1 hour"
 </IfModule>
 
-# Compresión GZIP para archivos más pequeños
+# Service worker sin cache
+<Files "service-worker.js">
+  <IfModule mod_expires.c>
+    ExpiresDefault "access plus 0 seconds"
+  </IfModule>
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </IfModule>
+</Files>
+
+# ============ COMPRESIÓN GZIP ============
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/plain
   AddOutputFilterByType DEFLATE text/html
   AddOutputFilterByType DEFLATE text/xml
   AddOutputFilterByType DEFLATE text/css
+  AddOutputFilterByType DEFLATE text/javascript
   AddOutputFilterByType DEFLATE application/xml
   AddOutputFilterByType DEFLATE application/xhtml+xml
   AddOutputFilterByType DEFLATE application/rss+xml
   AddOutputFilterByType DEFLATE application/javascript
   AddOutputFilterByType DEFLATE application/x-javascript
   AddOutputFilterByType DEFLATE application/json
+  AddOutputFilterByType DEFLATE application/font-woff
+  AddOutputFilterByType DEFLATE application/font-woff2
+  AddOutputFilterByType DEFLATE image/svg+xml
 </IfModule>
 
-# Headers de seguridad adicionales
+# ============ HEADERS DE SEGURIDAD ============
 <IfModule mod_headers.c>
-  # Cache busting para archivos con hash
+  # Headers de seguridad básicos
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-XSS-Protection "1; mode=block"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  
+  # Content Security Policy para MercadoPago
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.mercadopago.com https://www.mercadopago.com https://sdk.mercadopago.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseapp.com https://*.googleapis.com https://api.mercadopago.com https://hisma-1b0p0eujm-andresmartin2609-gmailcoms-projects.vercel.app https://cdn.jsdelivr.net"  
+  # Cache busting para archivos estáticos
   <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|woff|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"
   </FilesMatch>
   
-  # Security headers
-  Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "DENY"
-  Header always set X-XSS-Protection "1; mode=block"
+  # Sin cache para index.html
+  <Files "index.html">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </Files>
 </IfModule>
+
+# ============ PROTECCIÓN DE ARCHIVOS ============
+<Files ".env">
+  Order allow,deny
+  Deny from all
+</Files>
+
+<Files "*.json">
+  <If "%{REQUEST_URI} !~ m#^/static/#">
+    Order allow,deny
+    Deny from all
+  </If>
+</Files>
+
+# ============ ERROR PAGES ============
+ErrorDocument 404 /index.html

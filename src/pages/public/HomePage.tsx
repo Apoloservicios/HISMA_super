@@ -909,7 +909,7 @@ const HomePage: React.FC = () => {
                 📍 San Rafael, Mendoza - Argentina
               </p>
               <p className="text-sm text-gray-600 mb-4">
-                📞 +54 260 451-5854 | ✉️ contacto@hisma.com.ar
+                📞 +54 260 451-5854 | ✉️ info@hisma.com.ar
               </p>
             </div>
             

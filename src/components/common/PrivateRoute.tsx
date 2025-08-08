@@ -13,6 +13,27 @@ const LoadingScreen = () => (
   </div>
 );
 
+
+// ✅ Rutas permitidas para usuarios con trial expirado
+const isAllowedRouteForExpiredTrial = (pathname: string): boolean => {
+  const allowedRoutes = [
+    '/dashboard',           // ✅ CRÍTICO: Permitir dashboard (tiene botones de renovación)
+    '/perfil',              
+    '/usuarios',            
+    '/suscripcion',         
+    '/reportes',            
+    '/cambios-aceite',      // Solo ver historial
+  ];
+
+  // Permitir rutas de visualización (no creación)
+const isViewRoute = Boolean(pathname.match(/^\/cambios-aceite\/[^\/]+$/)) && 
+                   !pathname.includes('/nuevo') && 
+                   !pathname.includes('/editar');
+
+  return allowedRoutes.some(route => pathname.startsWith(route)) || isViewRoute;
+};
+
+
 // Componente para mostrar cuando el período de prueba ha expirado
 const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
   <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -38,10 +59,10 @@ const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
           </p>
           <div className="space-y-2">
             <p className="text-xs text-blue-600">
-              📧 Email: soporte@hisma.com.ar
+              📧 Email: ventas@hisma.com.ar
             </p>
             <p className="text-xs text-blue-600">
-              📱 WhatsApp: +54 (11) 1234-5678
+              📱 WhatsApp: +54 (260) 4515854
             </p>
           </div>
         </div>
@@ -50,7 +71,7 @@ const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
           <Button
             color="primary"
             fullWidth
-            onClick={() => window.location.href = 'mailto:soporte@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
+            onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
           >
             Contactar por Email
           </Button>
@@ -58,7 +79,7 @@ const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
             color="success"
             variant="outline"
             fullWidth
-            onClick={() => window.open('https://wa.me/5491112345678?text=' + encodeURIComponent(`Hola, necesito activar la suscripción para ${lubricentro.fantasyName}`))}
+            onClick={() => window.open('https://wa.me/5492604515854?text=' + encodeURIComponent(`Hola, necesito activar la suscripción para ${lubricentro.fantasyName}`))}
           >
             Contactar por WhatsApp
           </Button>
@@ -170,8 +191,8 @@ const TrialLimitReachedScreen = ({ lubricentro, currentServices, limit }: {
             Contáctanos para activar tu cuenta y elegir el plan que mejor se adapte a tus necesidades.
           </p>
           <div className="space-y-1">
-            <p className="text-xs text-blue-600">📧 soporte@hisma.com.ar</p>
-            <p className="text-xs text-blue-600">📱 +54 (11) 1234-5678</p>
+            <p className="text-xs text-blue-600">📧 ventas@hisma.com.ar</p>
+            <p className="text-xs text-blue-600">📱 +54 (260) 4515854</p>
           </div>
         </div>
 
@@ -179,7 +200,7 @@ const TrialLimitReachedScreen = ({ lubricentro, currentServices, limit }: {
           <Button
             color="primary"
             fullWidth
-            onClick={() => window.location.href = 'mailto:soporte@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
+            onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
           >
             Contactar Soporte
           </Button>
@@ -260,7 +281,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({
   // ✅ CORRECCIÓN: Verificar estado del lubricentro y período de prueba de manera más precisa
   if (userProfile && userProfile.role !== 'superadmin' && lubricentro) {
     // Si el lubricentro está inactivo
-    if (lubricentro.estado === 'inactivo') {
+   if (lubricentro.estado === 'inactivo' && !isAllowedRouteForExpiredTrial(location.pathname)) {
       return <TrialExpiredScreen lubricentro={lubricentro} />;
     }
     
@@ -313,7 +334,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({
             <Button
               color="primary"
               fullWidth
-              onClick={() => window.location.href = 'mailto:soporte@hisma.com.ar'}
+              onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar'}
             >
               Contactar Soporte
             </Button>
