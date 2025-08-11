@@ -89,7 +89,9 @@ RewriteRule . /index.html [L]
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   
   # Content Security Policy para MercadoPago
-Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.mercadopago.com https://www.mercadopago.com https://sdk.mercadopago.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseapp.com https://*.googleapis.com https://api.mercadopago.com https://hisma-1b0p0eujm-andresmartin2609-gmailcoms-projects.vercel.app https://cdn.jsdelivr.net"  
+
+Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.mercadopago.com https://www.mercadopago.com https://sdk.mercadopago.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseapp.com https://*.googleapis.com https://api.mercadopago.com https://hisma-1b0p0eujm-andresmartin2609-gmailcoms-projects.vercel.app https://hisma-api.vercel.app https://cdn.jsdelivr.net"
+  
   # Cache busting para archivos estáticos
   <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|woff|woff2)$">
     Header set Cache-Control "public, max-age=31536000, immutable"

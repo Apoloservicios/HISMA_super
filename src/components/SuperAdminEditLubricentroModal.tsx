@@ -44,7 +44,7 @@ interface EditFormData {
   trialEndDate: string;
   
   // Configuración de membresía
-  paymentStatus: 'paid' | 'pending' | 'overdue';
+  paymentStatus: 'paid' | 'pending' | 'overdue' | 'cancelled' ;
   subscriptionRenewalType?: 'monthly' | 'semiannual' | 'annual' | 'service';
   autoRenewal: boolean;
   

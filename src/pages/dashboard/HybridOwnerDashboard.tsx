@@ -291,6 +291,8 @@ const getSubscriptionInfo = (
 // Continuación...
 
 // ✅ COMPONENTE MEJORADO: Mostrar plan actual del lubricentro
+// También actualizar CurrentPlanDisplay (líneas 141-200) para agregar un botón de cambio:
+
 const CurrentPlanDisplay = ({ 
   lubricentro, 
   dynamicPlans 
@@ -305,9 +307,22 @@ const CurrentPlanDisplay = ({
         <h4 className="text-gray-800 font-medium mb-2">
           📋 Sin Plan Asignado
         </h4>
-        <p className="text-gray-600 text-sm">
+        <p className="text-gray-600 text-sm mb-3">
           Actualmente no tienes un plan activo. Selecciona uno para comenzar.
         </p>
+        
+        {/* ✅ BOTÓN PARA SELECCIONAR PLAN */}
+        <PaymentButton
+          planType="starter"
+          planName="Seleccionar Plan"
+          amount={0}
+          billingType="monthly"
+          className="w-full"
+          showPlanSelector={true} // ← ACTIVAR SELECTOR
+          currentPlanId={undefined}
+          fantasyName={lubricentro.fantasyName}
+          variant="payment"
+        />
       </div>
     );
   }
@@ -323,18 +338,49 @@ const CurrentPlanDisplay = ({
         <p className="text-red-700 text-sm mb-2">
           {planInfo.error}
         </p>
-        <p className="text-red-600 text-xs">
+        <p className="text-red-600 text-xs mb-3">
           Contacta al administrador para resolver este problema.
         </p>
+        
+        {/* ✅ BOTÓN PARA CAMBIAR PLAN */}
+        <PaymentButton
+          planType="starter"
+          planName="Seleccionar Otro Plan"
+          amount={0}
+          billingType="monthly"
+          className="w-full"
+          showPlanSelector={true} // ← ACTIVAR SELECTOR
+          currentPlanId={lubricentro.subscriptionPlan}
+          fantasyName={lubricentro.fantasyName}
+          variant="upgrade"
+        />
       </div>
     );
   }
 
   return (
     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-      <h4 className="text-blue-800 font-medium mb-2">
-        📋 Tu Plan Actual: {planInfo.name}
-      </h4>
+      <div className="flex justify-between items-start mb-2">
+        <h4 className="text-blue-800 font-medium">
+          📋 Tu Plan Actual: {planInfo.name}
+        </h4>
+        
+        {/* ✅ BOTÓN PEQUEÑO PARA CAMBIAR PLAN */}
+        {lubricentro.estado === 'activo' && (
+          <Button
+            size="sm"
+            variant="outline"
+            color="primary"
+            onClick={() => {
+              // Crear un evento para abrir el selector
+              const event = new CustomEvent('openPlanSelector');
+              window.dispatchEvent(event);
+            }}
+          >
+            Cambiar Plan
+          </Button>
+        )}
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -378,11 +424,185 @@ const CurrentPlanDisplay = ({
           </div>
         </div>
       )}
+      
+      {/* ✅ BOTÓN DE CAMBIO DE PLAN PARA CUENTAS ACTIVAS */}
+      {lubricentro.estado === 'activo' && (
+        <div className="mt-3 pt-3 border-t border-blue-200">
+          <PaymentButton
+            planType={lubricentro.subscriptionPlan}
+            planName="Cambiar o Mejorar Plan"
+            amount={0}
+            billingType="monthly"
+            className="w-full"
+            showPlanSelector={true} // ← ACTIVAR SELECTOR
+            currentPlanId={lubricentro.subscriptionPlan}
+            fantasyName={lubricentro.fantasyName}
+            variant="upgrade"
+          />
+        </div>
+      )}
     </div>
   );
 };
 
+
+// 2️⃣ CREAR NUEVA SECCIÓN DE GESTIÓN DE SUSCRIPCIÓN AL FINAL
+const SubscriptionManagementCard = React.memo(({ 
+  lubricentro, 
+  subscriptionInfo, 
+  dynamicPlans,
+  formatDate // ✅ AGREGAR formatDate como prop
+}: { 
+  lubricentro: Lubricentro; 
+  subscriptionInfo: SubscriptionInfo | null;
+  dynamicPlans: Record<string, any>;
+  formatDate: (date: any) => string; // ✅ AGREGAR TIPO
+}) => {
+  if (!subscriptionInfo) return null;
+
+  const planInfo = lubricentro.subscriptionPlan 
+    ? getPlanDisplayInfo(lubricentro.subscriptionPlan, dynamicPlans)
+    : null;
+
+  return (
+    <Card className="mb-6">
+      <CardHeader title="Gestión de Suscripción" />
+      <CardBody>
+        <div className="space-y-4">
+          {/* Información del plan actual */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex justify-between items-start mb-2">
+              <h4 className="text-blue-800 font-medium">
+                📋 Plan Actual: {planInfo?.name || 'Sin plan asignado'}
+              </h4>
+              
+              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                lubricentro.estado === 'activo' 
+                  ? 'bg-green-100 text-green-800' 
+                  : lubricentro.estado === 'trial'
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {lubricentro.estado === 'activo' ? 'Activo' : 
+                 lubricentro.estado === 'trial' ? 'Período de Prueba' : 'Inactivo'}
+              </span>
+            </div>
+            
+            {planInfo && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-blue-900 font-semibold">
+                    ${planInfo.price.toLocaleString()}
+                    {planInfo.type === 'service' ? ' (pago único)' : '/mes'}
+                  </p>
+                  <p className="text-blue-700 text-sm">
+                    {planInfo.description}
+                  </p>
+                </div>
+                
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Usuarios:</span>
+                    <span className="text-blue-900 font-medium">
+                      {subscriptionInfo.currentUsers} / {subscriptionInfo.userLimit}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Servicios:</span>
+                    <span className="text-blue-900 font-medium">
+                      {subscriptionInfo.currentServices}
+                      {subscriptionInfo.serviceLimit && ` / ${subscriptionInfo.serviceLimit}`}
+                      {subscriptionInfo.serviceLimit === null && ' (Ilimitados)'}
+                    </span>
+                  </div>
+                  {subscriptionInfo.isTrialPeriod && subscriptionInfo.daysRemaining !== undefined && (
+                    <div className="flex justify-between">
+                      <span className="text-blue-700">Días restantes:</span>
+                      <span className={`font-medium ${
+                        subscriptionInfo.daysRemaining <= 2 ? 'text-red-600' : 'text-blue-900'
+                      }`}>
+                        {subscriptionInfo.daysRemaining}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Información adicional para planes por servicios */}
+            {planInfo?.type === 'service' && (
+              <div className="pt-3 border-t border-blue-200">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Servicios utilizados:</span>
+                    <span className="text-blue-900 font-medium">
+                      {lubricentro.servicesUsed || 0} / {planInfo.totalServices}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-700">Servicios restantes:</span>
+                    <span className="text-blue-900 font-medium">
+                      {Math.max(0, (planInfo.totalServices || 0) - (lubricentro.servicesUsed || 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Botones de gestión */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Cambiar Plan */}
+            <PaymentButton
+              planType={lubricentro.subscriptionPlan || 'starter'}
+              planName="Cambiar Plan"
+              amount={0}
+              billingType="monthly"
+              className="w-full"
+              showPlanSelector={true}
+              currentPlanId={lubricentro.subscriptionPlan}
+              fantasyName={lubricentro.fantasyName}
+              variant="upgrade"
+            />
+
+            {/* Renovar Plan (solo si es necesario) */}
+            {lubricentro.subscriptionPlan && planInfo && (
+              <PaymentButton
+                planType={lubricentro.subscriptionPlan}
+                planName={`Renovar ${planInfo.name}`}
+                amount={planInfo.price}
+                billingType="monthly"
+                className="w-full"
+                variant="renewal"
+              />
+            )}
+          </div>
+
+          {/* Información adicional */}
+          <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
+            <p className="mb-1">
+              <strong>Próxima facturación:</strong> {
+                lubricentro.subscriptionEndDate 
+                  ? formatDate(lubricentro.subscriptionEndDate)
+                  : 'No programada'
+              }
+            </p>
+            <p>
+              <strong>Renovación automática:</strong> {
+                lubricentro.autoRenewal ? 'Activada' : 'Desactivada'
+              }
+            </p>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+});
+
+
 // ✅ FUNCIÓN ACTUALIZADA: Renderizar botones de pago dinámicos
+// En tu función renderPaymentButtons (líneas 254-295), cambiar por esto:
+
 const renderPaymentButtons = (
   lubricentro: Lubricentro,
   dynamicPlans: Record<string, any>,
@@ -391,84 +611,77 @@ const renderPaymentButtons = (
   planType: string
 ) => {
   
-  // Para período de prueba o cuenta inactiva - mostrar planes disponibles
+  // Para período de prueba o cuenta inactiva - mostrar selector de planes
   if (isTrialPeriod || lubricentro.estado === 'inactivo') {
     
-    // Filtrar planes publicados y activos
-    const availablePlans = Object.values(dynamicPlans).filter((plan: any) => 
-      plan.isActive && plan.isPublished
-    );
-
-    if (availablePlans.length === 0) {
-      return (
-        <div className="text-center py-4">
-          <p className="text-gray-600">No hay planes disponibles en este momento.</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar'}
-            className="mt-2"
-          >
-            Contactar Soporte
-          </Button>
-        </div>
-      );
-    }
-
     return (
       <div>
-        <h5 className="font-medium text-orange-900 mb-3">Planes Disponibles:</h5>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {availablePlans.map((plan: any) => {
-            const planInfo = getPlanDisplayInfo(plan.id, dynamicPlans);
-            
-            return (
-              <div key={plan.id} className="p-3 border border-orange-200 rounded-lg bg-white">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-medium text-gray-900">{plan.name}</span>
-                  <span className="text-sm text-gray-600">
-                    {plan.planType === 'service' ? 'Por servicios' : 'Mensual'}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-600 mb-3">
-                  {planInfo.description}
-                </div>
-                <PaymentButton
-                  planType={plan.id}
-                  planName={plan.name}
-                  amount={planInfo.price}
-                  billingType="monthly" // ✅ Siempre usar 'monthly' para compatibilidad
-                  className="w-full"
-                />
-              </div>
-            );
-          })}
-        </div>
+        <h5 className="font-medium text-orange-900 mb-3">Seleccionar Plan:</h5>
+        
+        {/* ✅ BOTÓN CON SELECTOR DE PLANES */}
+        <PaymentButton
+          planType="starter" // Plan por defecto
+          planName="Seleccionar Plan"
+          amount={0} // Se calculará dinámicamente
+          billingType="monthly"
+          className="w-full mb-3"
+          showPlanSelector={true} // ← ACTIVAR SELECTOR
+          currentPlanId={lubricentro.subscriptionPlan}
+          fantasyName={lubricentro.fantasyName}
+          variant="payment"
+        />
+        
+        {/* Botón de soporte */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar'}
+          className="w-full"
+        >
+          ¿Necesitas ayuda? Contactar Soporte
+        </Button>
       </div>
     );
   }
 
-  // Para planes por servicios agotados - mostrar renovación
+  // Para planes por servicios agotados - mostrar renovación con selector
   if (planType === 'service' && isLimitReached && lubricentro.subscriptionPlan) {
     const currentPlanInfo = getPlanDisplayInfo(lubricentro.subscriptionPlan, dynamicPlans);
     
     return (
       <div>
-        <h5 className="font-medium text-orange-900 mb-2">Renovar servicios:</h5>
-        <PaymentButton
-          planType={lubricentro.subscriptionPlan}
-          planName={`Renovar ${currentPlanInfo.name}`}
-          amount={currentPlanInfo.price}
-          billingType="monthly" // ✅ Usar 'monthly' para compatibilidad
-          className="w-full"
-        />
+        <h5 className="font-medium text-orange-900 mb-3">Renovar o Cambiar Plan:</h5>
+        
+        <div className="space-y-2">
+          {/* ✅ BOTÓN DE RENOVACIÓN RÁPIDA */}
+          <PaymentButton
+            planType={lubricentro.subscriptionPlan}
+            planName={`Renovar ${currentPlanInfo.name}`}
+            amount={currentPlanInfo.price}
+            billingType="monthly"
+            className="w-full"
+            variant="renewal"
+          />
+          
+          {/* ✅ BOTÓN PARA CAMBIAR PLAN */}
+          <PaymentButton
+            planType={lubricentro.subscriptionPlan}
+            planName="Cambiar Plan"
+            amount={0}
+            billingType="monthly"
+            className="w-full"
+            showPlanSelector={true} // ← ACTIVAR SELECTOR
+            currentPlanId={lubricentro.subscriptionPlan}
+            fantasyName={lubricentro.fantasyName}
+            variant="upgrade"
+          />
+        </div>
       </div>
     );
   }
 
   return null;
 };
-
 // Componente de suscripción con lógica mejorada
 const SubscriptionCard = React.memo(({ 
   lubricentro, 
@@ -481,7 +694,6 @@ const SubscriptionCard = React.memo(({
 }) => {
   const { isTrialPeriod, isExpiring, isLimitReached, daysRemaining, serviceLimit, planType } = subscriptionInfo || {};
   
-  // ✅ CORREGIDO: Incluir estado inactivo en needsPayment
   const needsPayment = (isTrialPeriod && (isExpiring || isLimitReached)) || 
                       lubricentro.estado === 'inactivo' ||
                       (planType === 'service' && isLimitReached);
@@ -489,10 +701,10 @@ const SubscriptionCard = React.memo(({
   return (
     <Card className="mb-6">
       <CardBody>
-        {/* Mostrar plan actual */}
-        <CurrentPlanDisplay lubricentro={lubricentro} dynamicPlans={dynamicPlans} />
+        {/* ❌ ELIMINAR ESTA LÍNEA - Ya no mostrar CurrentPlanDisplay aquí */}
+        {/* <CurrentPlanDisplay lubricentro={lubricentro} dynamicPlans={dynamicPlans} /> */}
 
-        {/* ✅ CORREGIDO: Mostrar alerta de renovación para estado inactivo */}
+        {/* ✅ SOLO MOSTRAR CUANDO HAY PROBLEMAS QUE REQUIEREN ACCIÓN */}
         {needsPayment && (
           <div className="mb-4">
             <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -501,7 +713,7 @@ const SubscriptionCard = React.memo(({
                 <div className="flex-1">
                   <h4 className="text-sm font-medium text-orange-800 mb-1">
                     {isLimitReached ? '🚫 Límite de servicios alcanzado' :
-                     lubricentro.estado === 'inactivo' ? '❌ Cuenta inactiva' :    // ✅ MOSTRAR MENSAJE
+                     lubricentro.estado === 'inactivo' ? '❌ Cuenta inactiva' :
                      '⚠️ Acción requerida'}
                   </h4>
                   
@@ -522,14 +734,13 @@ const SubscriptionCard = React.memo(({
                         Has utilizado todos los servicios de tu plan. Renueva para continuar.
                       </p>
                     )}
-                    {lubricentro.estado === 'inactivo' && (                      // ✅ AGREGAR MENSAJE
+                    {lubricentro.estado === 'inactivo' && (
                       <p className="mb-2">
                         Tu cuenta está inactiva. Reactiva tu suscripción para continuar.
                       </p>
                     )}
                   </div>
 
-                  {/* ✅ BOTONES DE PAGO DINÁMICOS (ya están implementados correctamente) */}
                   <div className="space-y-3">
                     {renderPaymentButtons(
                       lubricentro,
@@ -539,7 +750,6 @@ const SubscriptionCard = React.memo(({
                       planType || 'monthly'
                     )}
 
-                    {/* Botón de contacto de soporte */}
                     <div className="pt-3 border-t border-orange-200">
                       <Button
                         size="sm"
@@ -557,9 +767,9 @@ const SubscriptionCard = React.memo(({
           </div>
         )}
 
-        {/* Mostrar información adicional para cuentas activas */}
+        {/* ✅ MOSTRAR MENSAJE POSITIVO PARA CUENTAS ACTIVAS SIN PROBLEMAS */}
         {lubricentro.estado === 'activo' && !needsPayment && (
-          <div className="mt-4 p-3 rounded-lg bg-green-50 border border-green-200">
+          <div className="p-3 rounded-lg bg-green-50 border border-green-200">
             <div className="flex items-center text-green-800">
               <CheckCircleIcon className="h-4 w-4 mr-2" />
               <span className="text-sm font-medium">Suscripción activa y funcionando correctamente</span>
@@ -571,9 +781,6 @@ const SubscriptionCard = React.memo(({
   );
 });
 
-
-
-// src/pages/dashboard/HybridOwnerDashboard.tsx - PARTE 3/3
 
 const HybridOwnerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
@@ -777,12 +984,7 @@ const HybridOwnerDashboard: React.FC = () => {
       title={`Dashboard - ${lubricentro?.fantasyName || 'Lubricentro'}`} 
       subtitle={`Bienvenido${userProfile?.apellido ? `, ${userProfile.nombre}` : ''}`}
     >
-      {/* Sección de suscripción */}
-      <SubscriptionCard 
-        lubricentro={lubricentro!} 
-        subscriptionInfo={subscriptionInfo}
-        dynamicPlans={dynamicPlans}
-      />
+      
 
       {/* Métricas principales */}
       <div className="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-4">
@@ -1124,6 +1326,19 @@ const HybridOwnerDashboard: React.FC = () => {
           Reportes
         </Button>
       </div>
+      {/* Sección de suscripción *
+      <SubscriptionCard 
+        lubricentro={lubricentro!} 
+        subscriptionInfo={subscriptionInfo}
+        dynamicPlans={dynamicPlans}
+      />*/}
+
+        <SubscriptionManagementCard 
+      lubricentro={lubricentro!} 
+      subscriptionInfo={subscriptionInfo}
+      dynamicPlans={dynamicPlans}
+      formatDate={formatDate}
+    />
     </PageContainer>
   );
 };

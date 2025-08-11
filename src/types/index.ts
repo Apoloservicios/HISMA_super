@@ -7,6 +7,7 @@ export type UserRole = 'superadmin' | 'admin' | 'user';
 export type UserStatus = 'activo' | 'inactivo' | 'pendiente';
 export type OilChangeStatus = 'pendiente' | 'completo' | 'enviado';
 
+// ✅ CORREGIDO: Interface User con fantasyName en la posición correcta
 export interface User {
   id: string;
   nombre: string;
@@ -15,6 +16,7 @@ export interface User {
   role: 'superadmin' | 'admin' | 'user';
   estado: 'activo' | 'inactivo' | 'pendiente';
   lubricentroId?: string | null; // ✅ CORREGIDO: Ahora puede ser undefined o null
+  fantasyName?: string; // ✅ AGREGADO: Campo faltante para PaymentButton
   createdAt: Date;
   lastLogin?: Date | null;
   updatedAt?: Date;
@@ -26,6 +28,7 @@ export interface User {
 // Tipos de Lubricentro
 export type LubricentroStatus = 'activo' | 'inactivo' | 'trial';
 
+// ✅ CORREGIDO: Interface Lubricentro con campos faltantes y paymentStatus correcto
 export interface Lubricentro {
   id: string;
   fantasyName: string;
@@ -50,28 +53,29 @@ export interface Lubricentro {
   updatedAt?: Date;
   
   // 🔧 CAMPOS ACTUALIZADOS para suscripción - Compatible con planes dinámicos
-  subscriptionPlan?: SubscriptionPlanType | string; // ✅ Acepta planes dinámicos
+  subscriptionPlan?: SubscriptionPlanType | string;
   subscriptionStartDate?: Date;
   subscriptionEndDate?: Date;
-  subscriptionRenewalType?: 'monthly' | 'semiannual' | 'annual' | 'service'; // ✅ Agregado 'service'
+  subscriptionRenewalType?: 'monthly' | 'semiannual' | 'annual' | 'service';
   contractEndDate?: Date;         
   billingCycleEndDate?: Date;     
   lastPaymentDate?: Date;         
   nextPaymentDate?: Date;         
-  paymentStatus?: 'paid' | 'pending' | 'overdue';
+  paymentStatus?: 'paid' | 'pending' | 'overdue' | 'cancelled'; // ✅ AGREGADO: 'cancelled'
+  lastSubscriptionAttempt?: Date; // ✅ AGREGADO: Para mercadoPagoService
   servicesUsedThisMonth?: number; 
   activeUserCount?: number;       
   servicesUsedHistory?: {         
     [month: string]: number;      
   };
-  paymentHistory?: PaymentRecord[]; // ✅ Usar interface estructurada
+  paymentHistory?: PaymentRecord[];
   autoRenewal?: boolean;
 
   // 🔧 CAMPOS ESPECÍFICOS para planes por servicios
-  totalServicesContracted?: number;    // Servicios totales contratados en plan por servicios
-  servicesUsed?: number;               // Servicios ya utilizados del plan
-  servicesRemaining?: number;          // Servicios restantes
-  serviceSubscriptionExpiryDate?: Date; // Fecha de vencimiento para planes por servicios
+  totalServicesContracted?: number;
+  servicesUsed?: number;
+  servicesRemaining?: number;
+  serviceSubscriptionExpiryDate?: Date;
 }
 
 // 🔧 INTERFACE ESTRUCTURADA para registros de pago
@@ -83,6 +87,7 @@ export interface PaymentRecord {
   planName?: string;      // ✅ Nombre del plan para mejor tracking
   description?: string;   // ✅ Descripción adicional
   processedBy?: string;   // ✅ Quién procesó el pago
+  status?: 'completed' | 'pending' | 'failed';
 }
 
 // Cambiar esto para evitar conflicto con el nombre
@@ -172,7 +177,7 @@ export interface OilChange {
   createdAt: Date;
   updatedAt?: Date;
 
-    notificado?: boolean;           // ✅ NUEVO: indica si ya se notificó al cliente
+  notificado?: boolean;           // ✅ NUEVO: indica si ya se notificó al cliente
   fechaNotificacion?: Date;       // ✅ NUEVO: cuándo se notificó
   usuarioNotificacion?: string;   // ✅ NUEVO: quién marcó la notificación
 }
@@ -189,6 +194,58 @@ export interface OperatorStats {
   operatorId: string;
   operatorName: string;
   count: number;
+}
+
+// ✅ Tipos adicionales para el sistema
+export interface ServiceReminder {
+  id: string;
+  oilChangeId: string;
+  lubricentroId: string;
+  clientName: string;
+  vehicleDomain: string;
+  nextServiceDate: Date;
+  reminderType: 'email' | 'sms' | 'whatsapp';
+  status: 'pending' | 'sent' | 'failed';
+  createdAt: Date;
+  sentAt?: Date;
+  attempts: number;
+}
+
+export interface SystemSettings {
+  id: string;
+  lubricentroId?: string; // null para configuración global
+  reminderDaysBefore: number;
+  maxReminderAttempts: number;
+  enableEmailReminders: boolean;
+  enableSMSReminders: boolean;
+  enableWhatsAppReminders: boolean;
+  defaultOilChangeInterval: number; // en meses
+  businessHours: {
+    start: string;
+    end: string;
+    days: string[];
+  };
+  currency: string;
+  timezone: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  lubricentroId?: string;
+  action: string;
+  entityType: 'oil_change' | 'user' | 'lubricentro' | 'system';
+  entityId: string;
+  changes?: {
+    field: string;
+    oldValue: any;
+    newValue: any;
+  }[];
+  timestamp: Date;
+  ip?: string;
+  userAgent?: string;
 }
 
 // 🔧 NUEVAS FUNCIONES UTILITARIAS para manejo de planes dinámicos
