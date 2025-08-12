@@ -181,35 +181,13 @@ const LubricentroTable: React.FC<LubricentroTableProps> = ({
     }
   };
 
- // Buscar y reemplazar la función getPlanName existente
 const getPlanName = (lubricentro: Lubricentro): string => {
   if (!lubricentro.subscriptionPlan) return 'Sin Plan';
   
-  // Primero intentar con SUBSCRIPTION_PLANS (planes estáticos)
-  const staticPlan = SUBSCRIPTION_PLANS[lubricentro.subscriptionPlan as keyof typeof SUBSCRIPTION_PLANS];
-  if (staticPlan) {
-    return staticPlan.name;
-  }
-  
-  // Mapeo para planes dinámicos comunes
-  const dynamicPlanNames: Record<string, string> = {
-    'PLAN 100': 'Plan 100 Servicios',
-    'PLAN_100': 'Plan 100 Servicios',
-    'plan_100': 'Plan 100 Servicios',
-    'PLAN 200': 'Plan 200 Servicios',
-    'PLAN_200': 'Plan 200 Servicios',
-    'plan_200': 'Plan 200 Servicios',
-    'PLAN_BASICO': 'Plan Básico',
-    'plan_basico': 'Plan Básico',
-    'PLAN_PREMIUM': 'Plan Premium',
-    'plan_premium': 'Plan Premium',
-    'PLAN_ENTERPRISE': 'Plan Empresarial',
-    'plan_enterprise': 'Plan Empresarial'
-  };
-  
-  return dynamicPlanNames[lubricentro.subscriptionPlan] || 
-         lubricentro.subscriptionPlan.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 
-         'Plan Personalizado';
+  // Formato simple: capitalizar y reemplazar guiones bajos
+  return lubricentro.subscriptionPlan
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase()) || 'Plan Personalizado';
 };
 
 // Agregar esta función después de getPlanName

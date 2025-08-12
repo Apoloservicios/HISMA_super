@@ -451,12 +451,14 @@ const SubscriptionManagementCard = React.memo(({
   lubricentro, 
   subscriptionInfo, 
   dynamicPlans,
-  formatDate // ✅ AGREGAR formatDate como prop
+  formatDate,
+  setShowPlanReservationModal // ✅ AGREGAR ESTA PROP
 }: { 
   lubricentro: Lubricentro; 
   subscriptionInfo: SubscriptionInfo | null;
   dynamicPlans: Record<string, any>;
-  formatDate: (date: any) => string; // ✅ AGREGAR TIPO
+  formatDate: (date: any) => string;
+  setShowPlanReservationModal: (show: boolean) => void; // ✅ AGREGAR TIPO
 }) => {
   if (!subscriptionInfo) return null;
 
@@ -469,6 +471,44 @@ const SubscriptionManagementCard = React.memo(({
       <CardHeader title="Gestión de Suscripción" />
       <CardBody>
         <div className="space-y-4">
+
+          {/* ✅ NUEVO: Sección especial para período de prueba */}
+{lubricentro.estado === 'trial' && (
+  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+    <h4 className="text-yellow-800 font-medium mb-2 flex items-center">
+      ⏰ Período de Prueba Activo
+    </h4>
+    <p className="text-yellow-700 text-sm mb-3">
+      {lubricentro.subscriptionPlan 
+        ? `Plan seleccionado: ${lubricentro.subscriptionPlan}. Se activará al finalizar la prueba.`
+        : 'Selecciona tu plan preferido para después de la prueba (sin costo ahora).'
+      }
+    </p>
+    
+    <Button
+      color="warning"
+      className="w-full"
+      onClick={() => setShowPlanReservationModal(true)}
+    >
+      {lubricentro.subscriptionPlan ? 'Cambiar Plan Reservado' : 'Seleccionar Plan Preferido'}
+    </Button>
+
+    {/* Información adicional */}
+    <div className="bg-white border border-yellow-200 rounded p-3 mt-3 text-sm">
+      <p className="text-yellow-800">
+        <strong>¿Qué sucede después?</strong>
+      </p>
+      <ul className="text-yellow-700 mt-1 space-y-1 text-xs">
+        <li>• Al finalizar la prueba, se te solicitará el pago</li>
+        <li>• Podrás cambiar de plan antes del pago si lo deseas</li>
+        <li>• Sin pago, la cuenta pasará a estado inactivo</li>
+      </ul>
+    </div>
+  </div>
+)}
+
+
+
           {/* Información del plan actual */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex justify-between items-start mb-2">
@@ -683,104 +723,6 @@ const renderPaymentButtons = (
   return null;
 };
 // Componente de suscripción con lógica mejorada
-const SubscriptionCard = React.memo(({ 
-  lubricentro, 
-  subscriptionInfo, 
-  dynamicPlans 
-}: { 
-  lubricentro: Lubricentro; 
-  subscriptionInfo: SubscriptionInfo | null;
-  dynamicPlans: Record<string, any>;
-}) => {
-  const { isTrialPeriod, isExpiring, isLimitReached, daysRemaining, serviceLimit, planType } = subscriptionInfo || {};
-  
-  const needsPayment = (isTrialPeriod && (isExpiring || isLimitReached)) || 
-                      lubricentro.estado === 'inactivo' ||
-                      (planType === 'service' && isLimitReached);
-
-  return (
-    <Card className="mb-6">
-      <CardBody>
-        {/* ❌ ELIMINAR ESTA LÍNEA - Ya no mostrar CurrentPlanDisplay aquí */}
-        {/* <CurrentPlanDisplay lubricentro={lubricentro} dynamicPlans={dynamicPlans} /> */}
-
-        {/* ✅ SOLO MOSTRAR CUANDO HAY PROBLEMAS QUE REQUIEREN ACCIÓN */}
-        {needsPayment && (
-          <div className="mb-4">
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-              <div className="flex items-start">
-                <ExclamationTriangleIcon className="h-5 w-5 text-orange-500 mt-0.5 mr-3" />
-                <div className="flex-1">
-                  <h4 className="text-sm font-medium text-orange-800 mb-1">
-                    {isLimitReached ? '🚫 Límite de servicios alcanzado' :
-                     lubricentro.estado === 'inactivo' ? '❌ Cuenta inactiva' :
-                     '⚠️ Acción requerida'}
-                  </h4>
-                  
-                  <div className="text-sm text-orange-800 mb-3">
-                    {isTrialPeriod && isExpiring && (
-                      <p className="mb-2">
-                        Tu período de prueba vence en {daysRemaining} día{daysRemaining !== 1 ? 's' : ''}. 
-                        Activa una suscripción para continuar usando todas las funcionalidades.
-                      </p>
-                    )}
-                    {isLimitReached && planType === 'trial' && (
-                      <p className="mb-2">
-                        Has alcanzado el límite de {serviceLimit} servicios del período de prueba.
-                      </p>
-                    )}
-                    {isLimitReached && planType === 'service' && (
-                      <p className="mb-2">
-                        Has utilizado todos los servicios de tu plan. Renueva para continuar.
-                      </p>
-                    )}
-                    {lubricentro.estado === 'inactivo' && (
-                      <p className="mb-2">
-                        Tu cuenta está inactiva. Reactiva tu suscripción para continuar.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-3">
-                    {renderPaymentButtons(
-                      lubricentro,
-                      dynamicPlans,
-                      isTrialPeriod || false,
-                      isLimitReached || false,
-                      planType || 'monthly'
-                    )}
-
-                    <div className="pt-3 border-t border-orange-200">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => window.location.href = `mailto:soporte@hisma.com.ar?subject=Consulta sobre suscripción - ${lubricentro.fantasyName}`}
-                        className="w-full"
-                      >
-                        ¿Necesitas ayuda? Contactar Soporte
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ✅ MOSTRAR MENSAJE POSITIVO PARA CUENTAS ACTIVAS SIN PROBLEMAS */}
-        {lubricentro.estado === 'activo' && !needsPayment && (
-          <div className="p-3 rounded-lg bg-green-50 border border-green-200">
-            <div className="flex items-center text-green-800">
-              <CheckCircleIcon className="h-4 w-4 mr-2" />
-              <span className="text-sm font-medium">Suscripción activa y funcionando correctamente</span>
-            </div>
-          </div>
-        )}
-      </CardBody>
-    </Card>
-  );
-});
-
 
 const HybridOwnerDashboard: React.FC = () => {
   const { userProfile } = useAuth();
@@ -790,6 +732,7 @@ const HybridOwnerDashboard: React.FC = () => {
   const [essentialsLoading, setEssentialsLoading] = useState(true);
   const [chartsLoading, setChartsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showPlanReservationModal, setShowPlanReservationModal] = useState(false);
   
   // Estados de datos
   const [dashboardData, setDashboardData] = useState<{
@@ -807,21 +750,23 @@ const HybridOwnerDashboard: React.FC = () => {
   });
 
   // Estado para planes dinámicos
-  const [dynamicPlans, setDynamicPlans] = useState<Record<string, SubscriptionPlan>>({});
+const [dynamicPlans, setDynamicPlans] = useState<Record<string, SubscriptionPlan>>({});
+
+
 
   // Cargar planes dinámicos
-  useEffect(() => {
-    const loadPlans = async () => {
-      try {
-        const plans = await getSubscriptionPlans();
-        setDynamicPlans(plans);
-      } catch (error) {
-        console.warn('Error cargando planes dinámicos:', error);
-      }
-    };
-
-    loadPlans();
-  }, []);
+useEffect(() => {
+  const loadPlans = async () => {
+    try {
+      const plans = await getSubscriptionPlans(); // Ahora devuelve Record<string, SubscriptionPlan>
+      setDynamicPlans(plans);
+      console.log(`✅ ${Object.keys(plans).length} planes cargados en dashboard`);
+    } catch (error) {
+      console.error('Error cargando planes:', error);
+    }
+  };
+  loadPlans();
+}, []);
 
   // Cargar datos esenciales primero (rápido)
   useEffect(() => {
@@ -930,6 +875,61 @@ const HybridOwnerDashboard: React.FC = () => {
     }
   }, []);
 
+  // ✅ NUEVA FUNCIÓN: Manejar reserva de plan durante período de prueba
+    const handlePlanReservation = async (planId: string) => {
+      try {
+        console.log(`🎯 Reservando plan ${planId} para después de la prueba`);
+        
+        // Aquí podrías llamar a una función que actualice el lubricentro
+        // Por ahora, simulamos la reserva
+        setShowPlanReservationModal(false);
+        
+        // Mostrar mensaje de éxito
+        alert(`Plan "${dynamicPlans[planId]?.name || planId}" reservado correctamente. Se activará al finalizar el período de prueba.`);
+        
+        // Opcional: Recargar la página para mostrar el cambio
+        window.location.reload();
+        
+      } catch (error) {
+        console.error('Error al reservar plan:', error);
+        alert('Error al reservar el plan. Por favor, inténtalo de nuevo.');
+      }
+    };
+
+    // ✅ NUEVA FUNCIÓN: Activar plan inmediatamente
+  // ✅ REEMPLAZAR la función completa por esta versión corregida:
+    const handlePlanActivation = async (planId: string) => {
+      try {
+        console.log(`⚡ Activando plan ${planId} inmediatamente`);
+        
+        const selectedPlan = dynamicPlans[planId];
+        if (!selectedPlan) {
+          alert('Plan no encontrado');
+          return;
+        }
+        
+        // Cerrar modal
+        setShowPlanReservationModal(false);
+        
+        // Calcular precio
+        const amount = selectedPlan.price?.monthly || selectedPlan.servicePrice || 0;
+        
+        // Mostrar confirmación usando window.confirm
+        const confirmMessage = `¿Activar "${selectedPlan.name}" por $${amount.toLocaleString()}/mes ahora?`;
+        
+        if (window.confirm(confirmMessage)) {
+          // Mostrar mensaje de redirección
+          alert(`Serás redirigido a MercadoPago para pagar el plan "${selectedPlan.name}"`);
+          
+          // Temporal: recargar página (después puedes integrar con MercadoPago)
+          window.location.reload();
+        }
+        
+      } catch (error) {
+        console.error('Error al activar plan:', error);
+        alert('Error al activar el plan. Por favor, inténtalo de nuevo.');
+      }
+    };
   // Datos para gráficos optimizados
   const { operatorStats, upcomingChanges } = dashboardData;
   const monthlyComparisonData = useMemo(() => [
@@ -1334,11 +1334,103 @@ const HybridOwnerDashboard: React.FC = () => {
       />*/}
 
         <SubscriptionManagementCard 
-      lubricentro={lubricentro!} 
-      subscriptionInfo={subscriptionInfo}
-      dynamicPlans={dynamicPlans}
-      formatDate={formatDate}
-    />
+        lubricentro={lubricentro!} 
+        subscriptionInfo={subscriptionInfo}
+        dynamicPlans={dynamicPlans}
+        formatDate={formatDate}
+        setShowPlanReservationModal={setShowPlanReservationModal}
+      />
+
+    {/* ✅ NUEVO: Modal simple para seleccionar plan durante período de prueba */}
+      {showPlanReservationModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 transition-opacity" onClick={() => setShowPlanReservationModal(false)}>
+              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  🎯 Seleccionar Plan Preferido
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Durante el período de prueba, puedes reservar tu plan preferido sin costo. 
+                  Se activará automáticamente al finalizar la prueba.
+                </p>
+                
+                <div className="space-y-2">
+                  
+                  {Object.entries(dynamicPlans)
+                        .filter(([planId, plan]) => {
+                          const planWithMeta = plan as any; // Casting a any para acceder a propiedades adicionales
+                          return planWithMeta.isPublished === undefined || planWithMeta.isPublished === true;
+                        })
+                        .map(([planId, plan]) => (
+
+                    <div
+                        key={planId}
+                        className={`w-full p-3 border rounded-lg ${
+                          lubricentro?.subscriptionPlan === planId 
+                            ? 'border-blue-500 bg-blue-50' 
+                            : 'border-gray-200'
+                        }`}
+                      >
+                        <div className="mb-3">
+                          <div className="flex justify-between items-center mb-2">
+                            <h4 className="font-medium text-gray-900">{plan.name}</h4>
+                            {lubricentro?.subscriptionPlan === planId && (
+                              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                                Actual
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600 mb-1">
+                            ${plan.price?.monthly?.toLocaleString() || 'Consultar'}/mes
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {plan.description || 'Plan disponible'}
+                          </p>
+                        </div>
+                        
+                        {/* ✅ DOS BOTONES: Reservar o Activar */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handlePlanReservation(planId)}
+                            className="px-3 py-2 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 transition-colors"
+                          >
+                            📅 Reservar para después
+                          </button>
+                          
+                          <button
+                            onClick={() => handlePlanActivation(planId)}
+                            className="px-3 py-2 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200 transition-colors"
+                          >
+                            ⚡ Activar ahora
+                          </button>
+                        </div>
+                      </div>
+                    
+
+
+
+                  ))}
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button
+                  onClick={() => setShowPlanReservationModal(false)}
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+ 
     </PageContainer>
   );
 };

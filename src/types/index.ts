@@ -254,13 +254,6 @@ export interface AuditLog {
  * Valida si un plan es válido (estándar o dinámico)
  */
 export const isValidPlan = (plan: string | undefined): boolean => {
-  if (!plan) return false;
-  
-  // Validar planes estándar
-  const standardPlans = ['starter', 'basic', 'premium', 'enterprise'];
-  if (standardPlans.includes(plan)) return true;
-  
-  // Validar planes dinámicos (pueden tener cualquier formato)
   return typeof plan === 'string' && plan.length > 0;
 };
 
@@ -334,17 +327,8 @@ export const canUseService = (lubricentro: Lubricentro): boolean => {
 export const formatPlanName = (planId: string | undefined): string => {
   if (!planId) return 'Sin plan';
   
-  // Mapeo de nombres amigables para planes conocidos
-  const planNames: Record<string, string> = {
-    'starter': 'Plan Iniciante',
-    'basic': 'Plan Básico',
-    'premium': 'Plan Premium',
-    'enterprise': 'Plan Empresarial',
-    'Plan50': 'PLAN50',
-    'P100': 'PLAN 100'
-  };
-  
-  return planNames[planId] || planId;
+  // Simplemente capitalizar y formatear
+  return planId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
 
 /**

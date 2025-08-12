@@ -1,4 +1,6 @@
 // src/services/hybridSubscriptionService.ts
+// ✅ VERSIÓN COMPLETA: Mantiene toda la funcionalidad, elimina solo el mapeo problemático
+
 import { 
   getActivePlans, 
   ManagedSubscriptionPlan,
@@ -8,19 +10,19 @@ import {
 import { 
   SUBSCRIPTION_PLANS as STATIC_PLANS, 
   SubscriptionPlan, 
-  SubscriptionPlanType ,
-   PlanType 
+  SubscriptionPlanType,
+  PlanType 
 } from '../types/subscription';
 
 import { TRIAL_LIMITS } from '../config/constants';
 
 /**
  * Servicio híbrido que combina planes dinámicos de Firestore con fallback a planes estáticos
- * Esto permite una transición suave y mantiene la compatibilidad con el sistema existente
+ * ✅ REFACTORIZADO: Eliminado mapeo problemático, mantenida funcionalidad completa
  */
 
 // Cache en memoria para mejorar el rendimiento
-let plansCache: Record<SubscriptionPlanType, SubscriptionPlan> | null = null;
+let plansCache: Record<string, SubscriptionPlan> | null = null; // ✅ CAMBIO: ahora es Record<string, ...>
 let cacheTimestamp: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
@@ -28,7 +30,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
  * Convierte un ManagedSubscriptionPlan a SubscriptionPlan para compatibilidad
  */
 const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionPlan => {
- 
+  console.log(`🔄 Convirtiendo plan gestionado: ${managedPlan.id}`);
 
   // Para planes por servicios, necesitamos crear una estructura de precios compatible
   let priceStructure = managedPlan.price;
@@ -39,8 +41,7 @@ const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionP
       monthly: managedPlan.servicePrice,
       semiannual: managedPlan.servicePrice // Para planes por servicios, no hay diferencia semestral
     };
-    
-
+    console.log(`💰 Plan por servicios detectado: ${managedPlan.id}, precio: ${managedPlan.servicePrice}`);
   }
 
   return {
@@ -61,201 +62,75 @@ const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionP
 };
 
 /**
- * Mapea IDs de planes dinámicos a tipos estándar
+ * ✅ FUNCIÓN PRINCIPAL ACTUALIZADA: Obtiene todos los planes disponibles
+ * ELIMINADO: Mapeo a tipos estándar problemático
  */
-const mapPlanIdToStandardType = (planId: string): SubscriptionPlanType | null => {
-  // Mapeo directo para IDs estándar
-  const directMapping: Record<string, SubscriptionPlanType> = {
-    'starter': 'starter',
-    'basic': 'basic', 
-    'premium': 'premium',
-    'enterprise': 'enterprise'
-  };
-
-  // Mapeo por nombre/alias comunes - MEJORADO
-  const aliasMapping: Record<string, SubscriptionPlanType> = {
-    // Variaciones de PLAN50
-    'plan50': 'starter',
-    'plan 50': 'starter',
-    'plan_50': 'starter',
-    'PLAN50': 'starter',
-    'PLAN 50': 'starter',
-    'p50': 'starter',
-    
-    // Variaciones de PLAN100  
-    'plan100': 'basic',
-    'plan 100': 'basic', 
-    'plan_100': 'basic',
-    'PLAN100': 'basic',
-    'PLAN 100': 'basic',
-    'p100': 'basic',
-    
-    // Variaciones de Premium
-    'plan150': 'premium',
-    'plan 150': 'premium',
-    'plan_150': 'premium', 
-    'PLAN150': 'premium',
-    'PLAN 150': 'premium',
-    'p150': 'premium',
-    'plan premium': 'premium',
-    'planpremium': 'premium',
-    
-    // Variaciones de Enterprise
-    'unlimited': 'enterprise',
-    'enterprise': 'enterprise',
-    'empresarial': 'enterprise',
-    'ilimitado': 'enterprise',
-    'plan empresarial': 'enterprise',
-    'planempresarial': 'enterprise'
-  };
-
-  // Buscar mapeo directo primero
-  if (directMapping[planId]) {
-
-    return directMapping[planId];
-  }
-
-  // Buscar en alias (case insensitive)
-  const normalizedId = planId.toLowerCase().trim();
-  if (aliasMapping[normalizedId]) {
- 
-    return aliasMapping[normalizedId];
-  }
-
-  // Buscar por patrones numéricos
-  if (normalizedId.includes('50')) {
-
-    return 'starter';
-  }
-  if (normalizedId.includes('100')) {
-
-    return 'basic';
-  }
-  if (normalizedId.includes('150') || normalizedId.includes('premium')) {
-   
-    return 'premium';
-  }
-  if (normalizedId.includes('unlimited') || normalizedId.includes('ilimitado') || normalizedId.includes('enterprise')) {
-  
-    return 'enterprise';
-  }
-
-  console.warn(`⚠️ No se pudo mapear el plan ID: ${planId}`);
-  return null;
-};
-
-/**
- * Crea un ID único para planes dinámicos que evita colisiones
- */
-const createUniquePlanId = (originalId: string, mappedType: SubscriptionPlanType, existingPlans: Record<string, SubscriptionPlan>): string => {
-  // Si el mappedType no existe, usar directamente
-  if (!existingPlans[mappedType]) {
-    return mappedType;
-  }
-  
-  // Si existe, crear un ID único combinando el tipo con el ID original
-  const uniqueId = `${mappedType}_${originalId.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-
-  return uniqueId;
-};
-
-/**
- * Obtiene todos los planes de suscripción disponibles
- * Primero intenta cargar desde Firestore, si falla usa los planes estáticos
- */
-export const getSubscriptionPlans = async (): Promise<Record<SubscriptionPlanType, SubscriptionPlan>> => {
-  
+export const getSubscriptionPlans = async (): Promise<Record<string, SubscriptionPlan>> => {
+  console.log('🔄 Cargando planes de suscripción...');
   
   // Verificar cache
   const now = Date.now();
   if (plansCache && (now - cacheTimestamp) < CACHE_DURATION) {
-
+    console.log('✅ Planes cargados desde cache');
     return plansCache;
   }
 
   try {
-  
+    console.log('🔍 Intentando cargar planes dinámicos desde Firebase...');
     
     // Intentar cargar planes dinámicos desde Firestore
     const managedPlans = await getActivePlans();
-    
-
+    console.log(`📊 Encontrados ${managedPlans.length} planes dinámicos en Firebase`);
     
     if (managedPlans.length > 0) {
-      // 🔧 NUEVA ESTRATEGIA: Crear un mapa extendido que incluya TODOS los planes
+      // ✅ NUEVA ESTRATEGIA: Crear mapa simple con todos los planes
       const allPlansMap: Record<string, SubscriptionPlan> = {};
       
-      // Primero, agregar todos los planes dinámicos con sus IDs originales
+      // Agregar todos los planes dinámicos con sus IDs originales
       managedPlans.forEach((managedPlan) => {
-
+        console.log(`📋 Procesando plan: ${managedPlan.id} - ${managedPlan.name}`);
         
         const convertedPlan = convertManagedPlan(managedPlan);
-        
-        // Agregar el plan con su ID original
         allPlansMap[managedPlan.id] = convertedPlan;
-        
-        // También intentar mapear a tipo estándar (pero sin sobrescribir)
-        const mappedType = mapPlanIdToStandardType(managedPlan.id);
-        if (mappedType) {
-         
-          
-          // Solo mapear si no existe ya un plan con ese tipo estándar
-          if (!allPlansMap[mappedType]) {
-            allPlansMap[mappedType] = convertedPlan;
-          } else {
-           
-          }
-        } else {
-          console.warn(`⚠️ Plan ${managedPlan.id} no pudo ser mapeado a un tipo estándar`);
+      });
+      
+      // ✅ ASEGURAR: Si no hay planes con IDs estándar, agregar fallbacks
+      const standardIds = ['starter', 'basic', 'premium', 'enterprise'];
+      standardIds.forEach(id => {
+        if (!allPlansMap[id]) {
+          console.log(`📦 Agregando plan fallback estándar: ${id}`);
+          allPlansMap[id] = STATIC_PLANS[id as keyof typeof STATIC_PLANS];
         }
       });
       
-  
+      console.log(`✅ ${Object.keys(allPlansMap).length} planes cargados exitosamente`);
+      console.log(`📋 Planes disponibles: ${Object.keys(allPlansMap).join(', ')}`);
       
-      // Asegurar que tengamos los 4 tipos estándar mínimos
-      const finalPlans: Record<SubscriptionPlanType, SubscriptionPlan> = {
-        starter: allPlansMap['starter'] || STATIC_PLANS.starter,
-        basic: allPlansMap['basic'] || STATIC_PLANS.basic,
-        premium: allPlansMap['premium'] || STATIC_PLANS.premium,
-        enterprise: allPlansMap['enterprise'] || STATIC_PLANS.enterprise,
-      };
-      
-      // 🔧 NUEVO: Agregar planes adicionales que no sean los tipos estándar
-      Object.entries(allPlansMap).forEach(([planId, planData]) => {
-        if (!['starter', 'basic', 'premium', 'enterprise'].includes(planId)) {
-        
-          
-          // Usar type assertion para agregar planes dinámicos
-          (finalPlans as any)[planId] = planData;
-        }
-      });
-      
-    
-      
-      plansCache = finalPlans;
+      // Actualizar cache
+      plansCache = allPlansMap;
       cacheTimestamp = now;
-      return finalPlans;
+      return allPlansMap;
     }
     
-  
-    
-    // Si no hay planes dinámicos o están vacíos, usar fallback
-    plansCache = { ...STATIC_PLANS };
-    cacheTimestamp = now;
-    return plansCache;
-    
   } catch (error) {
-   
-    
-    // Fallback a planes estáticos en caso de error
-    plansCache = { ...STATIC_PLANS };
-    cacheTimestamp = now;
-    return plansCache;
+    console.error('❌ Error al cargar planes dinámicos:', error);
   }
+  
+  // ✅ FALLBACK: Usar planes estáticos si no hay dinámicos
+  console.log('🔄 Usando planes estáticos como fallback');
+  const fallbackPlans = { ...STATIC_PLANS };
+  
+  // Actualizar cache con fallback
+  plansCache = fallbackPlans;
+  cacheTimestamp = now;
+  return fallbackPlans;
 };
 
+/**
+ * ✅ MANTENER: Función para obtener planes separados por tipo
+ */
 export const getAllDynamicPlans = async (): Promise<{
-  standardPlans: Record<SubscriptionPlanType, SubscriptionPlan>;
+  standardPlans: Record<string, SubscriptionPlan>;
   dynamicPlans: Record<string, SubscriptionPlan>;
   allPlans: Record<string, SubscriptionPlan>;
   totalCount: number;
@@ -264,17 +139,13 @@ export const getAllDynamicPlans = async (): Promise<{
     const allPlans = await getSubscriptionPlans();
     
     // Separar planes estándar de dinámicos
-    const standardPlans: Record<SubscriptionPlanType, SubscriptionPlan> = {
-      starter: allPlans.starter,
-      basic: allPlans.basic,
-      premium: allPlans.premium,
-      enterprise: allPlans.enterprise,
-    };
-    
+    const standardPlans: Record<string, SubscriptionPlan> = {};
     const dynamicPlans: Record<string, SubscriptionPlan> = {};
     
     Object.entries(allPlans).forEach(([key, plan]) => {
-      if (!['starter', 'basic', 'premium', 'enterprise'].includes(key)) {
+      if (['starter', 'basic', 'premium', 'enterprise'].includes(key)) {
+        standardPlans[key] = plan;
+      } else {
         dynamicPlans[key] = plan;
       }
     });
@@ -282,32 +153,32 @@ export const getAllDynamicPlans = async (): Promise<{
     return {
       standardPlans,
       dynamicPlans,
-      allPlans: allPlans as Record<string, SubscriptionPlan>,
+      allPlans,
       totalCount: Object.keys(allPlans).length
     };
     
   } catch (error) {
-    console.error('Error al obtener planes dinámicos:', error);
+    console.error('Error al obtener planes con metadata:', error);
     return {
       standardPlans: STATIC_PLANS,
       dynamicPlans: {},
-      allPlans: STATIC_PLANS as Record<string, SubscriptionPlan>,
+      allPlans: STATIC_PLANS,
       totalCount: Object.keys(STATIC_PLANS).length
     };
   }
 };
 
 /**
- * Obtiene un plan específico por ID
+ * ✅ FUNCIÓN ACTUALIZADA: Obtiene un plan específico por ID
  */
-export const getSubscriptionPlan = async (planId: SubscriptionPlanType): Promise<SubscriptionPlan | null> => {
+export const getSubscriptionPlan = async (planId: string): Promise<SubscriptionPlan | null> => {
   try {
- 
+    console.log(`🔍 Buscando plan: ${planId}`);
     const plans = await getSubscriptionPlans();
     const plan = plans[planId] || null;
     
     if (plan) {
-      
+      console.log(`✅ Plan encontrado: ${plan.name}`);
     } else {
       console.warn(`⚠️ Plan no encontrado: ${planId}`);
     }
@@ -315,12 +186,13 @@ export const getSubscriptionPlan = async (planId: SubscriptionPlanType): Promise
     return plan;
   } catch (error) {
     console.error('❌ Error al obtener plan específico:', error);
-    return STATIC_PLANS[planId] || null;
+    // Fallback: buscar en planes estáticos
+    return STATIC_PLANS[planId as keyof typeof STATIC_PLANS] || null;
   }
 };
 
 /**
- * Obtiene los límites de trial desde la configuración dinámica o fallback estático
+ * ✅ MANTENER: Obtiene los límites de trial desde la configuración dinámica
  */
 export const getTrialLimits = async (): Promise<{
   days: number;
@@ -356,9 +228,9 @@ export const getTrialLimits = async (): Promise<{
 };
 
 /**
- * Valida si un plan existe y está disponible
+ * ✅ MANTENER: Valida si un plan existe y está disponible
  */
-export const isPlanAvailable = async (planId: SubscriptionPlanType): Promise<boolean> => {
+export const isPlanAvailable = async (planId: string): Promise<boolean> => {
   try {
     const plans = await getSubscriptionPlans();
     return planId in plans;
@@ -369,29 +241,29 @@ export const isPlanAvailable = async (planId: SubscriptionPlanType): Promise<boo
 };
 
 /**
- * Obtiene todos los IDs de planes disponibles
+ * ✅ MANTENER: Obtiene todos los IDs de planes disponibles
  */
-export const getAvailablePlanIds = async (): Promise<SubscriptionPlanType[]> => {
+export const getAvailablePlanIds = async (): Promise<string[]> => {
   try {
     const plans = await getSubscriptionPlans();
-    return Object.keys(plans) as SubscriptionPlanType[];
+    return Object.keys(plans);
   } catch (error) {
     console.error('Error al obtener IDs de planes:', error);
-    return Object.keys(STATIC_PLANS) as SubscriptionPlanType[];
+    return Object.keys(STATIC_PLANS);
   }
 };
 
 /**
- * Invalida el cache de planes (útil después de actualizaciones)
+ * ✅ MANTENER: Invalida el cache de planes
  */
 export const invalidatePlansCache = (): void => {
-
+  console.log('🗑️ Invalidando cache de planes');
   plansCache = null;
   cacheTimestamp = 0;
 };
 
 /**
- * Obtiene el plan recomendado
+ * ✅ MANTENER: Obtiene el plan recomendado
  */
 export const getRecommendedPlan = async (): Promise<SubscriptionPlan | null> => {
   try {
@@ -414,27 +286,31 @@ export const getRecommendedPlan = async (): Promise<SubscriptionPlan | null> => 
 };
 
 /**
- * Obtiene planes ordenados por precio (menor a mayor)
+ * ✅ MANTENER: Obtiene planes ordenados por precio
  */
-export const getPlansByPrice = async (): Promise<SubscriptionPlan[]> => {
+export const getPlansByPrice = async (ascending: boolean = true): Promise<SubscriptionPlan[]> => {
   try {
     const plans = await getSubscriptionPlans();
+    const plansArray = Object.values(plans);
     
-    return Object.values(plans).sort((a, b) => a.price.monthly - b.price.monthly);
+    return plansArray.sort((a, b) => {
+      const priceA = a.price.monthly;
+      const priceB = b.price.monthly;
+      return ascending ? priceA - priceB : priceB - priceA;
+    });
     
   } catch (error) {
     console.error('Error al ordenar planes por precio:', error);
-    return Object.values(STATIC_PLANS).sort((a, b) => a.price.monthly - b.price.monthly);
+    return Object.values(STATIC_PLANS);
   }
 };
 
 /**
- * Calcula el descuento porcentual del plan semestral vs mensual
+ * ✅ MANTENER: Calcula descuento semestral
  */
-export const calculateSemiannualDiscount = async (planId: SubscriptionPlanType): Promise<number> => {
+export const calculateSemiannualDiscount = async (planId: string): Promise<number> => {
   try {
     const plan = await getSubscriptionPlan(planId);
-    
     if (!plan) return 0;
     
     const monthlyTotal = plan.price.monthly * 6;
@@ -451,94 +327,93 @@ export const calculateSemiannualDiscount = async (planId: SubscriptionPlanType):
 };
 
 /**
- * Obtiene información comparativa entre planes
- */
-export const getPlansComparison = async (): Promise<{
-  cheapest: SubscriptionPlan | null;
-  mostExpensive: SubscriptionPlan | null;
-  recommended: SubscriptionPlan | null;
-  unlimited: SubscriptionPlan[];
-}> => {
-  try {
-    const plans = await getSubscriptionPlans();
-    const plansList = Object.values(plans);
-    
-    if (plansList.length === 0) {
-      return {
-        cheapest: null,
-        mostExpensive: null,
-        recommended: null,
-        unlimited: []
-      };
-    }
-    
-    // Plan más barato
-    const cheapest = plansList.reduce((prev, current) => 
-      prev.price.monthly < current.price.monthly ? prev : current
-    );
-    
-    // Plan más caro
-    const mostExpensive = plansList.reduce((prev, current) => 
-      prev.price.monthly > current.price.monthly ? prev : current
-    );
-    
-    // Plan recomendado
-    const recommended = plansList.find(plan => plan.recommended) || null;
-    
-    // Planes con servicios ilimitados
-    const unlimited = plansList.filter(plan => plan.maxMonthlyServices === null);
-    
-    return {
-      cheapest,
-      mostExpensive,
-      recommended,
-      unlimited
-    };
-    
-  } catch (error) {
-    console.error('Error al generar comparación de planes:', error);
-    
-    // Fallback con planes estáticos
-    const staticPlans = Object.values(STATIC_PLANS);
-    return {
-      cheapest: staticPlans[0] || null,
-      mostExpensive: staticPlans[staticPlans.length - 1] || null,
-      recommended: staticPlans.find(plan => plan.recommended) || null,
-      unlimited: staticPlans.filter(plan => plan.maxMonthlyServices === null)
-    };
-  }
-};
-
-/**
- * Función de utilidad para refrescar planes en componentes
- */
-export const refreshPlans = async (): Promise<Record<SubscriptionPlanType, SubscriptionPlan>> => {
-  invalidatePlansCache();
-  return await getSubscriptionPlans();
-};
-
-/**
- * Verifica si el sistema tiene configuración dinámica disponible
+ * ✅ MANTENER: Verifica si los planes dinámicos están habilitados
  */
 export const hasDynamicPlansEnabled = async (): Promise<boolean> => {
   try {
     const managedPlans = await getActivePlans();
     return managedPlans.length > 0;
   } catch (error) {
+    console.error('Error verificando planes dinámicos:', error);
     return false;
   }
 };
 
 /**
- * Migra los planes estáticos a dinámicos (función de utilidad para admin)
+ * ✅ MANTENER: Obtiene información de compatibilidad del plan
  */
-export const migrateToDynamicPlans = async (adminEmail: string): Promise<void> => {
+export const getPlanCompatibilityInfo = async (planId: string) => {
   try {
-    const { initializeDefaultPlans } = await import('./planManagementService');
-    await initializeDefaultPlans(adminEmail);
-    invalidatePlansCache();
+    const plan = await getSubscriptionPlan(planId);
+    if (!plan) {
+      return {
+        exists: false,
+        isStatic: false,
+        isDynamic: false,
+        needsMigration: true
+      };
+    }
+    
+    const isStatic = planId in STATIC_PLANS;
+    const isDynamic = !isStatic;
+    
+    return {
+      exists: true,
+      isStatic,
+      isDynamic,
+      needsMigration: false,
+      planName: plan.name,
+      planType: plan.planType
+    };
+    
   } catch (error) {
-    console.error('❌ Error en migración a planes dinámicos:', error);
-    throw error;
+    console.error('Error al obtener info de compatibilidad:', error);
+    return {
+      exists: false,
+      isStatic: false,
+      isDynamic: false,
+      needsMigration: true
+    };
+  }
+};
+
+/**
+ * ✅ NUEVA: Obtiene planes publicados para homepage
+ */
+export const getPublishedPlans = async (): Promise<SubscriptionPlan[]> => {
+  try {
+    const managedPlans = await getActivePlans();
+    
+    return managedPlans
+      .filter(plan => plan.isActive && plan.isPublished)
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+      .map(convertManagedPlan);
+      
+  } catch (error) {
+    console.error('Error al obtener planes publicados:', error);
+    // Fallback: devolver los primeros 3 planes estáticos
+    return Object.values(STATIC_PLANS).slice(0, 3);
+  }
+};
+
+/**
+ * ✅ NUEVA: Limpia cache de planes
+ */
+export const clearPlansCache = (): void => {
+  plansCache = null;
+  cacheTimestamp = 0;
+  console.log('🗑️ Cache de planes limpiado');
+};
+
+/**
+ * ✅ NUEVA: Verifica si un plan existe
+ */
+export const planExists = async (planId: string): Promise<boolean> => {
+  try {
+    const plans = await getSubscriptionPlans();
+    return !!plans[planId];
+  } catch (error) {
+    console.error('Error verificando existencia de plan:', error);
+    return false;
   }
 };

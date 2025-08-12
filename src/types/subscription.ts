@@ -1,6 +1,6 @@
 // src/types/subscription.ts
 
-export type SubscriptionPlanType = 'starter' | 'basic' | 'premium' | 'enterprise' | string;
+export type SubscriptionPlanType =  string;
 
 // Nuevo enum para tipos de planes
 export enum PlanType {
@@ -64,8 +64,12 @@ export interface PlanSystemSettings {
   updatedBy: string;
 }
 
-// Planes estáticos como fallback - manteniendo la estructura existente
-export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> = {
+
+
+
+// ✅ MANTENER: Planes estáticos solo como fallback de emergencia
+// Solo se usarán si no hay conexión a Firebase
+export const STATIC_FALLBACK_PLANS: Record<string, SubscriptionPlan> = {
   starter: {
     id: 'starter',
     name: 'Plan Iniciante',
@@ -87,10 +91,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     name: 'Plan Básico',
     description: 'Ideal para lubricentros pequeños',
     planType: PlanType.MONTHLY,
-    price: {
-      monthly: 2500,
-      semiannual: 12000
-    },
+    price: { monthly: 2500, semiannual: 12000 },
     maxUsers: 2,
     maxMonthlyServices: 50,
     features: [
@@ -107,10 +108,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     name: 'Plan Premium',
     description: 'Perfecto para lubricentros en crecimiento',
     planType: PlanType.MONTHLY,
-    price: {
-      monthly: 4500,
-      semiannual: 22500
-    },
+    price: { monthly: 4500, semiannual: 22500 },
     maxUsers: 5,
     maxMonthlyServices: 150,
     features: [
@@ -129,10 +127,7 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     name: 'Plan Empresarial',
     description: 'Para lubricentros grandes y cadenas',
     planType: PlanType.MONTHLY,
-    price: {
-      monthly: 7500,
-      semiannual: 37500
-    },
+    price: { monthly: 7500, semiannual: 37500 },
     maxUsers: 999,
     maxMonthlyServices: null,
     features: [
@@ -146,6 +141,12 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionPlanType, SubscriptionPlan> 
     ]
   }
 };
+
+// ✅ NUEVO: Alias para compatibilidad con código existente
+export const SUBSCRIPTION_PLANS = STATIC_FALLBACK_PLANS;
+
+
+
 
 // Funciones de utilidad - manteniendo las existentes y agregando nuevas
 export const isServicePlan = (plan: SubscriptionPlan): boolean => {
@@ -215,4 +216,33 @@ export const getServicePlanExpiryDate = (
   expiryDate.setMonth(expiryDate.getMonth() + plan.validityMonths);
   
   return expiryDate;
+};
+
+// ✅ NUEVAS FUNCIONES UTILITARIAS para manejo de planes dinámicos
+
+/**
+ * Valida si un plan es válido (cualquier string no vacío)
+ */
+export const isValidPlan = (plan: string | undefined): boolean => {
+  return typeof plan === 'string' && plan.length > 0;
+};
+
+/**
+ * Obtiene el tipo de suscripción basado en el estado del lubricentro
+ */
+export const getSubscriptionType = (lubricentro: any): 'trial' | 'annual' | 'monthly' | 'inactive' => {
+  if (lubricentro.estado === 'trial') return 'trial';
+  if (lubricentro.estado !== 'activo') return 'inactive';
+  if (lubricentro.subscriptionRenewalType === 'annual') return 'annual';
+  return 'monthly';
+};
+
+/**
+ * Formatea el nombre del plan para mostrar
+ */
+export const formatPlanName = (planId: string | undefined): string => {
+  if (!planId) return 'Sin plan';
+  
+  // Simplemente capitalizar y formatear
+  return planId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
