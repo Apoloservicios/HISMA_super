@@ -1,12 +1,14 @@
 // src/components/payment/PaymentButton.tsx
-// 🔧 VERSIÓN MEJORADA CON MEJOR MANEJO DE REDIRECTS
+// 🔧 VERSIÓN CORREGIDA CON PROPIEDADES FALTANTES
 
 import React, { useState } from 'react';
 import { Button } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { createMercadoPagoSubscription } from '../../services/mercadoPagoService';
 import { changSubscriptionPlan } from '../../services/paymentProcessingService';
+import PlanSelectorModal from './PlanSelectorModal';
 
+// ✅ INTERFAZ ACTUALIZADA CON TODAS LAS PROPIEDADES NECESARIAS
 interface PaymentButtonProps {
   planType: string;
   planName: string;
@@ -15,8 +17,9 @@ interface PaymentButtonProps {
   className?: string;
   disabled?: boolean;
   fantasyName?: string;
-  variant?: 'payment' | 'upgrade'; // ✅ NUEVO: Tipo de acción
-  currentPlanId?: string; // ✅ NUEVO: Plan actual (para upgrades)
+  variant?: 'payment' | 'upgrade' | 'renewal'; // ✅ AGREGADO: 'renewal'
+  currentPlanId?: string;
+  showPlanSelector?: boolean; // ✅ AGREGADO: Para mostrar selector de planes
   onPaymentInitiated?: () => void;
 }
 
@@ -30,11 +33,27 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
   fantasyName,
   variant = 'payment',
   currentPlanId,
+  showPlanSelector = false, // ✅ NUEVO: Default false
   onPaymentInitiated
 }) => {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false); // ✅ NUEVO: Estado para modal
+
+  /**
+   * 🎯 MANEJAR CLIC DEL BOTÓN
+   */
+  const handleClick = async () => {
+    // ✅ Si debe mostrar selector, abrir modal
+    if (showPlanSelector) {
+      setShowModal(true);
+      return;
+    }
+
+    // ✅ Si no, proceder con el pago normal
+    await handlePayment();
+  };
 
   /**
    * 🎯 MANEJAR PAGO/UPGRADE
@@ -77,6 +96,9 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       }
 
       // ✅ GENERAR DEVICE ID ÚNICO
+      const generateDeviceId = () => {
+        return `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      };
       const deviceId = generateDeviceId();
 
       // ✅ CREAR EXTERNAL_REFERENCE MEJORADO
@@ -101,7 +123,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         email: emailToSend,
         fantasyName: fantasyName || 'Lubricentro',
         deviceId: deviceId,
-        external_reference: external_reference // ✅ AGREGAR external_reference
+        external_reference: external_reference
       });
 
       console.log('✅ Suscripción creada:', {
@@ -115,16 +137,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       // ✅ REDIRECCIONAR A MERCADOPAGO
       if (result.initUrl) {
         console.log('🚀 Redirigiendo a MercadoPago...');
-        
-        // ✅ OPCIÓN 1: Redirección en la misma ventana (RECOMENDADO)
         window.location.href = result.initUrl;
-        
-        // ✅ OPCIÓN 2: Nueva ventana (solo si específicamente se requiere)
-        // const newWindow = window.open(result.initUrl, '_blank', 'width=800,height=600');
-        // if (!newWindow) {
-        //   throw new Error('Las ventanas emergentes están bloqueadas. Habilita las ventanas emergentes e intenta nuevamente.');
-        // }
-        
       } else {
         throw new Error('No se recibió URL de pago desde MercadoPago');
       }
@@ -149,11 +162,8 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         errorMessage = 'Monto inválido. Contacta al soporte.';
       } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
         errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
-      } else if (errorMessage.includes('usuarios') || errorMessage.includes('servicios')) {
-        // Error de validación de plan
-        errorMessage = errorMessage; // Mantener mensaje específico
       }
-      
+
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -161,65 +171,68 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
   };
 
   /**
-   * 🎯 GENERAR DEVICE ID ÚNICO
-   */
-  const generateDeviceId = (): string => {
-    const timestamp = Date.now().toString();
-    const random = Math.random().toString(36).substring(2);
-    return `${timestamp}_${random}`;
-  };
-
-  /**
-   * 🎯 DETERMINAR TEXTO DEL BOTÓN
+   * 🎯 OBTENER TEXTO DEL BOTÓN SEGÚN VARIANTE
    */
   const getButtonText = () => {
     if (loading) return 'Procesando...';
     
-    const formattedAmount = amount.toLocaleString('es-AR');
-    
-    if (variant === 'upgrade') {
-      return `Cambiar a ${planName} - $${formattedAmount}`;
+    switch (variant) {
+      case 'upgrade':
+        return showPlanSelector ? 'Cambiar Plan' : `Cambiar a ${planName}`;
+      case 'renewal':
+        return `Renovar Plan`;
+      case 'payment':
+      default:
+        return showPlanSelector ? 'Seleccionar Plan' : `Pagar ${planName}`;
     }
-    
-    return `Pagar ${planName} - $${formattedAmount}`;
   };
 
   /**
-   * 🎯 DETERMINAR COLOR DEL BOTÓN
+   * 🎯 OBTENER COLOR DEL BOTÓN SEGÚN VARIANTE
    */
   const getButtonColor = () => {
-    if (variant === 'upgrade') return 'warning';
-    return 'success';
+    switch (variant) {
+      case 'upgrade':
+        return 'info';
+      case 'renewal':
+        return 'warning';
+      case 'payment':
+      default:
+        return 'primary';
+    }
   };
 
-  const isDisabled = disabled || loading || !userProfile?.lubricentroId || !amount;
-
   return (
-    <div className={className}>
+    <>
       <Button
-        onClick={handlePayment}
-        disabled={isDisabled}
+        onClick={handleClick}
+        disabled={disabled || loading}
+        className={className}
         color={getButtonColor()}
-        className="w-full"
-        size="lg"
+        fullWidth
       >
         {getButtonText()}
       </Button>
 
       {/* ✅ MOSTRAR ERROR SI EXISTE */}
       {error && (
-        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
-          ❌ {error}
+        <div className="mt-2 text-sm text-red-600">
+          {error}
         </div>
       )}
 
-      {/* ✅ INFORMACIÓN ADICIONAL PARA UPGRADES */}
-      {variant === 'upgrade' && currentPlanId && (
-        <div className="mt-2 text-xs text-gray-500">
-          Cambiando desde plan actual: {currentPlanId}
-        </div>
+      {/* ✅ MODAL SELECTOR DE PLANES */}
+      {showPlanSelector && (
+        <PlanSelectorModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          currentPlanId={currentPlanId}
+          lubricentroId={userProfile?.lubricentroId}
+          userEmail={userProfile?.email || ''}
+          fantasyName={fantasyName || 'Lubricentro'}
+        />
       )}
-    </div>
+    </>
   );
 };
 

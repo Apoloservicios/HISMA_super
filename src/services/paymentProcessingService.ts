@@ -11,7 +11,6 @@ interface PaymentProcessingResult {
   updatedData?: any;
 }
 
-
 /**
  * 🎯 PROCESAR PAGO EXITOSO Y ACTUALIZAR SUSCRIPCIÓN
  */
@@ -44,7 +43,7 @@ export const processSuccessfulPayment = async (
     const plans = await getSubscriptionPlans();
     
     // 4. Determinar el plan (desde parámetros o del lubricentro)
-     const targetPlanId = planId || 
+    const targetPlanId = planId || 
                         (lubricentro as any).pendingPlan || // ✅ Cast temporal
                         'basic';
     const selectedPlan = plans[targetPlanId];
@@ -66,8 +65,26 @@ export const processSuccessfulPayment = async (
       endDate.setMonth(endDate.getMonth() + 1);
     }
 
+    // ✅ 5.5. CALCULAR EL MONTO DEL PAGO BASADO EN EL PLAN Y TIPO DE FACTURACIÓN
+    let paymentAmount = 0;
+    
+    if (selectedPlan.planType === 'service' && selectedPlan.servicePrice) {
+      // Para planes por servicios, usar el precio único
+      paymentAmount = selectedPlan.servicePrice;
+    } else if (selectedPlan.price) {
+      // Para planes mensuales/semestrales, usar el precio según el tipo de facturación
+      paymentAmount = billingType === 'semiannual' 
+        ? selectedPlan.price.semiannual 
+        : selectedPlan.price.monthly;
+    } else {
+      console.warn('⚠️ No se pudo determinar el precio del plan');
+      paymentAmount = 0;
+    }
+
+    console.log(`💰 Monto calculado: $${paymentAmount} para facturación ${billingType}`);
+
     // 6. Preparar datos de actualización
-     const updateData: Partial<Lubricentro> = {
+    const updateData: Partial<Lubricentro> = {
       // ACTIVAR SUSCRIPCIÓN
       estado: 'activo' as LubricentroStatus, // ✅ Tipo específico
       subscriptionPlan: targetPlanId,
@@ -96,7 +113,7 @@ export const processSuccessfulPayment = async (
       paymentHistory: [
         ...(lubricentro.paymentHistory || []),
         {
-          amount: paymentAmount, // ✅ Usar variable tipada
+          amount: paymentAmount, // ✅ Ahora está definido correctamente
           date: now,
           method: 'mercadopago',
           reference: paymentId,
@@ -119,7 +136,8 @@ export const processSuccessfulPayment = async (
       updatedData: {
         planName: selectedPlan.name,
         endDate: endDate,
-        maxServices: selectedPlan.maxMonthlyServices
+        maxServices: selectedPlan.maxMonthlyServices,
+        amountPaid: paymentAmount
       }
     };
 
@@ -142,14 +160,15 @@ export const changSubscriptionPlan = async (
 ): Promise<PaymentProcessingResult> => {
   try {
     const lubricentro = await getLubricentroById(lubricentroId);
-
     
+    if (!lubricentro) {
+      return { success: false, message: 'Lubricentro no encontrado' };
+    }
     
     // ✅ VALIDAR QUE PUEDE CAMBIAR DE PLAN
     if (lubricentro.estado !== 'activo') {
       return { success: false, message: 'Solo se puede cambiar el plan de lubricentros activos' };
     }
-
 
     // ✅ VERIFICAR LÍMITES ACTUALES
     const currentUsage = lubricentro.servicesUsedThisMonth || 0;
@@ -157,8 +176,6 @@ export const changSubscriptionPlan = async (
     
     const plans = await getSubscriptionPlans();
     const newPlan = plans[newPlanId];
-
-    
     
     if (!newPlan) {
       return { success: false, message: 'Plan seleccionado no válido' };
@@ -179,7 +196,7 @@ export const changSubscriptionPlan = async (
       };
     }
 
-     // ✅ CORRECCIÓN: updateData con tipos específicos
+    // ✅ CORRECCIÓN: updateData con tipos específicos
     const updateData: Partial<Lubricentro> = {
       pendingPlan: newPlanId,          // ✅ Ahora es válido
       pendingBillingType: billingType, // ✅ Ahora es válido
@@ -192,8 +209,6 @@ export const changSubscriptionPlan = async (
       success: true,
       message: 'Plan preparado para cambio. Procede con el pago.'
     };
-
- 
 
   } catch (error) {
     console.error('❌ Error preparando cambio de plan:', error);

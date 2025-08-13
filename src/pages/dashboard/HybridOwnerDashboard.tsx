@@ -11,6 +11,7 @@ import { SUBSCRIPTION_PLANS } from '../../types/subscription';
 
 // Componentes UI
 import { Card, CardHeader, CardBody, Button, Badge, PageContainer } from '../../components/ui';
+import SubscriptionManagementCard from '../../components/subscription/SubscriptionManagementCard';
 
 import PaymentButton from '../../components/payment/PaymentButton';
 
@@ -446,282 +447,10 @@ const CurrentPlanDisplay = ({
 };
 
 
-// 2️⃣ CREAR NUEVA SECCIÓN DE GESTIÓN DE SUSCRIPCIÓN AL FINAL
-const SubscriptionManagementCard = React.memo(({ 
-  lubricentro, 
-  subscriptionInfo, 
-  dynamicPlans,
-  formatDate,
-  setShowPlanReservationModal // ✅ AGREGAR ESTA PROP
-}: { 
-  lubricentro: Lubricentro; 
-  subscriptionInfo: SubscriptionInfo | null;
-  dynamicPlans: Record<string, any>;
-  formatDate: (date: any) => string;
-  setShowPlanReservationModal: (show: boolean) => void; // ✅ AGREGAR TIPO
-}) => {
-  if (!subscriptionInfo) return null;
-
-  const planInfo = lubricentro.subscriptionPlan 
-    ? getPlanDisplayInfo(lubricentro.subscriptionPlan, dynamicPlans)
-    : null;
-
-  return (
-    <Card className="mb-6">
-      <CardHeader title="Gestión de Suscripción" />
-      <CardBody>
-        <div className="space-y-4">
-
-          {/* ✅ NUEVO: Sección especial para período de prueba */}
-{lubricentro.estado === 'trial' && (
-  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-    <h4 className="text-yellow-800 font-medium mb-2 flex items-center">
-      ⏰ Período de Prueba Activo
-    </h4>
-    <p className="text-yellow-700 text-sm mb-3">
-      {lubricentro.subscriptionPlan 
-        ? `Plan seleccionado: ${lubricentro.subscriptionPlan}. Se activará al finalizar la prueba.`
-        : 'Selecciona tu plan preferido para después de la prueba (sin costo ahora).'
-      }
-    </p>
-    
-    <Button
-      color="warning"
-      className="w-full"
-      onClick={() => setShowPlanReservationModal(true)}
-    >
-      {lubricentro.subscriptionPlan ? 'Cambiar Plan Reservado' : 'Seleccionar Plan Preferido'}
-    </Button>
-
-    {/* Información adicional */}
-    <div className="bg-white border border-yellow-200 rounded p-3 mt-3 text-sm">
-      <p className="text-yellow-800">
-        <strong>¿Qué sucede después?</strong>
-      </p>
-      <ul className="text-yellow-700 mt-1 space-y-1 text-xs">
-        <li>• Al finalizar la prueba, se te solicitará el pago</li>
-        <li>• Podrás cambiar de plan antes del pago si lo deseas</li>
-        <li>• Sin pago, la cuenta pasará a estado inactivo</li>
-      </ul>
-    </div>
-  </div>
-)}
-
-
-
-          {/* Información del plan actual */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex justify-between items-start mb-2">
-              <h4 className="text-blue-800 font-medium">
-                📋 Plan Actual: {planInfo?.name || 'Sin plan asignado'}
-              </h4>
-              
-              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                lubricentro.estado === 'activo' 
-                  ? 'bg-green-100 text-green-800' 
-                  : lubricentro.estado === 'trial'
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {lubricentro.estado === 'activo' ? 'Activo' : 
-                 lubricentro.estado === 'trial' ? 'Período de Prueba' : 'Inactivo'}
-              </span>
-            </div>
-            
-            {planInfo && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <p className="text-blue-900 font-semibold">
-                    ${planInfo.price.toLocaleString()}
-                    {planInfo.type === 'service' ? ' (pago único)' : '/mes'}
-                  </p>
-                  <p className="text-blue-700 text-sm">
-                    {planInfo.description}
-                  </p>
-                </div>
-                
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Usuarios:</span>
-                    <span className="text-blue-900 font-medium">
-                      {subscriptionInfo.currentUsers} / {subscriptionInfo.userLimit}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Servicios:</span>
-                    <span className="text-blue-900 font-medium">
-                      {subscriptionInfo.currentServices}
-                      {subscriptionInfo.serviceLimit && ` / ${subscriptionInfo.serviceLimit}`}
-                      {subscriptionInfo.serviceLimit === null && ' (Ilimitados)'}
-                    </span>
-                  </div>
-                  {subscriptionInfo.isTrialPeriod && subscriptionInfo.daysRemaining !== undefined && (
-                    <div className="flex justify-between">
-                      <span className="text-blue-700">Días restantes:</span>
-                      <span className={`font-medium ${
-                        subscriptionInfo.daysRemaining <= 2 ? 'text-red-600' : 'text-blue-900'
-                      }`}>
-                        {subscriptionInfo.daysRemaining}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Información adicional para planes por servicios */}
-            {planInfo?.type === 'service' && (
-              <div className="pt-3 border-t border-blue-200">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Servicios utilizados:</span>
-                    <span className="text-blue-900 font-medium">
-                      {lubricentro.servicesUsed || 0} / {planInfo.totalServices}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-blue-700">Servicios restantes:</span>
-                    <span className="text-blue-900 font-medium">
-                      {Math.max(0, (planInfo.totalServices || 0) - (lubricentro.servicesUsed || 0))}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Botones de gestión */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Cambiar Plan */}
-            <PaymentButton
-              planType={lubricentro.subscriptionPlan || 'starter'}
-              planName="Cambiar Plan"
-              amount={0}
-              billingType="monthly"
-              className="w-full"
-              showPlanSelector={true}
-              currentPlanId={lubricentro.subscriptionPlan}
-              fantasyName={lubricentro.fantasyName}
-              variant="upgrade"
-            />
-
-            {/* Renovar Plan (solo si es necesario) */}
-            {lubricentro.subscriptionPlan && planInfo && (
-              <PaymentButton
-                planType={lubricentro.subscriptionPlan}
-                planName={`Renovar ${planInfo.name}`}
-                amount={planInfo.price}
-                billingType="monthly"
-                className="w-full"
-                variant="renewal"
-              />
-            )}
-          </div>
-
-          {/* Información adicional */}
-          <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
-            <p className="mb-1">
-              <strong>Próxima facturación:</strong> {
-                lubricentro.subscriptionEndDate 
-                  ? formatDate(lubricentro.subscriptionEndDate)
-                  : 'No programada'
-              }
-            </p>
-            <p>
-              <strong>Renovación automática:</strong> {
-                lubricentro.autoRenewal ? 'Activada' : 'Desactivada'
-              }
-            </p>
-          </div>
-        </div>
-      </CardBody>
-    </Card>
-  );
-});
-
-
 // ✅ FUNCIÓN ACTUALIZADA: Renderizar botones de pago dinámicos
 // En tu función renderPaymentButtons (líneas 254-295), cambiar por esto:
 
-const renderPaymentButtons = (
-  lubricentro: Lubricentro,
-  dynamicPlans: Record<string, any>,
-  isTrialPeriod: boolean,
-  isLimitReached: boolean,
-  planType: string
-) => {
-  
-  // Para período de prueba o cuenta inactiva - mostrar selector de planes
-  if (isTrialPeriod || lubricentro.estado === 'inactivo') {
-    
-    return (
-      <div>
-        <h5 className="font-medium text-orange-900 mb-3">Seleccionar Plan:</h5>
-        
-        {/* ✅ BOTÓN CON SELECTOR DE PLANES */}
-        <PaymentButton
-          planType="starter" // Plan por defecto
-          planName="Seleccionar Plan"
-          amount={0} // Se calculará dinámicamente
-          billingType="monthly"
-          className="w-full mb-3"
-          showPlanSelector={true} // ← ACTIVAR SELECTOR
-          currentPlanId={lubricentro.subscriptionPlan}
-          fantasyName={lubricentro.fantasyName}
-          variant="payment"
-        />
-        
-        {/* Botón de soporte */}
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar'}
-          className="w-full"
-        >
-          ¿Necesitas ayuda? Contactar Soporte
-        </Button>
-      </div>
-    );
-  }
 
-  // Para planes por servicios agotados - mostrar renovación con selector
-  if (planType === 'service' && isLimitReached && lubricentro.subscriptionPlan) {
-    const currentPlanInfo = getPlanDisplayInfo(lubricentro.subscriptionPlan, dynamicPlans);
-    
-    return (
-      <div>
-        <h5 className="font-medium text-orange-900 mb-3">Renovar o Cambiar Plan:</h5>
-        
-        <div className="space-y-2">
-          {/* ✅ BOTÓN DE RENOVACIÓN RÁPIDA */}
-          <PaymentButton
-            planType={lubricentro.subscriptionPlan}
-            planName={`Renovar ${currentPlanInfo.name}`}
-            amount={currentPlanInfo.price}
-            billingType="monthly"
-            className="w-full"
-            variant="renewal"
-          />
-          
-          {/* ✅ BOTÓN PARA CAMBIAR PLAN */}
-          <PaymentButton
-            planType={lubricentro.subscriptionPlan}
-            planName="Cambiar Plan"
-            amount={0}
-            billingType="monthly"
-            className="w-full"
-            showPlanSelector={true} // ← ACTIVAR SELECTOR
-            currentPlanId={lubricentro.subscriptionPlan}
-            fantasyName={lubricentro.fantasyName}
-            variant="upgrade"
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return null;
-};
 // Componente de suscripción con lógica mejorada
 
 const HybridOwnerDashboard: React.FC = () => {
@@ -1326,110 +1055,106 @@ useEffect(() => {
           Reportes
         </Button>
       </div>
-      {/* Sección de suscripción *
-      <SubscriptionCard 
-        lubricentro={lubricentro!} 
-        subscriptionInfo={subscriptionInfo}
-        dynamicPlans={dynamicPlans}
-      />*/}
+  
 
-        <SubscriptionManagementCard 
-        lubricentro={lubricentro!} 
-        subscriptionInfo={subscriptionInfo}
-        dynamicPlans={dynamicPlans}
-        formatDate={formatDate}
-        setShowPlanReservationModal={setShowPlanReservationModal}
-      />
+   {lubricentro && (
+  <div className="mb-6">
+    <SubscriptionManagementCard 
+      lubricentro={lubricentro} 
+      subscriptionInfo={subscriptionInfo}
+      dynamicPlans={dynamicPlans}
+      formatDate={formatDate}
+    />
+  </div>
+)}
 
-    {/* ✅ NUEVO: Modal simple para seleccionar plan durante período de prueba */}
-      {showPlanReservationModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 transition-opacity" onClick={() => setShowPlanReservationModal(false)}>
-              <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
-            </div>
+      {/* ✅ NUEVO: Modal simple para seleccionar plan durante período de prueba */}
+{showPlanReservationModal && (
+  <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      <div className="fixed inset-0 transition-opacity" onClick={() => setShowPlanReservationModal(false)}>
+        <div className="absolute inset-0 bg-gray-500 opacity-75"></div>
+      </div>
 
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  🎯 Seleccionar Plan Preferido
-                </h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Durante el período de prueba, puedes reservar tu plan preferido sin costo. 
-                  Se activará automáticamente al finalizar la prueba.
-                </p>
-                
-                <div className="space-y-2">
-                  
-                  {Object.entries(dynamicPlans)
-                        .filter(([planId, plan]) => {
-                          const planWithMeta = plan as any; // Casting a any para acceder a propiedades adicionales
-                          return planWithMeta.isPublished === undefined || planWithMeta.isPublished === true;
-                        })
-                        .map(([planId, plan]) => (
+      <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            🎯 Seleccionar Plan Preferido
+          </h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Durante el período de prueba, puedes reservar tu plan preferido sin costo. 
+            Se activará automáticamente al finalizar la prueba.
+          </p>
+          
+          <div className="space-y-2">
+            
+            {Object.entries(dynamicPlans)
+                  .filter(([planId, plan]) => {
+                    const planWithMeta = plan as any; // Casting a any para acceder a propiedades adicionales
+                    return planWithMeta.isPublished === undefined || planWithMeta.isPublished === true;
+                  })
+                  .map(([planId, plan]) => (
 
-                    <div
-                        key={planId}
-                        className={`w-full p-3 border rounded-lg ${
-                          lubricentro?.subscriptionPlan === planId 
-                            ? 'border-blue-500 bg-blue-50' 
-                            : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="mb-3">
-                          <div className="flex justify-between items-center mb-2">
-                            <h4 className="font-medium text-gray-900">{plan.name}</h4>
-                            {lubricentro?.subscriptionPlan === planId && (
-                              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
-                                Actual
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 mb-1">
-                            ${plan.price?.monthly?.toLocaleString() || 'Consultar'}/mes
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {plan.description || 'Plan disponible'}
-                          </p>
-                        </div>
-                        
-                        {/* ✅ DOS BOTONES: Reservar o Activar */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => handlePlanReservation(planId)}
-                            className="px-3 py-2 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 transition-colors"
-                          >
-                            📅 Reservar para después
-                          </button>
-                          
-                          <button
-                            onClick={() => handlePlanActivation(planId)}
-                            className="px-3 py-2 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200 transition-colors"
-                          >
-                            ⚡ Activar ahora
-                          </button>
-                        </div>
-                      </div>
-                    
-
-
-
-                  ))}
-                </div>
-              </div>
-              
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  onClick={() => setShowPlanReservationModal(false)}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm"
+              <div
+                  key={planId}
+                  className={`w-full p-3 border rounded-lg ${
+                    lubricentro?.subscriptionPlan === planId 
+                      ? 'border-blue-500 bg-blue-50' 
+                      : 'border-gray-200'
+                  }`}
                 >
-                  Cancelar
-                </button>
-              </div>
-            </div>
+                  <div className="mb-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-medium text-gray-900">{plan.name}</h4>
+                      {lubricentro?.subscriptionPlan === planId && (
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
+                          Actual
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">
+                      ${plan.price?.monthly?.toLocaleString() || 'Consultar'}/mes
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {plan.description || 'Plan disponible'}
+                    </p>
+                  </div>
+                  
+                  {/* ✅ DOS BOTONES: Reservar o Activar */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handlePlanReservation(planId)}
+                      className="px-3 py-2 text-sm bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200 transition-colors"
+                    >
+                      📅 Reservar para después
+                    </button>
+                    
+                    <button
+                      onClick={() => handlePlanActivation(planId)}
+                      className="px-3 py-2 text-sm bg-green-100 text-green-800 rounded hover:bg-green-200 transition-colors"
+                    >
+                      ⚡ Activar ahora
+                    </button>
+                  </div>
+                </div>
+            ))}
           </div>
         </div>
-      )}
+        
+        <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button
+            onClick={() => setShowPlanReservationModal(false)}
+            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+  
  
     </PageContainer>
   );
