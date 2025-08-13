@@ -71,6 +71,8 @@ import PaymentSuccessPage from './pages/payment/PaymentSuccessPage';
 import PaymentPendingPage from './pages/payment/PaymentPendingPage';
 import PaymentFailurePage from './pages/payment/PaymentFailurePage';
 
+import ManualRenewalDashboard from './pages/superadmin/ManualRenewalDashboard';
+
 
 // Create a client for React Query
 const queryClient = new QueryClient({
@@ -121,6 +123,7 @@ const App: React.FC = () => {
                 />
 
                 <Route path="/superadmin/planes" element={<PlanManagementPage />} />
+                <Route path="/superadmin/renovaciones" element={<ManualRenewalDashboard />} />
 
                 {/* Ruta para estadísticas globales del superadmin */}
                 <Route 

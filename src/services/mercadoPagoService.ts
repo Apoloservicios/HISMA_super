@@ -11,6 +11,7 @@ interface CreateSubscriptionParams {
   email: string;
   fantasyName: string;
   deviceId?: string;
+    external_reference?: string; // ✅ AGREGAR ESTA LÍNEA
 }
 
 interface SubscriptionResponse {
@@ -37,6 +38,19 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://hisma-api.verc
 export const createMercadoPagoSubscription = async (
   params: CreateSubscriptionParams
 ): Promise<SubscriptionResponse> => {
+
+   // ✅ Asegúrate de que external_reference se incluya en el body:
+  const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-subscription`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Cache-Control': 'no-cache'
+    },
+    body: JSON.stringify({
+      ...params, // ✅ Esto incluirá external_reference automáticamente
+    })
+  });
   
   console.log('🎯 Iniciando creación de suscripción...');
   console.log('📋 Parámetros:', {

@@ -51,6 +51,14 @@ export interface Lubricentro {
   createdAt: Date;
   trialEndDate?: Date;
   updatedAt?: Date;
+
+    // ✅ NUEVOS CAMPOS PARA MANEJO DE PLANES
+  pendingPlan?: string;                    // Plan temporal mientras se procesa pago
+  pendingBillingType?: string;            // Tipo de facturación temporal
+  maxUsersAllowed?: number;               // Límite de usuarios según plan
+  maxMonthlyServices?: number | null;     // Límite de servicios según plan
+
+  renewalCount?: number;  
   
   // 🔧 CAMPOS ACTUALIZADOS para suscripción - Compatible con planes dinámicos
   subscriptionPlan?: SubscriptionPlanType | string;
@@ -58,7 +66,7 @@ export interface Lubricentro {
   subscriptionEndDate?: Date;
   subscriptionRenewalType?: 'monthly' | 'semiannual' | 'annual' | 'service';
   contractEndDate?: Date;         
-  billingCycleEndDate?: Date;     
+    
   lastPaymentDate?: Date;         
   nextPaymentDate?: Date;         
   paymentStatus?: 'paid' | 'pending' | 'overdue' | 'cancelled'; // ✅ AGREGADO: 'cancelled'
@@ -68,14 +76,33 @@ export interface Lubricentro {
   servicesUsedHistory?: {         
     [month: string]: number;      
   };
-  paymentHistory?: PaymentRecord[];
+
   autoRenewal?: boolean;
+
+   // ✅ HISTORIAL DE PAGOS MEJORADO
+  paymentHistory?: Array<{
+    amount: number;
+    date: Date;
+    method: string;
+    reference: string;
+    planId?: string;                      // Plan asociado al pago
+    billingType?: string;                 // Tipo de facturación
+  }>;
 
   // 🔧 CAMPOS ESPECÍFICOS para planes por servicios
   totalServicesContracted?: number;
   servicesUsed?: number;
   servicesRemaining?: number;
   serviceSubscriptionExpiryDate?: Date;
+
+    // ✅ CAMPOS DE RENOVACIÓN AUTOMÁTICA
+  billingCycleEndDate?: Date;            // Fecha de fin del ciclo de facturación
+  lastRenewalDate?: Date;                // Fecha de la última renovación
+  inactiveReason?: string;               // Razón de inactivación
+  inactiveSince?: Date;                  // Fecha desde que está inactivo
+  trialExtensions?: number;              // Número de extensiones de trial
+  lastManualReset?: Date;                // Última vez que se resetearon contadores manualmente
+  resetBy?: string; 
 }
 
 // 🔧 INTERFACE ESTRUCTURADA para registros de pago

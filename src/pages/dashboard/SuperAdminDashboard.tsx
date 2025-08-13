@@ -34,6 +34,9 @@ import { SUBSCRIPTION_PLANS, SubscriptionPlanType } from '../../types/subscripti
 // Modal de edición
 import SuperAdminEditLubricentroModal from '../../components/SuperAdminEditLubricentroModal';
 
+// 🆕 NUEVO: Componente de acciones rápidas
+import QuickSubscriptionActions from '../../components/admin/QuickSubscriptionActions';
+
 // Iconos
 import { 
   BuildingOfficeIcon,
@@ -49,7 +52,8 @@ import {
   CalendarDaysIcon,
   WrenchIcon,
   WrenchScrewdriverIcon,
-  PencilIcon 
+  PencilIcon,
+  CogIcon // 🆕 Nuevo icono para renovaciones
 } from '@heroicons/react/24/outline';
 
 // Estado para almacenar los planes dinámicos
@@ -75,6 +79,7 @@ interface StatsType {
   inactivos: number;
   trial: number;
   expiring7Days: number;
+  needingRenewal: number; // 🆕 Nuevo: lubricentros que necesitan renovación
 }
 
 // ================================
@@ -95,6 +100,7 @@ const debugLubricentroData = (lubricentro: Lubricentro, context: string) => {
     totalServicesContracted: lubricentro.totalServicesContracted,
     trialEndDate: lubricentro.trialEndDate,
     subscriptionEndDate: lubricentro.subscriptionEndDate,
+    billingCycleEndDate: lubricentro.billingCycleEndDate, // 🆕 Nuevo campo
     createdAt: lubricentro.createdAt
   });
 };
@@ -164,6 +170,27 @@ const isExpiringIn7Days = (lubricentro: Lubricentro): boolean => {
   const diffTime = endDate.getTime() - now.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays <= 7 && diffDays >= 0;
+};
+
+// 🆕 NUEVA FUNCIÓN: Verificar si necesita renovación (vencido)
+const needsRenewal = (lubricentro: Lubricentro): boolean => {
+  if (lubricentro.estado !== 'activo') return false;
+  
+  const now = new Date();
+  
+  // Verificar billingCycleEndDate (más preciso)
+  if (lubricentro.billingCycleEndDate) {
+    const cycleEnd = new Date(lubricentro.billingCycleEndDate);
+    return cycleEnd < now;
+  }
+  
+  // Fallback a subscriptionEndDate
+  if (lubricentro.subscriptionEndDate) {
+    const subEnd = new Date(lubricentro.subscriptionEndDate);
+    return subEnd < now;
+  }
+  
+  return false;
 };
 
 // Funciones para badges
@@ -305,11 +332,13 @@ const SuperAdminDashboard: React.FC = () => {
     activos: 0,
     inactivos: 0,
     trial: 0,
-    expiring7Days: 0
+    expiring7Days: 0,
+    needingRenewal: 0 // 🆕 Nuevo
   });
   
   const [expiringSoon, setExpiringSoon] = useState<Lubricentro[]>([]);
   const [serviceOverLimit, setServiceOverLimit] = useState<Lubricentro[]>([]);
+  const [needingRenewalList, setNeedingRenewalList] = useState<Lubricentro[]>([]); // 🆕 Nuevo
   
   // ================================
   // EFFECTS
@@ -391,18 +420,22 @@ const SuperAdminDashboard: React.FC = () => {
     }
   };
 
-  // Función para calcular estadísticas
+  // 🆕 FUNCIÓN MEJORADA: Calcular estadísticas incluyendo renovaciones
   const calculateStats = (data: Lubricentro[]) => {
+    const renewalNeeded = data.filter(l => needsRenewal(l));
+    
     const newStats = {
       total: data.length,
       activos: data.filter(l => l.estado === 'activo').length,
       inactivos: data.filter(l => l.estado === 'inactivo').length,
       trial: data.filter(l => l.estado === 'trial').length,
-      expiring7Days: data.filter(l => isExpiringIn7Days(l)).length
+      expiring7Days: data.filter(l => isExpiringIn7Days(l)).length,
+      needingRenewal: renewalNeeded.length // 🆕 Nuevo contador
     };
     
     setStats(newStats);
     setExpiringSoon(data.filter(l => isExpiringIn7Days(l)));
+    setNeedingRenewalList(renewalNeeded); // 🆕 Nueva lista
     
     const overLimit = data.filter(l => {
       if (l.subscriptionRenewalType === 'service') {
@@ -429,7 +462,12 @@ const SuperAdminDashboard: React.FC = () => {
     }
     
     if (activeTab !== 'todos') {
-      filtered = filtered.filter(l => l.estado === activeTab);
+      if (activeTab === 'necesitan_renovacion') {
+        // 🆕 Nuevo filtro
+        filtered = filtered.filter(l => needsRenewal(l));
+      } else {
+        filtered = filtered.filter(l => l.estado === activeTab);
+      }
     }
     
     setFilteredLubricentros(filtered);
@@ -489,10 +527,16 @@ const SuperAdminDashboard: React.FC = () => {
     }
   };
 
+  // 🆕 FUNCIÓN: Manejar completación de acciones rápidas
+  const handleQuickActionComplete = () => {
+    loadLubricentros(); // Recargar datos después de cualquier acción
+  };
+
   // Función para renderizar tarjeta de lubricentro
   const renderLubricentroCard = (lubricentro: Lubricentro) => {
     const planName = getDynamicPlanName(lubricentro);
     const isExpiring = isExpiringIn7Days(lubricentro);
+    const needsRen = needsRenewal(lubricentro); // 🆕 Verificar si necesita renovación
     
     return (
       <Card key={lubricentro.id} className="hover:shadow-lg transition-shadow">
@@ -519,8 +563,15 @@ const SuperAdminDashboard: React.FC = () => {
                 {getStatusText(lubricentro.estado)}
               </span>
               
+              {/* 🆕 Badge de renovación necesaria */}
+              {needsRen && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  Renovación Vencida
+                </span>
+              )}
+              
               {/* Badge de expiración si aplica */}
-              {isExpiring && (
+              {isExpiring && !needsRen && (
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                   Expira Pronto
                 </span>
@@ -575,6 +626,16 @@ const SuperAdminDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* 🆕 COMPONENTE DE ACCIONES RÁPIDAS */}
+          <div className="mb-3">
+            <QuickSubscriptionActions
+              lubricentroId={lubricentro.id}
+              lubricentroName={lubricentro.fantasyName}
+              currentStatus={lubricentro.estado}
+              onActionComplete={handleQuickActionComplete}
+            />
+          </div>
+
           {/* Fechas importantes */}
           <div className="text-xs text-gray-500 mb-3">
             {lubricentro.subscriptionEndDate && (
@@ -583,9 +644,16 @@ const SuperAdminDashboard: React.FC = () => {
                 Vence: {new Date(lubricentro.subscriptionEndDate).toLocaleDateString('es-AR')}
               </div>
             )}
+            {/* 🆕 Mostrar billingCycleEndDate si existe */}
+            {lubricentro.billingCycleEndDate && (
+              <div>
+                <CogIcon className="w-3 h-3 inline mr-1" />
+                Ciclo: {new Date(lubricentro.billingCycleEndDate).toLocaleDateString('es-AR')}
+              </div>
+            )}
           </div>
 
-          {/* Botones de acción */}
+          {/* Botones de acción tradicionales */}
           <div className="flex space-x-2">
             {/* Botón de editar */}
             <Button
@@ -665,8 +733,27 @@ const SuperAdminDashboard: React.FC = () => {
         </Alert>
       )}
 
+      {/* 🆕 ALERTA ESPECIAL: Si hay lubricentros que necesitan renovación */}
+      {stats.needingRenewal > 0 && (
+        <Alert type="warning" className="mb-6">
+          <div className="flex items-center justify-between">
+            <span>
+              ⚠️ Hay <strong>{stats.needingRenewal}</strong> lubricentro(s) que necesitan renovación urgente.
+            </span>
+            <Button
+              size="sm"
+              onClick={() => navigate('/superadmin/renovaciones')}
+              color="warning"
+            >
+              <CogIcon className="w-4 h-4 mr-2" />
+              Gestionar Renovaciones
+            </Button>
+          </div>
+        </Alert>
+      )}
+
       {/* Estadísticas principales */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-6 mb-6">
         <Card>
           <CardBody className="p-5">
             <div className="flex items-center">
@@ -766,6 +853,27 @@ const SuperAdminDashboard: React.FC = () => {
             </div>
           </CardBody>
         </Card>
+
+        {/* 🆕 NUEVA ESTADÍSTICA: Necesitan renovación */}
+        <Card>
+          <CardBody className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <CogIcon className={`h-6 w-6 ${stats.needingRenewal > 0 ? 'text-red-500' : 'text-gray-400'}`} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    Necesitan Renovación
+                  </dt>
+                  <dd className={`text-lg font-medium ${stats.needingRenewal > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    {stats.needingRenewal}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
       </div>
 
       {/* Controles de filtrado */}
@@ -786,13 +894,14 @@ const SuperAdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Filtros por tabs */}
+            {/* 🆕 FILTROS ACTUALIZADOS con renovaciones */}
             <div className="flex space-x-1">
               {[
                 { id: 'todos', label: 'Todos', count: stats.total },
                 { id: 'activo', label: 'Activos', count: stats.activos },
                 { id: 'trial', label: 'Prueba', count: stats.trial },
-                { id: 'inactivo', label: 'Inactivos', count: stats.inactivos }
+                { id: 'inactivo', label: 'Inactivos', count: stats.inactivos },
+                { id: 'necesitan_renovacion', label: 'Renovación', count: stats.needingRenewal } // 🆕 Nuevo filtro
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -801,6 +910,10 @@ const SuperAdminDashboard: React.FC = () => {
                     activeTab === tab.id
                       ? 'bg-blue-100 text-blue-700'
                       : 'text-gray-500 hover:text-gray-700'
+                  } ${
+                    tab.id === 'necesitan_renovacion' && tab.count > 0 
+                      ? 'bg-red-50 text-red-600 hover:text-red-700' 
+                      : ''
                   }`}
                 >
                   {tab.label} ({tab.count})
@@ -852,7 +965,7 @@ const SuperAdminDashboard: React.FC = () => {
       )}
 
       {/* Botones de acciones administrativas */}
-      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-6">
         <Button 
           color="primary" 
           size="lg" 
@@ -861,6 +974,17 @@ const SuperAdminDashboard: React.FC = () => {
         >
           <BuildingOfficeIcon className="h-5 w-5 mr-2" />
           Gestión de Lubricentros
+        </Button>
+        
+        {/* 🆕 NUEVO BOTÓN: Dashboard de renovaciones */}
+        <Button 
+          color={stats.needingRenewal > 0 ? "error" : "warning"} 
+          size="lg" 
+          fullWidth 
+          onClick={() => navigate('/superadmin/renovaciones')}
+        >
+          <CogIcon className="h-5 w-5 mr-2" />
+          {stats.needingRenewal > 0 ? `Renovaciones (${stats.needingRenewal})` : 'Renovaciones'}
         </Button>
         
         <Button 

@@ -1,24 +1,23 @@
-// src/components/payment/PaymentButton.tsx - VERSIÓN SIMPLIFICADA COMPLETA
+// src/components/payment/PaymentButton.tsx
+// 🔧 VERSIÓN MEJORADA CON MEJOR MANEJO DE REDIRECTS
+
 import React, { useState } from 'react';
+import { Button } from '../ui';
 import { useAuth } from '../../context/AuthContext';
 import { createMercadoPagoSubscription } from '../../services/mercadoPagoService';
-import { Button, Spinner } from '../ui';
-import { CreditCardIcon } from '@heroicons/react/24/outline';
-
-
+import { changSubscriptionPlan } from '../../services/paymentProcessingService';
 
 interface PaymentButtonProps {
   planType: string;
   planName: string;
   amount: number;
   billingType: 'monthly' | 'semiannual';
-  disabled?: boolean;
   className?: string;
-  // ✅ PROPIEDADES ADICIONALES QUE USA TU CÓDIGO EXISTENTE
-  showPlanSelector?: boolean;
-  currentPlanId?: string;
+  disabled?: boolean;
   fantasyName?: string;
-  variant?: string;
+  variant?: 'payment' | 'upgrade'; // ✅ NUEVO: Tipo de acción
+  currentPlanId?: string; // ✅ NUEVO: Plan actual (para upgrades)
+  onPaymentInitiated?: () => void;
 }
 
 const PaymentButton: React.FC<PaymentButtonProps> = ({
@@ -26,104 +25,106 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
   planName,
   amount,
   billingType,
+  className,
   disabled = false,
-  className = '',
-  // ✅ PROPIEDADES ADICIONALES (OPCIONALES)
-  showPlanSelector,
-  currentPlanId,
   fantasyName,
-  variant
+  variant = 'payment',
+  currentPlanId,
+  onPaymentInitiated
 }) => {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ GENERAR DEVICE ID SIMPLE Y CONFIABLE (SIN SCREEN)
- const generateDeviceId = (): string => {
-  // Crear un ID único sin usar screen
-  const timestamp = Date.now();
-  const random1 = Math.random().toString(36).substring(2, 10);
-  const random2 = Math.random().toString(36).substring(2, 10);
-  const userAgent = navigator.userAgent.slice(0, 15).replace(/[^a-zA-Z0-9]/g, '');
-  
-  return `hisma_${timestamp}_${random1}_${userAgent}_${random2}`.substring(0, 50);
-};
-
+  /**
+   * 🎯 MANEJAR PAGO/UPGRADE
+   */
   const handlePayment = async () => {
-    // ✅ VALIDACIONES MEJORADAS
-    if (!userProfile?.lubricentroId) {
-      setError('Usuario no asociado a un lubricentro');
-      return;
-    }
-
-    if (!amount || amount <= 0) {
-      setError('Monto inválido para el pago');
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
 
-      console.log('🎯 Iniciando proceso de pago...');
-      console.log('📋 Datos del pago:', {
-        planType,
-        planName,
-        amount,
-        billingType,
-        lubricentroId: userProfile.lubricentroId,
-        email: userProfile.email,
-        fantasyName: fantasyName || 'Lubricentro',
-        variant,
-        showPlanSelector,
-        currentPlanId
-      });
+      console.log('🎯 Iniciando proceso de pago...', { planType, variant, currentPlanId });
+
+      // ✅ VALIDACIONES BÁSICAS
+      if (!userProfile?.lubricentroId) {
+        throw new Error('Usuario no válido. Por favor, inicia sesión nuevamente.');
+      }
+
+      if (!userProfile.email || !userProfile.email.includes('@')) {
+        throw new Error('Email inválido. Actualiza tu perfil antes de continuar.');
+      }
+
+      if (!amount || amount <= 0) {
+        throw new Error('Monto inválido');
+      }
+
+      // ✅ MANEJAR UPGRADE DE PLAN (lubricentros activos)
+      if (variant === 'upgrade' && currentPlanId) {
+        console.log('🔄 Preparando upgrade de plan...');
+        
+        const upgradeResult = await changSubscriptionPlan(
+          userProfile.lubricentroId,
+          planType,
+          billingType
+        );
+
+        if (!upgradeResult.success) {
+          throw new Error(upgradeResult.message);
+        }
+
+        console.log('✅ Upgrade preparado, procediendo al pago...');
+      }
 
       // ✅ GENERAR DEVICE ID ÚNICO
       const deviceId = generateDeviceId();
-      console.log('🆔 Device ID generado:', deviceId);
 
-      console.log('🔍 === EMAIL DEBUG FRONTEND ===');
-      console.log('userProfile completo:', userProfile);
-      console.log('userProfile.email:', userProfile.email);
-      console.log('email a enviar:', userProfile.email || 'andresmartin2609@gmail.com');
-      console.log('email es válido:', !!(userProfile.email && userProfile.email.includes('@')));
+      // ✅ CREAR EXTERNAL_REFERENCE MEJORADO
+      const external_reference = `lubricentro_${userProfile.lubricentroId}_plan_${planType}_${Date.now()}`;
 
-      
+      const emailToSend = userProfile.email.trim() || 'soporte@hisma.com.ar';
 
+      console.log('📧 Datos de pago:', {
+        lubricentroId: userProfile.lubricentroId,
+        planType,
+        billingType,
+        amount,
+        external_reference
+      });
 
-        // ✅ CREAR SUSCRIPCIÓN CON DEBUG DETALLADO
-        const emailToSend = userProfile.email && userProfile.email.trim() !== '' 
-          ? userProfile.email 
-          : 'andresmartin2609@gmail.com';
-
-        console.log('📧 Email final frontend:', emailToSend);
-
-
-      // ✅ CREAR SUSCRIPCIÓN CON TODOS LOS DATOS
+      // ✅ CREAR SUSCRIPCIÓN EN MERCADOPAGO
       const result = await createMercadoPagoSubscription({
         lubricentroId: userProfile.lubricentroId,
         planType,
         billingType,
         amount,
-        email: emailToSend, // ✅ USAR EMAIL VALIDADO
-       
+        email: emailToSend,
         fantasyName: fantasyName || 'Lubricentro',
-        deviceId: deviceId
+        deviceId: deviceId,
+        external_reference: external_reference // ✅ AGREGAR external_reference
       });
 
-      console.log('✅ Suscripción creada exitosamente:', {
+      console.log('✅ Suscripción creada:', {
         subscriptionId: result.subscriptionId,
-        hasInitUrl: !!result.initUrl,
-        status: result.status,
-        external_reference: result.external_reference
+        hasInitUrl: !!result.initUrl
       });
 
-      // ✅ REDIRIGIR A MERCADOPAGO
+      // ✅ CALLBACK OPCIONAL
+      onPaymentInitiated?.();
+
+      // ✅ REDIRECCIONAR A MERCADOPAGO
       if (result.initUrl) {
         console.log('🚀 Redirigiendo a MercadoPago...');
-        window.open(result.initUrl, '_blank');
-        console.log('✅ Ventana de pago abierta correctamente');
+        
+        // ✅ OPCIÓN 1: Redirección en la misma ventana (RECOMENDADO)
+        window.location.href = result.initUrl;
+        
+        // ✅ OPCIÓN 2: Nueva ventana (solo si específicamente se requiere)
+        // const newWindow = window.open(result.initUrl, '_blank', 'width=800,height=600');
+        // if (!newWindow) {
+        //   throw new Error('Las ventanas emergentes están bloqueadas. Habilita las ventanas emergentes e intenta nuevamente.');
+        // }
+        
       } else {
         throw new Error('No se recibió URL de pago desde MercadoPago');
       }
@@ -131,7 +132,6 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
     } catch (err) {
       console.error('❌ Error al crear pago:', err);
       
-      // Manejo específico de errores
       let errorMessage = 'Error al procesar pago';
       
       if (err instanceof Error) {
@@ -140,15 +140,18 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         errorMessage = err;
       }
       
-      // Errores específicos
+      // ✅ ERRORES ESPECÍFICOS MEJORADOS
       if (errorMessage.includes('lubricentroId')) {
-        errorMessage = 'Error de configuración de usuario';
+        errorMessage = 'Error de configuración de usuario. Refresca la página e intenta nuevamente.';
       } else if (errorMessage.includes('email')) {
-        errorMessage = 'Email inválido o faltante';
+        errorMessage = 'Email inválido o faltante. Actualiza tu perfil antes de continuar.';
       } else if (errorMessage.includes('amount')) {
-        errorMessage = 'Monto inválido';
+        errorMessage = 'Monto inválido. Contacta al soporte.';
       } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
-        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente';
+        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
+      } else if (errorMessage.includes('usuarios') || errorMessage.includes('servicios')) {
+        // Error de validación de plan
+        errorMessage = errorMessage; // Mantener mensaje específico
       }
       
       setError(errorMessage);
@@ -157,15 +160,38 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
     }
   };
 
-  // ✅ DETERMINAR TEXTO DEL BOTÓN
+  /**
+   * 🎯 GENERAR DEVICE ID ÚNICO
+   */
+  const generateDeviceId = (): string => {
+    const timestamp = Date.now().toString();
+    const random = Math.random().toString(36).substring(2);
+    return `${timestamp}_${random}`;
+  };
+
+  /**
+   * 🎯 DETERMINAR TEXTO DEL BOTÓN
+   */
   const getButtonText = () => {
     if (loading) return 'Procesando...';
     
     const formattedAmount = amount.toLocaleString('es-AR');
+    
+    if (variant === 'upgrade') {
+      return `Cambiar a ${planName} - $${formattedAmount}`;
+    }
+    
     return `Pagar ${planName} - $${formattedAmount}`;
   };
 
-  // ✅ DETERMINAR SI EL BOTÓN ESTÁ DESHABILITADO
+  /**
+   * 🎯 DETERMINAR COLOR DEL BOTÓN
+   */
+  const getButtonColor = () => {
+    if (variant === 'upgrade') return 'warning';
+    return 'success';
+  };
+
   const isDisabled = disabled || loading || !userProfile?.lubricentroId || !amount;
 
   return (
@@ -173,49 +199,24 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       <Button
         onClick={handlePayment}
         disabled={isDisabled}
-        color="success"
-        icon={loading ? <Spinner size="sm" /> : <CreditCardIcon className="w-4 h-4" />}
-        fullWidth
+        color={getButtonColor()}
+        className="w-full"
+        size="lg"
       >
         {getButtonText()}
       </Button>
-      
-      {/* ✅ MOSTRAR ERRORES */}
+
+      {/* ✅ MOSTRAR ERROR SI EXISTE */}
       {error && (
-        <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded border border-red-200">
-          <div className="flex items-center">
-            <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            {error}
-          </div>
+        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+          ❌ {error}
         </div>
       )}
-      
-      {/* ✅ INFORMACIÓN DEL PAGO */}
-      <div className="mt-2 text-xs text-gray-500 text-center">
-        <div>
-          {billingType === 'monthly' ? 'Facturación mensual' : 'Facturación semestral'} • Seguro con MercadoPago
-        </div>
-        
-        {/* ✅ MOSTRAR INFO ADICIONAL EN DESARROLLO */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-1 text-xs text-blue-600">
-            Dev: {planType} | Device ID ready | User: {userProfile?.email?.substring(0, 10)}...
-          </div>
-        )}
-      </div>
-      
-      {/* ✅ ESTADO DE VALIDACIÓN */}
-      {!userProfile?.lubricentroId && (
-        <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
-          ⚠️ Usuario no asociado a lubricentro
-        </div>
-      )}
-      
-      {!amount && (
-        <div className="mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
-          ⚠️ Monto no configurado
+
+      {/* ✅ INFORMACIÓN ADICIONAL PARA UPGRADES */}
+      {variant === 'upgrade' && currentPlanId && (
+        <div className="mt-2 text-xs text-gray-500">
+          Cambiando desde plan actual: {currentPlanId}
         </div>
       )}
     </div>
