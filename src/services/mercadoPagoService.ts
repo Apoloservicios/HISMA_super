@@ -2,6 +2,8 @@
 // ✅ VERSIÓN CORREGIDA para conectar con Vercel
 
 import { updateLubricentro, getLubricentroBySubscriptionId } from './lubricentroService';
+// ✅ AGREGAR AL FINAL DE mercadoPagoService.ts
+import { createMercadoPagoPaymentCompat } from './paymentService';
 
 interface CreateSubscriptionParams {
   lubricentroId: string;
@@ -333,4 +335,14 @@ export const testMercadoPagoConnection = async (): Promise<boolean> => {
     console.error('❌ Error de conectividad:', error);
     return false;
   }
+};
+
+
+
+/**
+ * 🔄 WRAPPER: Mantiene compatibilidad con código existente
+ */
+export const createMercadoPagoSubscriptionHybrid = async (params: CreateSubscriptionParams) => {
+  // Usar el nuevo servicio híbrido manteniendo la interfaz existente
+  return await createMercadoPagoPaymentCompat(params);
 };

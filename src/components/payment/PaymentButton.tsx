@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { Button } from '../ui';
 import { useAuth } from '../../context/AuthContext';
-import { createMercadoPagoSubscription } from '../../services/mercadoPagoService';
+import { createMercadoPagoSubscriptionHybrid as createMercadoPagoSubscription } from '../../services/mercadoPagoService';
 import { changSubscriptionPlan } from '../../services/paymentProcessingService';
 import PlanSelectorModal from './PlanSelectorModal';
 
