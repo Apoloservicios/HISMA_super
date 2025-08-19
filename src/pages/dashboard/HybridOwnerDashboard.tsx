@@ -910,10 +910,7 @@ useEffect(() => {
         </Card>
       </div>
 
-    <PaymentManagementButton 
-      lubricentro={lubricentro} 
-      subscriptionInfo={subscriptionInfo} 
-    />
+
 
       {/* Gráficos - Solo mostrar si hay datos */}
       {stats && stats.total > 0 ? (

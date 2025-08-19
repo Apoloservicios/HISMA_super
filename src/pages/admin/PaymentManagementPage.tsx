@@ -1,10 +1,18 @@
 // src/pages/admin/PaymentManagementPage.tsx - VERSIÓN CORREGIDA
 import React, { useState, useEffect } from 'react';
-import { PaymentActivator } from '../../components/admin/PaymentActivator';
-import { Card, CardBody, PageContainer, Button } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
 import { getLubricentroById } from '../../services/lubricentroService';
+import { getSubscriptionPlans } from '../../services/hybridSubscriptionService';
+import { Card, CardBody, PageContainer, Button } from '../../components/ui';
+// ✅ CORRECCIÓN: Importar desde subscription types
 import { Lubricentro } from '../../types';
+import { SubscriptionPlan } from '../../types/subscription';
+
+// Componentes
+import { PaymentActivator } from '../../components/admin/PaymentActivator';
+import { PaymentMethodSelector } from '../../components/admin/PaymentMethodSelector';
+import { TransferPaymentUpload } from '../../components/admin/TransferPaymentUpload';
+import { PaymentHistory } from '../../components/admin/PaymentHistory';
 
 interface LubricentroInfo {
   id: string;
@@ -12,27 +20,34 @@ interface LubricentroInfo {
   estado: string;
   servicesRemaining: number;
   lastPaymentDate?: Date;
-  // Removemos lastPaymentAmount si no existe en el tipo Lubricentro
   paymentStatus?: string;
+  subscriptionPlan?: string;
 }
 
 export const PaymentManagementPage: React.FC = () => {
   const { userProfile } = useAuth();
   const [lubricentroInfo, setLubricentroInfo] = useState<LubricentroInfo | null>(null);
+  const [availablePlans, setAvailablePlans] = useState<Record<string, SubscriptionPlan>>({});
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mercadopago' | 'transfer'>('mercadopago');
 
-  // Cargar información del lubricentro
+  // Cargar información del lubricentro y planes disponibles
   useEffect(() => {
-    const loadLubricentroInfo = async () => {
+    const loadData = async () => {
       if (!userProfile?.lubricentroId) {
         setLoading(false);
         return;
       }
 
       try {
-        console.log('📊 Cargando información del lubricentro...');
+        console.log('📊 Cargando información del lubricentro y planes...');
+        
+        // Cargar información del lubricentro
         const lubricentro = await getLubricentroById(userProfile.lubricentroId);
+        
+        // Cargar planes dinámicos desde Firebase
+        const plans = await getSubscriptionPlans();
         
         if (lubricentro) {
           setLubricentroInfo({
@@ -41,23 +56,26 @@ export const PaymentManagementPage: React.FC = () => {
             estado: lubricentro.estado,
             servicesRemaining: lubricentro.servicesRemaining || 0,
             lastPaymentDate: lubricentro.lastPaymentDate,
-            // Solo incluimos propiedades que existen en el tipo
-            paymentStatus: (lubricentro as any).paymentStatus // Cast temporal
+            paymentStatus: (lubricentro as any).paymentStatus,
+            subscriptionPlan: lubricentro.subscriptionPlan
           });
         }
+
+        setAvailablePlans(plans);
+        console.log('✅ Datos cargados:', { lubricentro: lubricentro?.fantasyName, plansCount: Object.keys(plans).length });
+        
       } catch (error) {
-        console.error('❌ Error cargando lubricentro:', error);
+        console.error('❌ Error cargando datos:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadLubricentroInfo();
+    loadData();
   }, [userProfile?.lubricentroId, refreshKey]);
 
   const handlePaymentSuccess = () => {
-    console.log('✅ Pago activado exitosamente, refrescando datos...');
-    // Refrescar la información del lubricentro
+    console.log('✅ Pago procesado exitosamente, refrescando datos...');
     setRefreshKey(prev => prev + 1);
   };
 
@@ -94,7 +112,7 @@ export const PaymentManagementPage: React.FC = () => {
   }
 
   return (
-    <PageContainer title="Gestión de Pagos">
+    <PageContainer title="Gestión de Pagos y Suscripciones">
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg p-6">
@@ -121,7 +139,7 @@ export const PaymentManagementPage: React.FC = () => {
                 </Button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {/* Estado */}
                 <div className="text-center p-4 bg-gray-50 rounded-lg">
                   <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium mb-2 ${
@@ -142,10 +160,18 @@ export const PaymentManagementPage: React.FC = () => {
                   <p className="text-sm text-gray-600">Servicios Disponibles</p>
                 </div>
 
-                {/* Último Pago - Sin lastPaymentAmount para evitar error */}
+                {/* Plan Actual */}
+                <div className="text-center p-4 bg-purple-50 rounded-lg">
+                  <div className="text-xl font-bold text-purple-600 mb-1">
+                    {lubricentroInfo.subscriptionPlan || 'Sin Plan'}
+                  </div>
+                  <p className="text-sm text-gray-600">Plan Actual</p>
+                </div>
+
+                {/* Estado de Pago */}
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <div className="text-xl font-bold text-green-600 mb-1">
-                    {lubricentroInfo.paymentStatus === 'paid' ? 'Pagado' : 'Sin pagos'}
+                    {lubricentroInfo.paymentStatus === 'paid' ? 'Al día' : 'Pendiente'}
                   </div>
                   <p className="text-sm text-gray-600">
                     {lubricentroInfo.lastPaymentDate
@@ -174,62 +200,64 @@ export const PaymentManagementPage: React.FC = () => {
           </Card>
         )}
 
-        {/* Activador de Pagos */}
-        <PaymentActivator
-          lubricentroId={userProfile.lubricentroId}
-          onSuccess={handlePaymentSuccess}
+        {/* Selector de Método de Pago */}
+        <PaymentMethodSelector
+          selectedMethod={selectedPaymentMethod}
+          onMethodChange={setSelectedPaymentMethod}
         />
+
+        {/* Renderizar componente según método seleccionado */}
+        {selectedPaymentMethod === 'mercadopago' ? (
+          <PaymentActivator
+            lubricentroId={userProfile.lubricentroId}
+            availablePlans={availablePlans}
+            onSuccess={handlePaymentSuccess}
+          />
+        ) : (
+          <TransferPaymentUpload
+            lubricentroId={userProfile.lubricentroId}
+            availablePlans={availablePlans}
+            onSuccess={handlePaymentSuccess}
+          />
+        )}
+
+        {/* Historial de Pagos */}
+        <PaymentHistory lubricentroId={userProfile.lubricentroId} />
 
         {/* Consejos de Uso */}
         <Card>
           <CardBody>
             <h3 className="text-lg font-semibold mb-4">💡 Consejos de Uso</h3>
             
-            <div className="space-y-3">
-              <div className="flex items-start space-x-3">
-                <div className="bg-blue-100 text-blue-600 rounded-full p-1 mt-1">
-                  <span className="text-xs font-bold">1</span>
-                </div>
-                <div>
-                  <p className="font-medium">Selecciona tu plan</p>
-                  <p className="text-sm text-gray-600">
-                    Elige el plan que mejor se adapte a tu volumen de trabajo mensual
-                  </p>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium text-blue-800 mb-3">📱 Pago con MercadoPago</h4>
+                <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                  <li>Selecciona tu plan preferido</li>
+                  <li>Completa el pago en MercadoPago</li>
+                  <li>Copia el Payment ID</li>
+                  <li>Activa instantáneamente tus servicios</li>
+                </ol>
               </div>
 
-              <div className="flex items-start space-x-3">
-                <div className="bg-blue-100 text-blue-600 rounded-full p-1 mt-1">
-                  <span className="text-xs font-bold">2</span>
-                </div>
-                <div>
-                  <p className="font-medium">Realiza el pago</p>
-                  <p className="text-sm text-gray-600">
-                    Completa el pago en MercadoPago de forma segura
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-3">
-                <div className="bg-blue-100 text-blue-600 rounded-full p-1 mt-1">
-                  <span className="text-xs font-bold">3</span>
-                </div>
-                <div>
-                  <p className="font-medium">Activa tus servicios</p>
-                  <p className="text-sm text-gray-600">
-                    Copia el Payment ID y activa instantáneamente tus servicios
-                  </p>
-                </div>
+              <div>
+                <h4 className="font-medium text-green-800 mb-3">🏦 Pago por Transferencia</h4>
+                <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                  <li>Selecciona tu plan preferido</li>
+                  <li>Realiza la transferencia bancaria</li>
+                  <li>Sube el comprobante de pago</li>
+                  <li>Espera la activación manual (24-48hs)</li>
+                </ol>
               </div>
             </div>
 
             <div className="mt-6 p-4 bg-green-50 rounded-lg">
-              <h4 className="font-medium text-green-800 mb-2">✅ Ventajas de este sistema:</h4>
+              <h4 className="font-medium text-green-800 mb-2">✅ Ventajas de nuestro sistema:</h4>
               <ul className="text-sm text-green-700 space-y-1">
-                <li>• Activación instantánea - no esperas webhooks</li>
-                <li>• 100% confiable - si el pago existe, se activa</li>
-                <li>• Control total - tú decides cuándo activar</li>
-                <li>• Historial completo - todos los pagos quedan registrados</li>
+                <li>• Activación instantánea con MercadoPago</li>
+                <li>• Flexibilidad para pagar por transferencia</li>
+                <li>• Historial completo de todos los pagos</li>
+                <li>• Soporte técnico especializado</li>
               </ul>
             </div>
           </CardBody>
