@@ -1,26 +1,24 @@
-// src/components/payment/PaymentButton.tsx
-// 🔧 VERSIÓN CORREGIDA CON PROPIEDADES FALTANTES
-
+// src/components/payment/PaymentButton.tsx - VERSIÓN CORREGIDA FINAL
 import React, { useState } from 'react';
 import { Button } from '../ui';
 import { useAuth } from '../../context/AuthContext';
-import { createMercadoPagoSubscriptionHybrid as createMercadoPagoSubscription } from '../../services/mercadoPagoService';
+import { createPayment } from '../../services/paymentService';
 import { changSubscriptionPlan } from '../../services/paymentProcessingService';
-import PlanSelectorModal from './PlanSelectorModal';
 
-// ✅ INTERFAZ ACTUALIZADA CON TODAS LAS PROPIEDADES NECESARIAS
 interface PaymentButtonProps {
-  planType: string;
+  planType: string; // Este es el ID del plan
   planName: string;
   amount: number;
   billingType: 'monthly' | 'semiannual';
   className?: string;
   disabled?: boolean;
   fantasyName?: string;
-  variant?: 'payment' | 'upgrade' | 'renewal'; // ✅ AGREGADO: 'renewal'
+  variant?: 'payment' | 'upgrade' | 'renewal';
   currentPlanId?: string;
-  showPlanSelector?: boolean; // ✅ AGREGADO: Para mostrar selector de planes
+  showPlanSelector?: boolean;
   onPaymentInitiated?: () => void;
+  // ✅ NUEVO: Especificar explícitamente si es plan por servicios
+  isServicePlan?: boolean;
 }
 
 const PaymentButton: React.FC<PaymentButtonProps> = ({
@@ -33,25 +31,57 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
   fantasyName,
   variant = 'payment',
   currentPlanId,
-  showPlanSelector = false, // ✅ NUEVO: Default false
-  onPaymentInitiated
+  showPlanSelector = false,
+  onPaymentInitiated,
+  isServicePlan = false // ✅ NUEVO: Por defecto false
 }) => {
   const { userProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false); // ✅ NUEVO: Estado para modal
+
+  /**
+   * 🎯 DETERMINAR TIPO DE PLAN AUTOMÁTICAMENTE
+   */
+  const detectPlanType = (): 'monthly' | 'service' => {
+    // 1. Si se especifica explícitamente
+    if (isServicePlan) return 'service';
+    
+    // 2. Por nombre del plan
+    const planTypeLower = planType.toLowerCase();
+    if (planTypeLower.includes('plan50') || 
+        planTypeLower.includes('service') || 
+        planTypeLower.includes('paquete')) {
+      return 'service';
+    }
+    
+    // 3. Por monto (heurística: planes baratos suelen ser por servicios)
+    if (amount < 3000) {
+      return 'service';
+    }
+    
+    // 4. Por defecto, asumir que es mensual
+    return 'monthly';
+  };
 
   /**
    * 🎯 MANEJAR CLIC DEL BOTÓN
    */
   const handleClick = async () => {
-    // ✅ Si debe mostrar selector, abrir modal
+    // Si debe mostrar selector, disparar evento personalizado
     if (showPlanSelector) {
-      setShowModal(true);
+      const event = new CustomEvent('openPlanSelector', {
+        detail: {
+          currentPlanId,
+          lubricentroId: userProfile?.lubricentroId,
+          userEmail: userProfile?.email,
+          fantasyName
+        }
+      });
+      window.dispatchEvent(event);
       return;
     }
 
-    // ✅ Si no, proceder con el pago normal
+    // Si no, proceder con el pago normal
     await handlePayment();
   };
 
@@ -63,7 +93,16 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       setLoading(true);
       setError(null);
 
-      console.log('🎯 Iniciando proceso de pago...', { planType, variant, currentPlanId });
+      const detectedPlanType = detectPlanType();
+      
+      console.log('🎯 Iniciando proceso de pago...', { 
+        planType, 
+        detectedPlanType,
+        amount,
+        variant, 
+        currentPlanId,
+        isServicePlan
+      });
 
       // ✅ VALIDACIONES BÁSICAS
       if (!userProfile?.lubricentroId) {
@@ -84,7 +123,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         
         const upgradeResult = await changSubscriptionPlan(
           userProfile.lubricentroId,
-          planType,
+          planType, // ID del plan de destino
           billingType
         );
 
@@ -95,52 +134,50 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         console.log('✅ Upgrade preparado, procediendo al pago...');
       }
 
-      // ✅ GENERAR DEVICE ID ÚNICO
-      const generateDeviceId = () => {
-        return `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      };
-      const deviceId = generateDeviceId();
-
-      // ✅ CREAR EXTERNAL_REFERENCE MEJORADO
-      const external_reference = `lubricentro_${userProfile.lubricentroId}_plan_${planType}_${Date.now()}`;
-
       const emailToSend = userProfile.email.trim() || 'soporte@hisma.com.ar';
 
       console.log('📧 Datos de pago:', {
         lubricentroId: userProfile.lubricentroId,
-        planType,
-        billingType,
-        amount,
-        external_reference
+        planId: planType,
+        planType: detectedPlanType, // ✅ USAR TIPO DETECTADO
+        billingType: detectedPlanType === 'service' ? 'monthly' : billingType, // Para servicios usar monthly
+        amount
       });
 
-      // ✅ CREAR SUSCRIPCIÓN EN MERCADOPAGO
-      const result = await createMercadoPagoSubscription({
+      // ✅ CREAR PAGO CON TIPO DETECTADO
+      const result = await createPayment({
         lubricentroId: userProfile.lubricentroId,
-        planType,
-        billingType,
+        planId: planType, // ID del plan
+        planType: detectedPlanType, // ✅ TIPO DETECTADO AUTOMÁTICAMENTE
+        billingType: detectedPlanType === 'service' ? 'monthly' : billingType, // Para servicios, billing no aplica
         amount,
         email: emailToSend,
-        fantasyName: fantasyName || 'Lubricentro',
-        deviceId: deviceId,
-        external_reference: external_reference
+        fantasyName: fantasyName || 'Lubricentro'
       });
 
-      console.log('✅ Suscripción creada:', {
-        subscriptionId: result.subscriptionId,
-        hasInitUrl: !!result.initUrl
+      console.log('✅ Pago creado:', {
+        success: result.success,
+        type: result.data?.type,
+        hasInitUrl: !!result.data?.initUrl,
+        planSent: planType,
+        detectedType: detectedPlanType
       });
+
+      // ✅ VERIFICAR QUE EL PAGO SE CREÓ CORRECTAMENTE
+      if (!result.success) {
+        throw new Error(result.error || 'Error creando el pago');
+      }
+
+      if (!result.data?.initUrl) {
+        throw new Error('No se recibió URL de pago desde MercadoPago');
+      }
 
       // ✅ CALLBACK OPCIONAL
       onPaymentInitiated?.();
 
       // ✅ REDIRECCIONAR A MERCADOPAGO
-      if (result.initUrl) {
-        console.log('🚀 Redirigiendo a MercadoPago...');
-        window.location.href = result.initUrl;
-      } else {
-        throw new Error('No se recibió URL de pago desde MercadoPago');
-      }
+      console.log('🚀 Redirigiendo a MercadoPago...');
+      window.location.href = result.data.initUrl;
 
     } catch (err) {
       console.error('❌ Error al crear pago:', err);
@@ -159,9 +196,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       } else if (errorMessage.includes('email')) {
         errorMessage = 'Email inválido o faltante. Actualiza tu perfil antes de continuar.';
       } else if (errorMessage.includes('amount')) {
-        errorMessage = 'Monto inválido. Contacta al soporte.';
-      } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
-        errorMessage = 'Error de conexión. Verifica tu internet e intenta nuevamente.';
+        errorMessage = 'Monto inválido. Verifica el plan seleccionado.';
       }
 
       setError(errorMessage);
@@ -171,68 +206,53 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
   };
 
   /**
-   * 🎯 OBTENER TEXTO DEL BOTÓN SEGÚN VARIANTE
+   * 🎯 DETERMINAR TEXTO DEL BOTÓN
    */
   const getButtonText = () => {
-    if (loading) return 'Procesando...';
+    if (loading) {
+      return 'Procesando...';
+    }
+
+    const detectedType = detectPlanType();
     
     switch (variant) {
       case 'upgrade':
-        return showPlanSelector ? 'Cambiar Plan' : `Cambiar a ${planName}`;
+        return `Cambiar a ${planName}`;
       case 'renewal':
-        return `Renovar Plan`;
-      case 'payment':
+        return `Renovar ${planName}`;
       default:
-        return showPlanSelector ? 'Seleccionar Plan' : `Pagar ${planName}`;
-    }
-  };
-
-  /**
-   * 🎯 OBTENER COLOR DEL BOTÓN SEGÚN VARIANTE
-   */
-  const getButtonColor = () => {
-    switch (variant) {
-      case 'upgrade':
-        return 'info';
-      case 'renewal':
-        return 'warning';
-      case 'payment':
-      default:
-        return 'primary';
+        if (detectedType === 'service') {
+          return `Comprar ${planName}`;
+        } else {
+          return `Activar ${planName}`;
+        }
     }
   };
 
   return (
-    <>
+    <div className="w-full">
       <Button
         onClick={handleClick}
         disabled={disabled || loading}
-        className={className}
-        color={getButtonColor()}
-        fullWidth
+        className={`w-full ${className || ''}`}
+        color="primary"
       >
         {getButtonText()}
       </Button>
 
-      {/* ✅ MOSTRAR ERROR SI EXISTE */}
       {error && (
-        <div className="mt-2 text-sm text-red-600">
+        <div className="mt-2 text-sm text-red-600 bg-red-50 p-2 rounded">
           {error}
         </div>
       )}
-
-      {/* ✅ MODAL SELECTOR DE PLANES */}
-      {showPlanSelector && (
-        <PlanSelectorModal
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          currentPlanId={currentPlanId}
-          lubricentroId={userProfile?.lubricentroId}
-          userEmail={userProfile?.email || ''}
-          fantasyName={fantasyName || 'Lubricentro'}
-        />
+      
+      {/* ✅ DEBUG INFO (solo en desarrollo) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-1 text-xs text-gray-500">
+          Plan: {planType} | Tipo: {detectPlanType()} | Monto: ${amount}
+        </div>
       )}
-    </>
+    </div>
   );
 };
 

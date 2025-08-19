@@ -1,4 +1,4 @@
-// src/components/payment/PlanSelectorModal.tsx
+// src/components/payment/PlanSelectorModal.tsx - CORREGIDO COMPLETAMENTE
 import React, { useState, useEffect } from 'react';
 import { Modal, Button, Card, CardBody, Badge, Spinner } from '../ui';
 import PaymentButton from './PaymentButton';
@@ -105,16 +105,32 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
     }
   };
 
+  /**
+   * 🎯 DETECTAR SI ES PLAN POR SERVICIOS
+   */
+  const isServicePlan = (plan: Plan): boolean => {
+    return plan.planType === PlanType.SERVICE || 
+           (plan as any).servicePrice !== undefined ||
+           plan.id.toLowerCase().includes('plan50') ||
+           plan.id.toLowerCase().includes('service');
+  };
+
+  /**
+   * 💰 OBTENER PRECIO CORRECTO DEL PLAN
+   */
   const getPlanPrice = (plan: Plan) => {
-    if (plan.planType === PlanType.SERVICE && plan.servicePrice) {
-      return plan.servicePrice;
+    if (isServicePlan(plan) && (plan as any).servicePrice) {
+      return (plan as any).servicePrice;
     }
     return billingType === 'monthly' ? plan.price.monthly : plan.price.semiannual;
   };
 
+  /**
+   * 📅 OBTENER PERÍODO DEL PLAN
+   */
   const getPlanPeriod = (plan: Plan) => {
-    if (plan.planType === PlanType.SERVICE) {
-      return 'Por servicios';
+    if (isServicePlan(plan)) {
+      return 'Pago único';
     }
     return billingType === 'monthly' ? 'Mensual' : 'Semestral';
   };
@@ -124,7 +140,7 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
   };
 
   const getDiscountPercentage = (plan: Plan) => {
-    if (plan.planType === PlanType.SERVICE) return 0;
+    if (isServicePlan(plan)) return 0;
     const monthlyTotal = plan.price.monthly * 6;
     const discount = ((monthlyTotal - plan.price.semiannual) / monthlyTotal) * 100;
     return Math.round(discount);
@@ -164,37 +180,39 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
     >
       <div className="space-y-6">
         
-        {/* Tipo de facturación */}
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h4 className="text-sm font-medium text-gray-900 mb-3">
-            Tipo de facturación:
-          </h4>
-          <div className="flex space-x-4">
-            <button
-              onClick={() => setBillingType('monthly')}
-              className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
-                billingType === 'monthly'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="text-sm font-medium">Mensual</div>
-              <div className="text-xs text-gray-500">Facturación cada mes</div>
-            </button>
-            <button
-              onClick={() => setBillingType('semiannual')}
-              className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
-                billingType === 'semiannual'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="text-sm font-medium">Semestral</div>
-              <div className="text-xs text-gray-500">Facturación cada 6 meses</div>
-              <Badge text="Hasta 20% descuento" color="success" className="mt-1" />
-            </button>
+        {/* Tipo de facturación - Solo para planes que no son por servicios */}
+        {selectedPlanData && !isServicePlan(selectedPlanData) && (
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h4 className="text-sm font-medium text-gray-900 mb-3">
+              Tipo de facturación:
+            </h4>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setBillingType('monthly')}
+                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
+                  billingType === 'monthly'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="text-sm font-medium">Mensual</div>
+                <div className="text-xs text-gray-500">Facturación cada mes</div>
+              </button>
+              <button
+                onClick={() => setBillingType('semiannual')}
+                className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
+                  billingType === 'semiannual'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <div className="text-sm font-medium">Semestral</div>
+                <div className="text-xs text-gray-500">Facturación cada 6 meses</div>
+                <Badge text="Hasta 20% descuento" color="success" className="mt-1" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Grid de planes */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -203,7 +221,8 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
             const isCurrent = planId === currentPlanId;
             const price = getPlanPrice(plan);
             const period = getPlanPeriod(plan);
-            const discount = billingType === 'semiannual' ? getDiscountPercentage(plan) : 0;
+            const discount = billingType === 'semiannual' && !isServicePlan(plan) ? getDiscountPercentage(plan) : 0;
+            const planIsService = isServicePlan(plan);
 
             return (
               <div 
@@ -228,6 +247,10 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
                           <p className="text-sm text-gray-600">
                             {plan.description}
                           </p>
+                          {/* ✅ INDICADOR DE TIPO DE PLAN */}
+                          {planIsService && (
+                            <Badge text="Pago único" color="info" className="mt-1" />
+                          )}
                         </div>
                         <div className="flex flex-col items-end space-y-1">
                           {plan.recommended && (
@@ -249,7 +272,7 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
                             ${price.toLocaleString()}
                           </span>
                           <span className="text-sm text-gray-600 ml-1">
-                            / {period.toLowerCase()}
+                            {planIsService ? '' : `/ ${period.toLowerCase()}`}
                           </span>
                         </div>
                         {discount > 0 && (
@@ -266,7 +289,9 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
                           <span className="font-medium">{plan.maxUsers}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-gray-600">Servicios mensuales:</span>
+                          <span className="text-gray-600">
+                            {planIsService ? 'Total servicios:' : 'Servicios mensuales:'}
+                          </span>
                           <span className="font-medium">
                             {plan.maxMonthlyServices === null || plan.maxMonthlyServices === -1 
                               ? 'Ilimitados' 
@@ -307,7 +332,7 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
                   Plan seleccionado: {selectedPlanData.name}
                 </h4>
                 <p className="text-sm text-gray-600">
-                  ${getPlanPrice(selectedPlanData).toLocaleString()} / {getPlanPeriod(selectedPlanData).toLowerCase()}
+                  ${getPlanPrice(selectedPlanData).toLocaleString()} - {getPlanPeriod(selectedPlanData)}
                 </p>
               </div>
               <button
@@ -333,8 +358,10 @@ const PlanSelectorModal: React.FC<PlanSelectorModalProps> = ({
                   planType={selectedPlan || ''}
                   planName={`${selectedPlanData.name} (${getPlanPeriod(selectedPlanData)})`}
                   amount={getPlanPrice(selectedPlanData)}
-                  billingType={selectedPlanData.planType === PlanType.SERVICE ? 'monthly' : billingType}
+                  billingType={isServicePlan(selectedPlanData) ? 'monthly' : billingType}
                   className="w-full"
+                  fantasyName={fantasyName}
+                  isServicePlan={isServicePlan(selectedPlanData)} // ✅ NUEVO PROP
                 />
               </div>
             </div>

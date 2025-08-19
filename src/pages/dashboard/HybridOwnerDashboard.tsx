@@ -447,6 +447,141 @@ const CurrentPlanDisplay = ({
 };
 
 
+
+// ✅ NUEVA FUNCIÓN: Crear botón de gestión de pagos
+const PaymentManagementButton = ({ 
+  lubricentro, 
+  subscriptionInfo 
+}: { 
+  lubricentro: Lubricentro, 
+  subscriptionInfo: SubscriptionInfo | null 
+}) => {
+  const navigate = useNavigate();
+
+  const getButtonText = () => {
+    if (!subscriptionInfo) return "Gestionar Pagos";
+    
+    if (subscriptionInfo.isTrialPeriod) {
+      return `🔄 Activar Plan (${subscriptionInfo.daysRemaining} días restantes)`;
+    }
+    
+    if (subscriptionInfo.isLimitReached) {
+      return "⚡ Renovar Servicios";
+    }
+    
+    if (subscriptionInfo.isExpiring) {
+      return "⚠️ Renovar Plan";
+    }
+    
+    return "💳 Gestionar Pagos";
+  };
+
+  const getButtonColor = () => {
+    if (!subscriptionInfo) return "primary";
+    
+    if (subscriptionInfo.isTrialPeriod) return "warning";
+    if (subscriptionInfo.isLimitReached) return "error";
+    if (subscriptionInfo.isExpiring) return "warning";
+    
+    return "primary";
+  };
+
+  const getStatusMessage = () => {
+    if (!subscriptionInfo) return "Administra tus servicios y pagos";
+    
+    if (subscriptionInfo.isTrialPeriod) {
+      return `Período de prueba activo. ${subscriptionInfo.daysRemaining} días restantes para activar un plan.`;
+    }
+    
+    if (subscriptionInfo.isLimitReached) {
+      return "Has alcanzado el límite de servicios. Renueva para continuar.";
+    }
+    
+    if (subscriptionInfo.isExpiring) {
+      return "Tu plan requiere atención. Renueva para evitar interrupciones.";
+    }
+    
+    return `Plan ${subscriptionInfo.planName} activo. ${subscriptionInfo.servicesRemaining || 0} servicios disponibles.`;
+  };
+
+  return (
+    <Card className="mb-6 border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <CardBody>
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              💳 Gestión de Pagos y Servicios
+            </h3>
+            <p className="text-gray-600 mb-4">
+              {getStatusMessage()}
+            </p>
+            
+            {subscriptionInfo && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {subscriptionInfo.currentServices}
+                  </div>
+                  <div className="text-sm text-gray-500">Servicios usados</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {subscriptionInfo.servicesRemaining ?? '∞'}
+                  </div>
+                  <div className="text-sm text-gray-500">Servicios disponibles</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">
+                    {subscriptionInfo.currentUsers}
+                  </div>
+                  <div className="text-sm text-gray-500">Usuarios activos</div>
+                </div>
+                
+                <div className="text-center">
+                  <div className={`text-2xl font-bold ${
+                    subscriptionInfo.isTrialPeriod ? 'text-orange-600' :
+                    subscriptionInfo.isLimitReached ? 'text-red-600' : 'text-green-600'
+                  }`}>
+                    {subscriptionInfo.isTrialPeriod ? subscriptionInfo.daysRemaining :
+                     subscriptionInfo.isLimitReached ? '⚠️' : '✅'}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {subscriptionInfo.isTrialPeriod ? 'Días restantes' : 'Estado'}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <div className="ml-6">
+            <Button
+              size="lg"
+              color={getButtonColor()}
+              onClick={() => navigate('/admin/pagos')}
+              className="px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+            >
+              {getButtonText()}
+            </Button>
+          </div>
+        </div>
+        
+        {/* Información adicional sobre recuperación de Payment IDs */}
+        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-medium text-blue-800 mb-2">💡 Información importante:</h4>
+          <ul className="text-sm text-blue-700 space-y-1">
+            <li>• <strong>Activación inmediata:</strong> Una vez que completes el pago, copia el Payment ID y actívalo al instante</li>
+            <li>• <strong>Recuperación:</strong> Los Payment IDs están disponibles en tu historial de MercadoPago por <strong>30 días</strong></li>
+            <li>• <strong>Flexibilidad:</strong> Puedes activar el pago en cualquier momento dentro de esos 30 días</li>
+            <li>• <strong>Soporte:</strong> Si tienes problemas, nuestro equipo puede ayudarte a localizar tu Payment ID</li>
+          </ul>
+        </div>
+      </CardBody>
+    </Card>
+  );
+};
+
 // ✅ FUNCIÓN ACTUALIZADA: Renderizar botones de pago dinámicos
 // En tu función renderPaymentButtons (líneas 254-295), cambiar por esto:
 
@@ -775,168 +910,10 @@ useEffect(() => {
         </Card>
       </div>
 
-      {/* Información de suscripción */}
-      {subscriptionInfo && (
-        <div className="grid grid-cols-1 gap-6 mb-6 lg:grid-cols-3">
-          <Card>
-            <CardHeader title="Estado de Suscripción" />
-            <CardBody>
-              {subscriptionInfo ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Plan</span>
-                    <span className="text-sm font-semibold text-gray-900">
-                      {subscriptionInfo.planName}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Usuarios</span>
-                    <span className="text-sm text-gray-900">
-                      {subscriptionInfo.currentUsers} / {subscriptionInfo.userLimit}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-500">Servicios</span>
-                    <span className="text-sm text-gray-900">
-                      {subscriptionInfo.currentServices}
-                      {subscriptionInfo.serviceLimit && ` / ${subscriptionInfo.serviceLimit}`}
-                      {subscriptionInfo.serviceLimit === null && ' (Ilimitados)'}
-                    </span>
-                  </div>
-                  
-                  {subscriptionInfo.isTrialPeriod && subscriptionInfo.daysRemaining !== undefined && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-500">Días restantes</span>
-                      <span className={`text-sm font-medium ${
-                        subscriptionInfo.daysRemaining <= 2 ? 'text-red-600' : 'text-gray-900'
-                      }`}>
-                        {subscriptionInfo.daysRemaining}
-                      </span>
-                    </div>
-                  )}
-                  
-                  <div className="pt-4 border-t">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-500">Estado</span>
-                      <div className="flex items-center">
-                        <span className={`text-sm font-medium ${
-                          subscriptionInfo.isLimitReached ? 'text-red-700' :
-                          subscriptionInfo.isExpiring ? 'text-orange-700' : 'text-green-700'
-                        }`}>
-                          {subscriptionInfo.isLimitReached ? 'Límite Alcanzado' :
-                           subscriptionInfo.isExpiring ? 'Requiere Atención' : 'Activo'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <CreditCardIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-gray-500">Cargando información de suscripción...</p>
-                </div>
-              )}
-            </CardBody>
-          </Card>
-
-          {/* Próximos servicios */}
-          <Card>
-            <CardHeader title="Próximos Servicios" />
-            <CardBody>
-              {upcomingChanges.length > 0 ? (
-                <div className="space-y-3">
-                  {upcomingChanges.slice(0, 3).map((change, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {change.nombreCliente}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {change.dominioVehiculo}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500">
-                          <ClockIcon className="h-3 w-3 inline mr-1" />
-                          {formatDate(change.fechaProximoCambio)}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {upcomingChanges.length > 3 && (
-                    <div className="text-center">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => navigate('/cambios-aceite')}
-                      >
-                        Ver todos ({upcomingChanges.length})
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <CalendarIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-gray-500 text-sm">No hay servicios programados</p>
-                </div>
-              )}
-            </CardBody>
-          </Card>
-
-          {/* Empleados activos */}
-          <Card>
-            <CardHeader title="Empleados" />
-            <CardBody>
-              {users.length > 0 ? (
-                <div className="space-y-3">
-                  {users.slice(0, 3).map((user, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center mr-3">
-                          <UserIcon className="h-4 w-4 text-gray-500" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {user.nombre} {user.apellido}
-                          </p>
-                          <p className="text-xs text-gray-500 capitalize">
-                            {user.role}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge 
-                        color={user.estado === 'activo' ? 'success' : 'warning'}
-                        text={user.estado}
-                      >
-                        
-                      </Badge>
-                    </div>
-                  ))}
-                  {users.length > 3 && (
-                    <div className="text-center">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => navigate('/usuarios')}
-                      >
-                        Ver todos ({users.length})
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-4">
-                  <UserGroupIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-                  <p className="text-gray-500 text-sm">Sin empleados registrados</p>
-                </div>
-              )}
-            </CardBody>
-          </Card>
-        </div>
-      )}
+    <PaymentManagementButton 
+      lubricentro={lubricentro} 
+      subscriptionInfo={subscriptionInfo} 
+    />
 
       {/* Gráficos - Solo mostrar si hay datos */}
       {stats && stats.total > 0 ? (

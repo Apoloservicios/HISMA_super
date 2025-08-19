@@ -1,8 +1,8 @@
-// src/App.tsx
+// src/App.tsx - AGREGANDO RUTA DE GESTIÓN DE PAGOS
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HelmetProvider } from 'react-helmet-async'; // ✅ NUEVO IMPORT
+import { HelmetProvider } from 'react-helmet-async';
 
 // Providers
 import { AuthProvider } from './context/AuthContext';
@@ -54,6 +54,10 @@ import WarrantyDashboardPage from './pages/warranties/WarrantyDashboardPage';
 import WarrantyFormPage from './pages/warranties/WarrantyFormPage';
 import WarrantyDetailPage from './pages/warranties/WarrantyDetailPage';
 
+// ✅ NUEVA IMPORTACIÓN - Gestión de Pagos
+import { PaymentManagementPage } from './pages/admin/PaymentManagementPage';
+
+
 // Components
 import PrivateRoute from './components/common/PrivateRoute';
 
@@ -73,7 +77,6 @@ import PaymentFailurePage from './pages/payment/PaymentFailurePage';
 
 import ManualRenewalDashboard from './pages/superadmin/ManualRenewalDashboard';
 
-
 // Create a client for React Query
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -86,7 +89,6 @@ const queryClient = new QueryClient({
 
 const App: React.FC = () => {
   return (
-    // ✅ HELMET PROVIDER AGREGADO AQUÍ
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
@@ -125,6 +127,16 @@ const App: React.FC = () => {
                 <Route path="/superadmin/planes" element={<PlanManagementPage />} />
                 <Route path="/superadmin/renovaciones" element={<ManualRenewalDashboard />} />
 
+                {/* ✅ NUEVA RUTA - Gestión de Pagos para Admins */}
+                <Route 
+                  path="/admin/pagos" 
+                  element={
+                    <PrivateRoute requiredRoles={['admin', 'user', 'superadmin']}>
+                      <PaymentManagementPage />
+                    </PrivateRoute>
+                  } 
+                />
+
                 {/* Ruta para estadísticas globales del superadmin */}
                 <Route 
                   path="/superadmin/reportes" 
@@ -136,35 +148,34 @@ const App: React.FC = () => {
                 />
 
                 {/* Rutas de gestión global de servicios para superadmin */}
-                  <Route 
-                    path="/superadmin/servicios" 
-                    element={
-                      <PrivateRoute requiredRoles={['superadmin']}>
-                        <SuperAdminServicesPage />
-                      </PrivateRoute>
-                    } 
-                  />
+                <Route 
+                  path="/superadmin/servicios" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <SuperAdminServicesPage />
+                    </PrivateRoute>
+                  } 
+                />
 
-                  <Route 
-                    path="/superadmin/servicios/:serviceId" 
-                    element={
-                      <PrivateRoute requiredRoles={['superadmin']}>
-                        <SuperAdminServiceDetailPage />
-                      </PrivateRoute>
-                    } 
-                  />
+                <Route 
+                  path="/superadmin/servicios/:serviceId" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <SuperAdminServiceDetailPage />
+                    </PrivateRoute>
+                  } 
+                />
 
-                  {/* Ruta para editar servicios desde el contexto del lubricentro */}
-                  <Route 
-                    path="/superadmin/lubricentros/:lubricentroId/servicios/:serviceId/editar" 
-                    element={
-                      <PrivateRoute requiredRoles={['superadmin']}>
-                        {/* Aquí podrías usar el OilChangeFormPage existente o crear uno específico */}
-                        <OilChangeFormPage />
-                      </PrivateRoute>
-                    } 
-                  />
-                
+                {/* Ruta para editar servicios desde el contexto del lubricentro */}
+                <Route 
+                  path="/superadmin/lubricentros/:lubricentroId/servicios/:serviceId/editar" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <OilChangeFormPage />
+                    </PrivateRoute>
+                  } 
+                />
+              
                 {/* Rutas de cambios de aceite */}
                 <Route 
                   path="/cambios-aceite" 

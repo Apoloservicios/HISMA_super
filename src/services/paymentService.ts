@@ -1,7 +1,4 @@
-// =============================================================================
-// src/services/paymentService.ts - SERVICIO HÍBRIDO COMPATIBLE
-// =============================================================================
-
+// src/services/paymentService.ts - CORREGIDO COMPLETAMENTE
 import { SubscriptionPlan } from '../types/subscription';
 
 export interface PaymentRequest {
@@ -37,15 +34,21 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://hisma-api.verc
 export const createPayment = async (request: PaymentRequest): Promise<PaymentResponse> => {
   try {
     console.log('💳 === INICIANDO PROCESO DE PAGO ===');
+    console.log('📋 Plan ID:', request.planId);
     console.log('📋 Plan Type:', request.planType);
     console.log('💰 Amount:', request.amount);
     
-    // ✅ DETERMINAR QUÉ ENDPOINT USAR SEGÚN EL TIPO DE PLAN
-    if (request.planType === 'service') {
-      console.log('🔧 Creando PAGO ÚNICO para plan por servicios');
+    // ✅ DETERMINAR TIPO DE PLAN BASADO EN EL PLAN ID O PLAN TYPE
+    const isServicePlan = request.planType === 'service' || 
+                         request.planId.toLowerCase().includes('plan50') ||
+                         request.planId.toLowerCase().includes('service') ||
+                         (request.amount && request.amount < 3000); // Heurística: planes baratos son por servicios
+    
+    if (isServicePlan) {
+      console.log('🔧 Detectado como PAGO ÚNICO para plan por servicios');
       return await createSinglePayment(request);
     } else {
-      console.log('🔄 Creando SUSCRIPCIÓN para plan recurrente');
+      console.log('🔄 Detectado como SUSCRIPCIÓN para plan recurrente');
       return await createSubscription(request);
     }
     
@@ -72,7 +75,7 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
       amount: request.amount,
       email: request.email,
       fantasyName: request.fantasyName,
-      description: `HISMA - Paquete de Servicios - ${request.fantasyName}`
+      description: `HISMA - Paquete de Servicios ${request.planId} - ${request.fantasyName}`
     };
 
     console.log('📤 Enviando datos de pago único:', paymentData);
@@ -88,10 +91,12 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
     const data = await response.json();
 
     if (!response.ok) {
+      console.error('❌ Error del servidor:', data);
       throw new Error(data.message || 'Error creando pago único');
     }
 
-    console.log('✅ Pago único creado exitosamente');
+    console.log('✅ Pago único creado exitosamente:', data);
+    
     return {
       success: true,
       data: {
@@ -144,10 +149,11 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
     const data = await response.json();
 
     if (!response.ok) {
+      console.error('❌ Error del servidor:', data);
       throw new Error(data.message || 'Error creando suscripción');
     }
 
-    console.log('✅ Suscripción creada exitosamente');
+    console.log('✅ Suscripción creada exitosamente:', data);
     return {
       success: true,
       data: {
@@ -203,8 +209,32 @@ export const getPaymentDescription = (plan: SubscriptionPlan, billingType?: 'mon
 };
 
 /**
+ * 🎯 FUNCIÓN HELPER: Detectar automáticamente si un plan es por servicios
+ */
+export const isServicePlan = (planId: string, planType?: string, amount?: number): boolean => {
+  // Verificar por tipo explícito
+  if (planType === 'service') return true;
+  
+  // Verificar por nombre del plan
+  const servicePlanPatterns = [
+    'plan50', 'service', 'paquete', 'servicios'
+  ];
+  
+  const planIdLower = planId.toLowerCase();
+  if (servicePlanPatterns.some(pattern => planIdLower.includes(pattern))) {
+    return true;
+  }
+  
+  // Verificar por monto (heurística)
+  if (amount && amount < 3000) {
+    return true;
+  }
+  
+  return false;
+};
+
+/**
  * 🔄 FUNCIÓN: Wrapper para compatibilidad con código existente
- * Mantiene la interfaz del mercadoPagoService existente
  */
 export const createMercadoPagoPaymentCompat = async (params: {
   lubricentroId: string;
@@ -216,11 +246,19 @@ export const createMercadoPagoPaymentCompat = async (params: {
   deviceId?: string;
   external_reference?: string;
 }) => {
-  // Convertir parámetros al nuevo formato
+  // ✅ DETECTAR AUTOMÁTICAMENTE EL TIPO DE PLAN
+  const detectedPlanType = isServicePlan(params.planType, undefined, params.amount) ? 'service' : 'monthly';
+  
+  console.log('🔍 Plan detectado automáticamente:', {
+    originalPlanType: params.planType,
+    detectedPlanType,
+    amount: params.amount
+  });
+
   const paymentRequest: PaymentRequest = {
     lubricentroId: params.lubricentroId,
-    planId: params.planType, // planType se convierte en planId
-    planType: 'monthly', // Asumir que es mensual por defecto para compatibilidad
+    planId: params.planType,
+    planType: detectedPlanType,
     billingType: params.billingType,
     amount: params.amount,
     email: params.email,
@@ -232,7 +270,6 @@ export const createMercadoPagoPaymentCompat = async (params: {
   const result = await createPayment(paymentRequest);
   
   if (result.success && result.data) {
-    // Convertir respuesta al formato esperado por el código existente
     return {
       subscriptionId: result.data.subscriptionId || result.data.preferenceId,
       initUrl: result.data.initUrl,
