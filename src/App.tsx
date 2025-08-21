@@ -64,7 +64,7 @@ import WarrantyFormPage from './pages/warranties/WarrantyFormPage';
 import WarrantyDetailPage from './pages/warranties/WarrantyDetailPage';
 
 // ✅ IMPORTACIONES DE GESTIÓN DE PAGOS
-import { PaymentManagementPage } from './pages/admin/PaymentManagementPage';
+import  PaymentManagementPage  from './pages/admin/PaymentManagementPage';
 
 // Pages - Payment Results
 import PaymentSuccessPage from './pages/payment/PaymentSuccessPage';

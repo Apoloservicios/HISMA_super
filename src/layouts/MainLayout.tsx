@@ -146,9 +146,16 @@ const MainLayout: React.FC = () => {
     // ==================== SECCIÓN CAMBIOS DE ACEITE ====================
     items.push(
       { 
-        text: 'Historial de Cambios', 
+        text: 'Cambios de Aceite', 
         icon: <WrenchIcon className="w-5 h-5" />, 
         path: '/cambios-aceite',
+        divider: false
+      },
+
+       { 
+        text: 'Precarga Rápida', 
+        icon: <PlusIcon className="w-5 h-5" />, 
+        path: '/cambios-aceite/precarga',
         divider: false
       },
       { 
@@ -158,11 +165,12 @@ const MainLayout: React.FC = () => {
         divider: false
       },
       { 
-        text: 'Precarga Rápida', 
-        icon: <PlusIcon className="w-5 h-5" />, 
-        path: '/cambios-aceite/precarga',
-        divider: false
+        text: 'Próximos Servicios', 
+        icon: <CalendarIcon className="w-5 h-5" />, 
+        path: '/proximos-servicios',
+        divider: true // Separador después de servicios
       }
+     
     );
 
     // ==================== SECCIÓN GARANTÍAS Y SERVICIOS ====================
@@ -171,20 +179,21 @@ const MainLayout: React.FC = () => {
         text: 'Garantías', 
         icon: <ShieldCheckIcon className="w-5 h-5" />, 
         path: '/garantias',
-        divider: false
+        divider: true
       },
-      { 
-        text: 'Próximos Servicios', 
-        icon: <CalendarIcon className="w-5 h-5" />, 
-        path: '/proximos-servicios',
-        divider: true // Separador después de servicios
-      }
+      
     );
     
     // ==================== SECCIÓN ADMINISTRATIVA ====================
     // Para admin y owner - menú administrativo
     if (userProfile.role === 'admin' || userProfile.role === 'user') {
       items.push(
+          { 
+          text: 'Reportes', 
+          icon: <ChartBarIcon className="w-5 h-5" />, 
+          path: '/reportes',
+          divider: true
+        },
         // ✅ NUEVA OPCIÓN - Gestión de Pagos
         { 
           text: 'Gestión de Pagos', 
@@ -192,12 +201,7 @@ const MainLayout: React.FC = () => {
           path: '/admin/pagos',
           divider: false
         },
-        { 
-          text: 'Reportes', 
-          icon: <ChartBarIcon className="w-5 h-5" />, 
-          path: '/reportes',
-          divider: false
-        },
+      
         { 
           text: 'Usuarios', 
           icon: <UserGroupIcon className="w-5 h-5" />, 

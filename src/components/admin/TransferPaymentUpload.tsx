@@ -1,99 +1,110 @@
-// src/components/admin/TransferPaymentUpload.tsx - VERSIÓN CORREGIDA SIN FORMDATA
-import React, { useState } from 'react';
+// src/components/admin/TransferPaymentUpload.tsx - MEJORADO con más información del lubricentro
+import React, { useState, useEffect } from 'react';
 import { Card, CardBody, Button } from '../ui';
-import { 
-  CloudArrowUpIcon, 
-  CheckCircleIcon, 
-  ExclamationTriangleIcon,
-  DocumentTextIcon,
-  CreditCardIcon
-} from '@heroicons/react/24/outline';
-import { SubscriptionPlan } from '../../types/subscription';
+import { DocumentArrowUpIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { getLubricentroById } from '../../services/lubricentroService';
+import { Lubricentro } from '../../types';
 
 interface TransferPaymentUploadProps {
   lubricentroId: string;
-  availablePlans: Record<string, SubscriptionPlan>;
-  onSuccess?: () => void;
+  selectedPlan: string;
+  planAmount: number;
+  onSuccess?: (result: any) => void;
+  onError?: (error: string) => void;
 }
 
-interface UploadResult {
+interface TransferData {
+  bankName: string;
+  transferAmount: number;
+  transferDate: string;
+  referenceNumber: string;
+  comments: string;
+}
+
+interface TransferResult {
   success: boolean;
   message: string;
   requestId?: string;
 }
 
-// ✅ NUEVA FUNCIÓN: Convertir archivo a base64
-const convertFileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        // Remover el prefijo "data:type/subtype;base64,"
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      } else {
-        reject(new Error('Error converting file to base64'));
-      }
-    };
-    reader.onerror = () => reject(new Error('Error reading file'));
-    reader.readAsDataURL(file);
-  });
-};
-
 export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
   lubricentroId,
-  availablePlans,
-  onSuccess
+  selectedPlan,
+  planAmount,
+  onSuccess,
+  onError
 }) => {
-  const [selectedPlan, setSelectedPlan] = useState('');
+  const [loading, setLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [transferData, setTransferData] = useState({
+  const [result, setResult] = useState<TransferResult | null>(null);
+  const [lubricentroData, setLubricentroData] = useState<Lubricentro | null>(null);
+  const [loadingLubricentro, setLoadingLubricentro] = useState(true);
+  
+  const [transferData, setTransferData] = useState<TransferData>({
     bankName: '',
-    accountNumber: '',
-    transferAmount: '',
+    transferAmount: planAmount,
     transferDate: '',
     referenceNumber: '',
     comments: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<UploadResult | null>(null);
 
-  // Convertir planes dinámicos a formato compatible
-  const planOptions = Object.entries(availablePlans)
-    .filter(([_, plan]) => plan.planType === 'service')
-    .map(([id, plan]) => ({
-      id,
-      name: plan.name,
-      services: plan.totalServices || 0,
-      price: plan.servicePrice || 0
+  // ✅ CARGAR DATOS COMPLETOS DEL LUBRICENTRO
+  useEffect(() => {
+    const loadLubricentroData = async () => {
+      try {
+        setLoadingLubricentro(true);
+        console.log('🏢 Cargando datos del lubricentro:', lubricentroId);
+        
+        const data = await getLubricentroById(lubricentroId);
+        if (data) {
+          setLubricentroData(data);
+          console.log('✅ Datos del lubricentro cargados:', {
+            fantasyName: data.fantasyName,
+            cuit: data.cuit,
+            responsable: data.responsable
+          });
+        } else {
+          console.warn('⚠️ No se encontraron datos del lubricentro');
+        }
+      } catch (error) {
+        console.error('❌ Error cargando datos del lubricentro:', error);
+      } finally {
+        setLoadingLubricentro(false);
+      }
+    };
+
+    if (lubricentroId) {
+      loadLubricentroData();
+    }
+  }, [lubricentroId]);
+
+  // Actualizar monto cuando cambia planAmount
+  useEffect(() => {
+    setTransferData(prev => ({
+      ...prev,
+      transferAmount: planAmount
     }));
+  }, [planAmount]);
 
-  // Auto-seleccionar primer plan si no hay ninguno seleccionado
-  React.useEffect(() => {
-    if (planOptions.length > 0 && !selectedPlan) {
-      setSelectedPlan(planOptions[0].id);
-      setTransferData(prev => ({
-        ...prev,
-        transferAmount: planOptions[0].price.toString()
-      }));
-    }
-  }, [planOptions, selectedPlan]);
-
-  const selectedPlanData = planOptions.find(p => p.id === selectedPlan);
-
-  // Actualizar monto cuando cambia el plan
-  const handlePlanChange = (planId: string) => {
-    setSelectedPlan(planId);
-    const plan = planOptions.find(p => p.id === planId);
-    if (plan) {
-      setTransferData(prev => ({
-        ...prev,
-        transferAmount: plan.price.toString()
-      }));
-    }
+  // ✅ FUNCIÓN PARA CONVERTIR ARCHIVO A BASE64
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        } else {
+          reject(new Error('Error al leer archivo'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Error al leer archivo'));
+      reader.readAsDataURL(file);
+    });
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Manejar selección de archivo
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       // Validar tipo y tamaño de archivo
@@ -119,7 +130,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: handleSubmit sin FormData
+  // ✅ FUNCIÓN PRINCIPAL CON DATOS COMPLETOS DEL LUBRICENTRO
   const handleSubmit = async () => {
     // Validaciones
     if (!selectedPlan) {
@@ -146,11 +157,19 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
       return;
     }
 
+    if (!lubricentroData) {
+      setResult({
+        success: false,
+        message: 'Error: No se pudieron cargar los datos del lubricentro'
+      });
+      return;
+    }
+
     setLoading(true);
     setResult(null);
 
     try {
-      console.log('🚀 Enviando pago por transferencia...');
+      console.log('🚀 Enviando pago por transferencia con datos completos...');
 
       // ✅ CONVERTIR ARCHIVO A BASE64
       console.log('📄 Convirtiendo archivo a base64...');
@@ -163,33 +182,51 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
         content: base64Content
       };
 
-      console.log('✅ Archivo convertido:', {
-        name: fileData.name,
-        size: fileData.size,
-        type: fileData.type
+      // ✅ PREPARAR DATOS COMPLETOS DEL LUBRICENTRO
+      const lubricentroInfo = {
+        id: lubricentroId,
+        fantasyName: lubricentroData.fantasyName || 'Sin nombre',
+        responsable: lubricentroData.responsable || 'Sin responsable',
+        cuit: lubricentroData.cuit || 'Sin CUIT',
+        domicilio: lubricentroData.domicilio || 'Sin dirección', 
+        phone: lubricentroData.phone || 'Sin teléfono',
+        email: lubricentroData.email || 'Sin email',
+        ticketPrefix: lubricentroData.ticketPrefix || 'Sin prefijo',
+        estado: lubricentroData.estado || 'trial',
+        // ✅ INFORMACIÓN ADICIONAL QUE PUEDE SER ÚTIL
+        trialEndDate: lubricentroData.trialEndDate ? new Date(lubricentroData.trialEndDate).toLocaleDateString('es-ES') : 'Sin fecha',
+        activeUserCount: lubricentroData.activeUserCount || 0,
+        servicesUsedThisMonth: lubricentroData.servicesUsedThisMonth || 0,
+        currentPlan: lubricentroData.subscriptionPlan || 'Sin plan'
+      };
+
+      console.log('🏢 Información completa del lubricentro preparada:', {
+        fantasyName: lubricentroInfo.fantasyName,
+        responsable: lubricentroInfo.responsable,
+        cuit: lubricentroInfo.cuit,
+        domicilio: lubricentroInfo.domicilio
       });
 
-      // ✅ PREPARAR DATOS JSON (NO FormData)
+      // ✅ PREPARAR DATOS JSON CON INFORMACIÓN COMPLETA
       const requestData = {
         lubricentroId: lubricentroId,
         planId: selectedPlan,
         transferData: transferData,
-        fileData: fileData
+        fileData: fileData,
+        // ✅ AGREGAR INFORMACIÓN COMPLETA DEL LUBRICENTRO
+        lubricentroInfo: lubricentroInfo
       };
 
-      console.log('📤 Enviando datos:', {
-        ...requestData,
-        fileData: { name: fileData.name, size: fileData.size, type: fileData.type }
-      });
+      console.log('📤 Enviando datos completos al backend...');
 
-      // ✅ ENVIAR CON JSON (NO FormData)
+      // ✅ ENVIAR AL BACKEND
       const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/admin/transfer-payment`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json', // ← JSON, no multipart
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestData) // ← JSON stringify, no FormData
+        body: JSON.stringify(requestData)
       });
 
       const data = await response.json();
@@ -203,119 +240,113 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
           requestId: data.requestId
         });
 
-        // Limpiar formulario
+        // Reset form
         setSelectedFile(null);
         setTransferData({
           bankName: '',
-          accountNumber: '',
-          transferAmount: selectedPlanData?.price.toString() || '',
+          transferAmount: planAmount,
           transferDate: '',
           referenceNumber: '',
           comments: ''
         });
 
-        // Callback opcional
-        onSuccess?.();
+        // Callback de éxito
+        onSuccess?.(data);
+
       } else {
-        setResult({
-          success: false,
-          message: data.message || 'Error procesando la solicitud'
-        });
+        throw new Error(data.message || 'Error en el servidor');
       }
 
     } catch (error) {
-      console.error('❌ Error enviando transferencia:', error);
+      console.error('❌ Error enviando transfer payment:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Error al enviar la solicitud';
       setResult({
         success: false,
-        message: 'Error de conexión. Intenta nuevamente.'
+        message: errorMessage
       });
+
+      onError?.(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ MOSTRAR LOADING MIENTRAS SE CARGAN LOS DATOS
+  if (loadingLubricentro) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardBody>
+            <div className="flex items-center justify-center p-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <span className="ml-3 text-gray-600">Cargando información del lubricentro...</span>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
+  // ✅ MOSTRAR ERROR SI NO SE PUEDEN CARGAR LOS DATOS
+  if (!lubricentroData) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardBody>
+            <div className="text-center p-8">
+              <ExclamationTriangleIcon className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Error al cargar datos</h3>
+              <p className="text-gray-600">
+                No se pudieron cargar los datos del lubricentro. 
+                Por favor, refresca la página e intenta nuevamente.
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Selector de Plan */}
+      {/* ✅ INFORMACIÓN DEL LUBRICENTRO VISIBLE */}
       <Card>
         <CardBody>
-          <h3 className="text-lg font-semibold mb-4">1️⃣ Selecciona tu Plan</h3>
-          
-          {planOptions.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">No hay planes disponibles en este momento</p>
+          <h3 className="text-lg font-semibold mb-4">🏢 Información del Lubricentro</h3>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              <div><strong>Nombre:</strong> {lubricentroData.fantasyName}</div>
+              <div><strong>CUIT:</strong> {lubricentroData.cuit || 'Sin CUIT'}</div>
+              <div><strong>Responsable:</strong> {lubricentroData.responsable}</div>
+              <div><strong>Teléfono:</strong> {lubricentroData.phone || 'Sin teléfono'}</div>
+              <div className="md:col-span-2"><strong>Dirección:</strong> {lubricentroData.domicilio}</div>
+              <div className="md:col-span-2"><strong>Email:</strong> {lubricentroData.email}</div>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {planOptions.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`border-2 rounded-lg p-4 cursor-pointer transition-colors ${
-                    selectedPlan === plan.id
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                  onClick={() => handlePlanChange(plan.id)}
-                >
-                  <div className="text-center">
-                    <h4 className="font-medium">{plan.name}</h4>
-                    <p className="text-2xl font-bold text-green-600">{plan.services}</p>
-                    <p className="text-sm text-gray-500">servicios</p>
-                    <p className="text-lg font-semibold mt-2">${plan.price.toLocaleString()}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="mt-3 text-xs text-blue-700">
+              ℹ️ Esta información se incluirá en el email para facilitar la identificación de tu pago
             </div>
-          )}
+          </div>
         </CardBody>
       </Card>
 
-      {/* Datos Bancarios para Transferencia */}
+      {/* Datos de Transferencia */}
       <Card>
         <CardBody>
-          <h3 className="text-lg font-semibold mb-4">2️⃣ Datos para Transferencia</h3>
+          <h3 className="text-lg font-semibold mb-4">1️⃣ Datos de la Transferencia</h3>
           
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <h4 className="font-medium text-blue-800 mb-3">🏦 Realiza tu transferencia a:</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <p><strong>Banco:</strong> Banco Nación</p>
-                <p><strong>Titular:</strong> HISMA SRL</p>
-                <p><strong>CUIT:</strong> 30-12345678-9</p>
-              </div>
-              <div>
-                <p><strong>CBU:</strong> 0110599520000012345678</p>
-                <p><strong>Alias:</strong> HISMA.PAGOS.AR</p>
-                <p><strong>Concepto:</strong> Plan {selectedPlanData?.name || ''}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Banco desde donde transferiste *
+                Banco donde realizaste la transferencia *
               </label>
               <input
                 type="text"
                 value={transferData.bankName}
                 onChange={(e) => setTransferData(prev => ({...prev, bankName: e.target.value}))}
-                placeholder="Ej: Banco Nación"
+                placeholder="Ej: Banco Santander, Banco Nación, etc."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                disabled={loading}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Número de cuenta (opcional)
-              </label>
-              <input
-                type="text"
-                value={transferData.accountNumber}
-                onChange={(e) => setTransferData(prev => ({...prev, accountNumber: e.target.value}))}
-                placeholder="Últimos 4 dígitos"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
                 disabled={loading}
               />
             </div>
@@ -327,9 +358,10 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
               <input
                 type="number"
                 value={transferData.transferAmount}
-                onChange={(e) => setTransferData(prev => ({...prev, transferAmount: e.target.value}))}
-                placeholder="0"
+                onChange={(e) => setTransferData(prev => ({...prev, transferAmount: Number(e.target.value)}))}
+                placeholder="Monto en pesos"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                required
                 disabled={loading}
               />
             </div>
@@ -381,68 +413,62 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
       {/* Upload de Comprobante */}
       <Card>
         <CardBody>
-          <h3 className="text-lg font-semibold mb-4">3️⃣ Sube tu Comprobante</h3>
+          <h3 className="text-lg font-semibold mb-4">2️⃣ Sube tu Comprobante</h3>
           
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
             <div className="text-center">
               {selectedFile ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <DocumentTextIcon className="h-8 w-8 text-green-600" />
+                <div className="space-y-3">
+                  <CheckCircleIcon className="h-12 w-12 text-green-500 mx-auto" />
                   <div>
-                    <p className="text-sm font-medium text-green-800">{selectedFile.name}</p>
-                    <p className="text-xs text-green-600">
+                    <p className="font-medium text-gray-900">{selectedFile.name}</p>
+                    <p className="text-sm text-gray-500">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
                   <Button
                     onClick={() => setSelectedFile(null)}
-                    className="text-red-600 hover:text-red-800"
+                    className="text-sm bg-gray-500 hover:bg-gray-600"
+                    disabled={loading}
                   >
-                    ✕
+                    Cambiar archivo
                   </Button>
                 </div>
               ) : (
-                <div>
-                  <CloudArrowUpIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <div className="mt-4">
-                    <label className="cursor-pointer">
-                      <span className="mt-2 block text-sm font-medium text-gray-900">
-                        Haz clic para subir tu comprobante
+                <div className="space-y-3">
+                  <DocumentArrowUpIcon className="h-12 w-12 text-gray-400 mx-auto" />
+                  <div>
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      <span className="font-medium text-green-600 hover:text-green-500">
+                        Haz clic para seleccionar
                       </span>
-                      <span className="block text-xs text-gray-500 mt-1">
-                        JPG, PNG o PDF (máx. 5MB)
-                      </span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept=".jpg,.jpeg,.png,.pdf"
-                        onChange={handleFileChange}
-                        disabled={loading}
-                      />
+                      <span className="text-gray-500"> o arrastra el archivo aquí</span>
                     </label>
+                    <input
+                      id="file-upload"
+                      name="file-upload"
+                      type="file"
+                      className="sr-only"
+                      accept="image/*,.pdf"
+                      onChange={handleFileSelect}
+                      disabled={loading}
+                    />
                   </div>
+                  <p className="text-xs text-gray-500">
+                    PNG, JPG o PDF hasta 5MB
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="mt-4 text-center">
+          <div className="mt-6">
             <Button
               onClick={handleSubmit}
-              disabled={loading || !selectedFile || !selectedPlan}
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-3"
+              className="w-full bg-green-600 hover:bg-green-700"
+              disabled={loading || !selectedFile || !transferData.bankName || !transferData.transferDate}
             >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Enviando solicitud...
-                </span>
-              ) : (
-                '📤 Enviar Solicitud de Activación'
-              )}
+              {loading ? 'Enviando...' : 'Enviar Solicitud de Pago'}
             </Button>
           </div>
         </CardBody>
@@ -488,7 +514,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
         </div>
       )}
 
-      {/* Información sobre el proceso - RESTO IGUAL */}
+      {/* Información sobre el proceso */}
       <Card>
         <CardBody>
           <h3 className="text-lg font-semibold mb-4">📋 Proceso de Activación por Transferencia</h3>
