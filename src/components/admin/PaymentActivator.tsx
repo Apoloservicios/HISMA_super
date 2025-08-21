@@ -216,64 +216,88 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
   };
 
   const handleBuyPlan = async () => {
-    if (!selectedPlanData) return;
+  if (!selectedPlan) {
+    alert('Por favor selecciona un plan');
+    return;
+  }
 
-    // ✅ INTEGRACIÓN REAL CON MERCADOPAGO
-    setLoading(true);
+  setLoading(true);
+  
+  try {
+    console.log('🚀 Creando pago para plan:', selectedPlan);
     
-    try {
-      console.log('🚀 Iniciando pago con MercadoPago para:', selectedPlanData.name);
-      
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://hisma-api.vercel.app';
-      
-      // Preparar datos del pago
-      const paymentData = {
-        lubricentroId,
-        planId: selectedPlan,
-        planType: selectedPlanData.isServicePlan ? 'service' : 'monthly',
-        amount: selectedPlanData.price,
-        email: userEmail || 'admin@hisma.com.ar', // ✅ USAR EMAIL REAL
-        fantasyName: fantasyName || `Lubricentro ${lubricentroId}`, // ✅ USAR NOMBRE REAL
-        description: `HISMA - ${selectedPlanData.name}`,
-        external_reference: `${lubricentroId}-${selectedPlan}-${Date.now()}`
-      };
-      
-      console.log('📤 Enviando datos de pago:', paymentData);
-      
-      // Llamar al endpoint correcto según el tipo de plan
-      const endpoint = selectedPlanData.isServicePlan ? 
-        '/api/mercadopago/create-payment' : 
-        '/api/mercadopago/create-subscription';
-      
-      const response = await fetch(`${backendUrl}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(paymentData)
-      });
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://hisma-api.vercel.app';
+    
+    // ✅ CORRECCIÓN CRÍTICA: Usar el formato correcto que espera el backend
+    const selectedPlanData = planOptions.find(p => p.id === selectedPlan);
+    
+    const paymentData = {
+      lubricentroId: lubricentroId,
+      planId: selectedPlan,
+      planType: selectedPlanData?.isServicePlan ? 'service' : 'monthly',
+      amount: selectedPlanData?.price || 0,
+      email: userEmail || 'admin@hisma.com.ar',
+      fantasyName: fantasyName || `Lubricentro ${lubricentroId}`,
+      description: `HISMA - ${selectedPlanData?.name}`,
+      // ✅ FORMATO CORRECTO que coincide con los patrones del backend
+      external_reference: `lubricentro_${lubricentroId}_payment_${selectedPlan}_${Date.now()}`
+      //                    ↑ Cambio principal: formato correcto
+    };
+    
+    console.log('📤 Enviando datos con external_reference corregido:', paymentData);
+    
+    // Llamar al endpoint correcto según el tipo de plan
+    const endpoint = selectedPlanData?.isServicePlan ? 
+      '/api/mercadopago/create-payment' : 
+      '/api/mercadopago/create-subscription';
+    
+    const response = await fetch(`${backendUrl}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(paymentData)
+    });
 
-      const data = await response.json();
-      
-      console.log('📨 Respuesta del backend:', data);
+    const data = await response.json();
+    
+    console.log('📨 Respuesta del backend:', data);
 
-      if (data.success && data.data?.initUrl) {
-        console.log('✅ Redirigiendo a MercadoPago:', data.data.initUrl);
-        
+    if (data.success && data.data?.initUrl) {
+      console.log('✅ Redirigiendo a MercadoPago:', data.data.initUrl);
+      
+      // Mostrar mensaje informativo antes de redireccionar
+      const confirmMessage = `
+🎯 Perfecto! Te redirigimos a MercadoPago para completar el pago.
+
+📋 Plan seleccionado: ${selectedPlanData?.name}
+💰 Monto: $${selectedPlanData?.price.toLocaleString()}
+🔧 Servicios: ${selectedPlanData?.displayInfo}
+
+❗ IMPORTANTE: 
+• Una vez que completes el pago, COPIA el Payment ID
+• Vuelve aquí para activar tus servicios instantáneamente
+• El Payment ID aparece después de confirmar el pago
+
+¿Continuar con el pago?`;
+
+      if (window.confirm(confirmMessage)) {
         // ✅ REDIRECCIÓN DIRECTA A MERCADOPAGO
         window.location.href = data.data.initUrl;
-        
-      } else {
-        throw new Error(data.message || 'Error al crear el pago');
       }
+      
+    } else {
+      throw new Error(data.message || 'Error al crear el pago');
+    }
 
-    } catch (error) {
-      console.error('❌ Error al crear pago:', error);
-      
-      // Si falla la integración, mostrar instrucciones manuales como fallback
-      const mercadoPagoUrl = 'https://www.mercadopago.com.ar';
-      
-      const instructions = `❌ No se pudo conectar con MercadoPago automáticamente.
+  } catch (error) {
+    console.error('❌ Error al crear pago:', error);
+    
+    // Si falla la integración, mostrar instrucciones manuales como fallback
+    const selectedPlanData = planOptions.find(p => p.id === selectedPlan);
+    const mercadoPagoUrl = 'https://www.mercadopago.com.ar';
+    
+    const instructions = `❌ No se pudo conectar con MercadoPago automáticamente.
 
 💳 Por favor realiza el pago manualmente:
 
@@ -282,8 +306,8 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
 2. Busca "Pagar a un contacto" o "Enviar dinero"
 
 💰 PASO 2: Realiza el pago
-• Monto: ${selectedPlanData.price.toLocaleString()}
-• Concepto: "${selectedPlanData.name} - HISMA"
+• Monto: $${selectedPlanData?.price.toLocaleString()}
+• Concepto: "${selectedPlanData?.name} - HISMA"
 • A favor de: HISMA
 
 📋 PASO 3: Guarda el Payment ID
@@ -297,12 +321,12 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
 
 ⚡ ¡Tus servicios se activarán instantáneamente!`;
 
-      alert(instructions);
-      
-    } finally {
-      setLoading(false);
-    }
-  };
+    alert(instructions);
+    
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="space-y-6">

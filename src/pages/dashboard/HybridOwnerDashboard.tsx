@@ -269,8 +269,10 @@ const HybridOwnerDashboard: React.FC = () => {
                   <span className={`font-medium ${
                     subscriptionInfo.isLimitReached ? 'text-red-600' : 'text-blue-900'
                   }`}>
-                    {lubricentro.totalServicesContracted ? 
-                      `${lubricentro.servicesUsed || 0} / ${lubricentro.totalServicesContracted}` :
+                    {lubricentro.servicesRemaining !== undefined ? 
+                      // Para planes por servicios: mostrar servicios usados este mes
+                      `${lubricentro.servicesUsedThisMonth || 0}` :
+                      // Para planes mensuales: mostrar límite o ilimitado
                       subscriptionInfo.serviceLimit ? 
                         `${subscriptionInfo.currentServices} / ${subscriptionInfo.serviceLimit}` :
                         `${subscriptionInfo.currentServices} (Ilimitado)`
@@ -373,12 +375,20 @@ const HybridOwnerDashboard: React.FC = () => {
               
               <div className="p-3 border rounded-lg">
                 <div className="text-lg font-bold text-gray-900">
-                  {subscriptionInfo.serviceLimit ? 
-                    `${subscriptionInfo.currentServices} / ${subscriptionInfo.serviceLimit}` :
-                    `${subscriptionInfo.currentServices} (Ilimitado)`
+                  {lubricentro.servicesRemaining !== undefined ? 
+                    // Plan por servicios: solo mostrar cantidad usada
+                    `${lubricentro.servicesUsedThisMonth || 0}` :
+                    // Plan mensual: mostrar límite o ilimitado
+                    subscriptionInfo.serviceLimit ? 
+                      `${subscriptionInfo.currentServices} / ${subscriptionInfo.serviceLimit}` :
+                      `${subscriptionInfo.currentServices} (Ilimitado)`
                   }
                 </div>
-                <div className="text-sm text-gray-600">Servicios este mes</div>
+
+                 <div className="text-sm text-gray-600">
+                  {lubricentro.servicesRemaining !== undefined ? 'Servicios este mes' : 'Servicios este mes'}
+                </div>
+              
               </div>
             </div>
 

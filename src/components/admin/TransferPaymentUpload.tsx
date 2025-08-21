@@ -1,4 +1,4 @@
-// src/components/admin/TransferPaymentUpload.tsx - VERSIÓN COMPLETA
+// src/components/admin/TransferPaymentUpload.tsx - VERSIÓN CORREGIDA SIN FORMDATA
 import React, { useState } from 'react';
 import { Card, CardBody, Button } from '../ui';
 import { 
@@ -21,6 +21,24 @@ interface UploadResult {
   message: string;
   requestId?: string;
 }
+
+// ✅ NUEVA FUNCIÓN: Convertir archivo a base64
+const convertFileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        // Remover el prefijo "data:type/subtype;base64,"
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      } else {
+        reject(new Error('Error converting file to base64'));
+      }
+    };
+    reader.onerror = () => reject(new Error('Error reading file'));
+    reader.readAsDataURL(file);
+  });
+};
 
 export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
   lubricentroId,
@@ -93,9 +111,15 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
       }
 
       setSelectedFile(file);
+      console.log('📄 Archivo seleccionado:', {
+        name: file.name,
+        size: file.size,
+        type: file.type
+      });
     }
   };
 
+  // ✅ FUNCIÓN CORREGIDA: handleSubmit sin FormData
   const handleSubmit = async () => {
     // Validaciones
     if (!selectedPlan) {
@@ -126,22 +150,53 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
     setResult(null);
 
     try {
-      // Crear FormData para enviar archivo
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('lubricentroId', lubricentroId);
-      formData.append('planId', selectedPlan);
-      formData.append('transferData', JSON.stringify(transferData));
+      console.log('🚀 Enviando pago por transferencia...');
 
+      // ✅ CONVERTIR ARCHIVO A BASE64
+      console.log('📄 Convirtiendo archivo a base64...');
+      const base64Content = await convertFileToBase64(selectedFile);
+      
+      const fileData = {
+        name: selectedFile.name,
+        type: selectedFile.type,
+        size: selectedFile.size,
+        content: base64Content
+      };
+
+      console.log('✅ Archivo convertido:', {
+        name: fileData.name,
+        size: fileData.size,
+        type: fileData.type
+      });
+
+      // ✅ PREPARAR DATOS JSON (NO FormData)
+      const requestData = {
+        lubricentroId: lubricentroId,
+        planId: selectedPlan,
+        transferData: transferData,
+        fileData: fileData
+      };
+
+      console.log('📤 Enviando datos:', {
+        ...requestData,
+        fileData: { name: fileData.name, size: fileData.size, type: fileData.type }
+      });
+
+      // ✅ ENVIAR CON JSON (NO FormData)
       const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/admin/transfer-payment`, {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json', // ← JSON, no multipart
+        },
+        body: JSON.stringify(requestData) // ← JSON stringify, no FormData
       });
 
       const data = await response.json();
 
       if (data.success) {
+        console.log('✅ Transfer payment enviado exitosamente:', data.requestId);
+        
         setResult({
           success: true,
           message: 'Solicitud enviada exitosamente. Tu pago será procesado en 24-48 horas.',
@@ -433,7 +488,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
         </div>
       )}
 
-      {/* Información sobre el proceso */}
+      {/* Información sobre el proceso - RESTO IGUAL */}
       <Card>
         <CardBody>
           <h3 className="text-lg font-semibold mb-4">📋 Proceso de Activación por Transferencia</h3>

@@ -41,19 +41,6 @@ export const createMercadoPagoSubscription = async (
   params: CreateSubscriptionParams
 ): Promise<SubscriptionResponse> => {
 
-   // ✅ Asegúrate de que external_reference se incluya en el body:
-  const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-subscription`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Cache-Control': 'no-cache'
-    },
-    body: JSON.stringify({
-      ...params, // ✅ Esto incluirá external_reference automáticamente
-    })
-  });
-  
   console.log('🎯 Iniciando creación de suscripción...');
   console.log('📋 Parámetros:', {
     ...params,
@@ -62,7 +49,7 @@ export const createMercadoPagoSubscription = async (
   console.log('🔗 Backend URL:', BACKEND_URL);
 
   try {
-    // ✅ Validaciones en el frontend
+    // ✅ VALIDACIONES EN EL FRONTEND
     if (!params.lubricentroId?.trim()) {
       throw new Error('lubricentroId es requerido');
     }
@@ -79,17 +66,24 @@ export const createMercadoPagoSubscription = async (
       throw new Error('Tipo de facturación inválido');
     }
 
-    // ✅ AGREGAR ESTA VALIDACIÓN NUEVA
+    // ✅ VALIDACIÓN DE DEVICE ID
     if (params.deviceId && !params.deviceId.trim()) {
       console.warn('⚠️ Device ID vacío, MercadoPago puede rechazar en producción');
     } else if (params.deviceId) {
       console.log('✅ Device ID presente:', params.deviceId.substring(0, 10) + '...');
     }
 
+    // ✅ GENERAR EXTERNAL REFERENCE CORRECTO SI NO SE PROPORCIONA
+    const finalParams = {
+      ...params,
+      external_reference: params.external_reference || 
+        `lubricentro_${params.lubricentroId}_plan_${params.planType}_${Date.now()}`
+    };
 
     console.log('✅ Validaciones pasadas, enviando solicitud...');
+    console.log('📋 External Reference final:', finalParams.external_reference);
 
-    // ✅ Llamada al backend con mejor configuración
+    // ✅ LLAMADA AL BACKEND CON EXTERNAL REFERENCE CORREGIDO
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-subscription`, {
       method: 'POST',
       headers: {
@@ -97,28 +91,28 @@ export const createMercadoPagoSubscription = async (
         'Accept': 'application/json',
         'Cache-Control': 'no-cache'
       },
-      body: JSON.stringify(params)
+      body: JSON.stringify(finalParams) // ✅ Incluye external_reference automáticamente
     });
 
     console.log('📨 Response status:', response.status);
     console.log('📨 Response URL:', response.url);
 
-    // ✅ Manejo de respuesta mejorado
+    // ✅ MANEJO DE RESPUESTA MEJORADO
     let responseData: MercadoPagoApiResponse;
     const responseText = await response.text();
     
-    console.log('📨 Response text:', responseText);
+    console.log('📨 Response text preview:', responseText.substring(0, 200) + '...');
 
     try {
       responseData = JSON.parse(responseText);
     } catch (parseError) {
       console.error('❌ Error al parsear respuesta:', responseText);
-      throw new Error(`Respuesta inválida del servidor: ${responseText}`);
+      throw new Error(`Respuesta inválida del servidor: ${responseText.substring(0, 100)}...`);
     }
 
     console.log('📦 Respuesta parseada:', responseData);
 
-    // ✅ Manejo de errores HTTP
+    // ✅ MANEJO DE ERRORES HTTP
     if (!response.ok) {
       const errorMessage = responseData.message || 
                           responseData.error || 
@@ -133,7 +127,7 @@ export const createMercadoPagoSubscription = async (
       throw new Error(errorMessage);
     }
 
-    // ✅ Validar estructura de respuesta exitosa
+    // ✅ VALIDAR ESTRUCTURA DE RESPUESTA EXITOSA
     if (!responseData.success) {
       const errorMessage = responseData.message || 'Error desconocido del servidor';
       console.error('❌ Respuesta no exitosa:', responseData);
@@ -159,13 +153,14 @@ export const createMercadoPagoSubscription = async (
       external_reference
     });
 
-    // ✅ Actualizar Firebase en background
+    // ✅ ACTUALIZAR FIREBASE EN BACKGROUND
     try {
       await updateLubricentro(params.lubricentroId, {
         subscriptionId,
         autoRenewal: true,
         paymentStatus: 'pending' as any,
-        updatedAt: new Date()
+        updatedAt: new Date(),
+  
       });
       console.log('✅ Firebase actualizado correctamente');
     } catch (firebaseError) {

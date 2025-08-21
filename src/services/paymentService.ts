@@ -68,6 +68,10 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
   try {
     console.log('🔧 === CREANDO PAGO ÚNICO ===');
     
+    // ✅ EXTERNAL REFERENCE CORREGIDO
+    const externalReference = request.external_reference || 
+      `lubricentro_${request.lubricentroId}_payment_${request.planId}_${Date.now()}`;
+    
     const paymentData = {
       lubricentroId: request.lubricentroId,
       planId: request.planId,
@@ -75,10 +79,12 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
       amount: request.amount,
       email: request.email,
       fantasyName: request.fantasyName,
-      description: `HISMA - Paquete de Servicios ${request.planId} - ${request.fantasyName}`
+      description: `HISMA - Paquete de Servicios ${request.planId} - ${request.fantasyName}`,
+      // ✅ INCLUIR EXTERNAL REFERENCE CORREGIDO
+      external_reference: externalReference
     };
 
-    console.log('📤 Enviando datos de pago único:', paymentData);
+    console.log('📤 Enviando datos de pago único con external_reference:', externalReference);
 
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-payment`, {
       method: 'POST',
@@ -125,6 +131,10 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
       throw new Error('billingType es requerido para suscripciones');
     }
 
+    // ✅ EXTERNAL REFERENCE CORREGIDO PARA SUSCRIPCIONES
+    const externalReference = request.external_reference || 
+      `lubricentro_${request.lubricentroId}_plan_${request.planId}_${Date.now()}`;
+
     const subscriptionData = {
       lubricentroId: request.lubricentroId,
       planType: request.planId, // ✅ USAR planId como planType para compatibilidad
@@ -133,10 +143,11 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
       email: request.email,
       fantasyName: request.fantasyName,
       deviceId: request.deviceId,
-      external_reference: request.external_reference
+      // ✅ INCLUIR EXTERNAL REFERENCE CORREGIDO
+      external_reference: externalReference
     };
 
-    console.log('📤 Enviando datos de suscripción:', subscriptionData);
+    console.log('📤 Enviando datos de suscripción con external_reference:', externalReference);
 
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-subscription`, {
       method: 'POST',
@@ -154,6 +165,7 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
     }
 
     console.log('✅ Suscripción creada exitosamente:', data);
+    
     return {
       success: true,
       data: {
@@ -170,6 +182,7 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
     throw error;
   }
 };
+
 
 /**
  * 🔍 FUNCIÓN: Determinar el tipo correcto de pago según el plan
