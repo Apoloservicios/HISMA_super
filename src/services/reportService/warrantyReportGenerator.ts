@@ -420,7 +420,7 @@ export class WarrantyReportGenerator implements ReportGenerator<WarrantyReportDa
         { Métrica: 'Garantías Reclamadas', Valor: data.stats.reclamadas },
         { Métrica: 'Vencen en 30 días', Valor: data.stats.vencenEn30Dias },
         { Métrica: 'Vencen en 7 días', Valor: data.stats.vencenEn7Dias },
-        { Métrica: 'Total Facturado', Valor: formatCurrency(data.stats.totalFacturado) },
+        { Métrica: 'Total Facturado', Valor: formatCurrency(data.stats.totalFacturado || 0) },
         { Métrica: 'Promedio por Garantía', Valor: formatCurrency(data.stats.total > 0 ? data.stats.totalFacturado / data.stats.total : 0) },
         { Métrica: 'Período del Reporte', Valor: data.dateRange },
         { Métrica: 'Fecha de Exportación', Valor: formatDate(new Date()) }

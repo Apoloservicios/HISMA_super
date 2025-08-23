@@ -74,12 +74,32 @@ const WarrantyDetailPage: React.FC = () => {
     return `${date.toLocaleDateString('es-ES')} ${date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`;
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS'
-    }).format(amount);
-  };
+    const formatCurrency = (amount: any) => {
+      // Validar entrada
+      if (amount === null || amount === undefined || amount === '') {
+        return '$0,00';
+      }
+      
+      // Convertir a número
+      const numAmount = typeof amount === 'number' ? amount : parseFloat(String(amount));
+      
+      // Verificar si es un número válido
+      if (isNaN(numAmount)) {
+        return '$0,00';
+      }
+      
+      try {
+        return new Intl.NumberFormat('es-AR', {
+          style: 'currency',
+          currency: 'ARS',
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(numAmount);
+      } catch (error) {
+        console.warn('Error formateando moneda:', error);
+        return `$${numAmount.toFixed(2)}`;
+      }
+    };
 
   const getDaysToExpire = (): number => {
     if (!warranty) return 0;

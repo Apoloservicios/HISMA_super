@@ -226,12 +226,32 @@ const WarrantyReportsPage: React.FC = () => {
     ];
   }, [stats]);
 
-  const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: any) => {
+  // Validar entrada
+  if (amount === null || amount === undefined || amount === '') {
+    return '$0,00';
+  }
+  
+  // Convertir a número
+  const numAmount = typeof amount === 'number' ? amount : parseFloat(String(amount));
+  
+  // Verificar si es un número válido
+  if (isNaN(numAmount)) {
+    return '$0,00';
+  }
+  
+  try {
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
-      currency: 'ARS'
-    }).format(amount);
-  };
+      currency: 'ARS',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(numAmount);
+  } catch (error) {
+    console.warn('Error formateando moneda:', error);
+    return `$${numAmount.toFixed(2)}`;
+  }
+};
 
   const getDaysToExpire = (fechaVencimiento: any): number => {
     const now = new Date();
@@ -407,7 +427,7 @@ const WarrantyReportsPage: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-600">Total Facturado</p>
-                    <p className="text-lg font-semibold text-gray-800">{formatCurrency(stats.totalFacturado)}</p>
+                    <p className="text-lg font-semibold text-gray-800">{formatCurrency(stats.totalFacturado || 0)}</p>
                   </div>
                 </div>
               </CardBody>

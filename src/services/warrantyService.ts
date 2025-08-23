@@ -643,23 +643,41 @@ export const generateWarrantyReport = async (
   reportType: 'vigentes' | 'vencidas' | 'por_vencer' | 'todas' = 'todas'
 ): Promise<void> => {
   try {
+    // Importar funciones seguras desde utils
+    const { 
+      sanitizeText, 
+      addSafeTextToPDF, 
+      formatCurrency, 
+      formatDate, 
+      cleanWarrantyData,
+      REPORT_COLORS
+    } = await import('./reportService/utils');
+    
     // Importación dinámica para evitar problemas de SSR
     const jsPDF = await import('jspdf');
     const pdf = new jsPDF.default();
     
+    // Configurar soporte para caracteres especiales
+    try {
+      pdf.setFont('helvetica', 'normal');
+      // Remover setCharSet ya que no existe en esta versión de jsPDF
+    } catch (charsetError) {
+      console.warn('Error configurando fuente:', charsetError);
+    }
+    
     let yPos = 20;
-    const primaryColor = [46, 125, 50];
+    const primaryColor = REPORT_COLORS.primary;
     
     // Título principal
     pdf.setFontSize(18);
     pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('REPORTE DE GARANTÍAS', 105, yPos, { align: 'center' });
+    addSafeTextToPDF(pdf, 'REPORTE DE GARANTÍAS', 105, yPos, { align: 'center' });
     yPos += 10;
     
     // Subtítulo
     pdf.setFontSize(14);
-    pdf.text(lubricentroName, 105, yPos, { align: 'center' });
+    addSafeTextToPDF(pdf, sanitizeText(lubricentroName), 105, yPos, { align: 'center' });
     yPos += 8;
     
     // Tipo de reporte
@@ -672,53 +690,56 @@ export const generateWarrantyReport = async (
     
     pdf.setFontSize(12);
     pdf.setTextColor(100, 100, 100);
-    pdf.text(reportTitles[reportType], 105, yPos, { align: 'center' });
+    addSafeTextToPDF(pdf, reportTitles[reportType], 105, yPos, { align: 'center' });
     yPos += 5;
-    pdf.text(`Generado el ${new Date().toLocaleDateString('es-ES')}`, 105, yPos, { align: 'center' });
+    addSafeTextToPDF(pdf, `Generado el ${formatDate(new Date())}`, 105, yPos, { align: 'center' });
     yPos += 15;
     
-    // Estadísticas
+    // Limpiar datos de garantías
+    const cleanWarranties = warranties.map(cleanWarrantyData);
+    
+    // Estadísticas con validación
     pdf.setFontSize(12);
     pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('RESUMEN', 20, yPos);
+    addSafeTextToPDF(pdf, 'RESUMEN', 20, yPos);
     yPos += 10;
     
-    const vigentes = warranties.filter(w => w.estado === 'vigente').length;
-    const vencidas = warranties.filter(w => w.estado === 'vencida').length;
-    const reclamadas = warranties.filter(w => w.estado === 'reclamada').length;
-    const totalFacturado = warranties.reduce((sum, w) => sum + w.precio, 0);
+    const vigentes = cleanWarranties.filter(w => w.estado === 'vigente').length;
+    const vencidas = cleanWarranties.filter(w => w.estado === 'vencida').length;
+    const reclamadas = cleanWarranties.filter(w => w.estado === 'reclamada').length;
+    const totalFacturado = cleanWarranties.reduce((sum, w) => sum + (w.precio || 0), 0);
     
     pdf.setFontSize(10);
     pdf.setTextColor(60, 60, 60);
     pdf.setFont('helvetica', 'normal');
     
     const stats = [
-      ['Total de garantías:', warranties.length.toString()],
+      ['Total de garantías:', cleanWarranties.length.toString()],
       ['Garantías vigentes:', vigentes.toString()],
       ['Garantías vencidas:', vencidas.toString()],
       ['Garantías reclamadas:', reclamadas.toString()],
-      ['Total facturado:', `${totalFacturado.toLocaleString()}`]
+      ['Total facturado:', formatCurrency(totalFacturado)]
     ];
     
     stats.forEach(([label, value]) => {
       pdf.setFont('helvetica', 'bold');
-      pdf.text(label, 25, yPos);
+      addSafeTextToPDF(pdf, sanitizeText(label), 25, yPos);
       pdf.setFont('helvetica', 'normal');
-      pdf.text(value, 80, yPos);
+      addSafeTextToPDF(pdf, sanitizeText(value), 80, yPos);
       yPos += 6;
     });
     
     yPos += 10;
     
-    // Lista de garantías (primeras 15)
+    // Lista de garantías (primeras 15) con datos limpios
     pdf.setFontSize(12);
     pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('DETALLE DE GARANTÍAS', 20, yPos);
+    addSafeTextToPDF(pdf, 'DETALLE DE GARANTÍAS', 20, yPos);
     yPos += 10;
     
-    const guarantiesToShow = warranties.slice(0, 15);
+    const guarantiesToShow = cleanWarranties.slice(0, 15);
     
     guarantiesToShow.forEach((warranty, index) => {
       if (yPos > 250) {
@@ -732,46 +753,37 @@ export const generateWarrantyReport = async (
       pdf.setFontSize(9);
       pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(`${index + 1}. ${warranty.marca} ${warranty.modelo}`, 25, yPos);
-      yPos += 6;
+      addSafeTextToPDF(pdf, `${index + 1}. ${warranty.marca} ${warranty.modelo}`, 25, yPos);
       
       pdf.setFontSize(8);
       pdf.setTextColor(60, 60, 60);
       pdf.setFont('helvetica', 'normal');
       
-      const details = [
-        `Cliente: ${warranty.clienteNombre}`,
-        `Venta: ${toDate(warranty.fechaVenta).toLocaleDateString('es-ES')}`,
-        `Vencimiento: ${toDate(warranty.fechaVencimiento).toLocaleDateString('es-ES')}`,
-        `Estado: ${warranty.estado}`,
-        `Precio: ${warranty.precio.toLocaleString()}`
-      ];
+      const cliente = sanitizeText(warranty.clienteNombre);
+      const precio = formatCurrency(warranty.precio || 0);
+      const estado = sanitizeText(warranty.estado || 'vigente');
       
-      details.forEach(detail => {
-        pdf.text(detail, 25, yPos);
-        yPos += 4;
-      });
+      addSafeTextToPDF(pdf, `Cliente: ${cliente}`, 25, yPos + 4);
+      addSafeTextToPDF(pdf, `Precio: ${precio} - Estado: ${estado}`, 25, yPos + 8);
       
-      yPos += 4;
+      yPos += 15;
     });
     
     if (warranties.length > 15) {
       pdf.setFontSize(10);
       pdf.setTextColor(100, 100, 100);
-      pdf.text(`... y ${warranties.length - 15} garantías más`, 25, yPos);
+      pdf.setFont('helvetica', 'italic');
+      addSafeTextToPDF(pdf, `... y ${warranties.length - 15} garantías más`, 25, yPos);
     }
     
-    // Pie de página
-    pdf.setFontSize(8);
-    pdf.setTextColor(120, 120, 120);
-    pdf.text(`Reporte de Garantías - ${lubricentroName}`, 20, 285);
-    pdf.text(`Generado por Sistema HISMA`, 105, 290, { align: 'center' });
-    
-    const fileName = `Reporte_Garantias_${reportType}_${new Date().toISOString().split('T')[0]}.pdf`;
+    // Generar nombre de archivo seguro
+    const { generateFileName } = await import('./reportService/utils');
+    const fileName = generateFileName('Garantias', lubricentroName);
     pdf.save(fileName);
+    
   } catch (error) {
-    console.error('Error al generar reporte PDF:', error);
-    throw new Error('No se pudo generar el reporte PDF');
+    console.error('Error al generar reporte PDF de garantías:', error);
+    throw new Error('No se pudo generar el reporte de garantías');
   }
 };
 

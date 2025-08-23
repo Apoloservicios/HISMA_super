@@ -1,4 +1,4 @@
-// src/services/reportService/index.ts
+// src/services/reportService/index.ts - PARTE 1 DE 2 - LIMPIO Y COMPLETO
 import { OilChangeStats, OperatorStats, OilChange, User, Warranty } from '../../types';
 import { WarrantyStats } from '../../types/warranty';
 import { 
@@ -13,11 +13,10 @@ import {
 } from './types';
 import { WarrantyReportGenerator } from './warrantyReportGenerator';
 import { AdvancedAnalysisGenerator } from './advancedAnalysisGenerator';
-import { analyzeOilChanges, generateFileName, toDate } from './utils';
+import { analyzeOilChanges, generateFileName, toDate, cleanOilChangeData } from './utils';
 
 /**
- * NUEVO SERVICIO DE REPORTES MODULARIZADO
- * Versión refactorizada y mejorada del reportService original
+ * SERVICIO DE REPORTES MODULARIZADO - SIN DUPLICADOS
  */
 class ReportService {
   private warrantyGenerator: WarrantyReportGenerator;
@@ -29,161 +28,115 @@ class ReportService {
   }
   
   // ===========================================
-  // REPORTES DE GARANTÍAS - NUEVA FUNCIONALIDAD
+  // FUNCIONES HELPER PARA ANÁLISIS
   // ===========================================
   
-  /**
-   * Genera reporte completo de garantías en PDF
-   */
-  async generateWarrantyReport(
-    warranties: Warranty[],
-    stats: WarrantyStats,
-    lubricentroName: string,
-    dateRange: string,
-    config?: ReportConfig
-  ): Promise<void> {
-    const data: WarrantyReportData = {
-      lubricentroName,
-      dateRange,
-      generatedAt: new Date(),
-      warranties,
-      stats
-    };
+  private analyzeBrandDistribution(oilChanges: OilChange[]): { marca: string; cantidad: number; porcentaje: number }[] {
+    if (!oilChanges || oilChanges.length === 0) return [];
     
-    return this.warrantyGenerator.generatePDF(data, config);
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
+    const brandCount: Record<string, number> = {};
+    
+    cleanChanges.forEach(change => {
+      const brand = change.marcaVehiculo || 'Sin especificar';
+      brandCount[brand] = (brandCount[brand] || 0) + 1;
+    });
+    
+    const total = cleanChanges.length;
+    return Object.entries(brandCount).map(([marca, cantidad]) => ({
+      marca,
+      cantidad,
+      porcentaje: Math.round((cantidad / total) * 100)
+    }));
   }
   
-  /**
-   * Exporta garantías a Excel con análisis detallado
-   */
-  async exportWarrantiesToExcel(
-    warranties: Warranty[],
-    stats: WarrantyStats,
-    lubricentroName: string,
-    dateRange: string,
-    config?: ReportConfig
-  ): Promise<void> {
-    const data: WarrantyReportData = {
-      lubricentroName,
-      dateRange,
-      generatedAt: new Date(),
-      warranties,
-      stats
-    };
+  private analyzeOilBrands(oilChanges: OilChange[]): { marca: string; cantidad: number; porcentaje: number }[] {
+    if (!oilChanges || oilChanges.length === 0) return [];
     
-    return this.warrantyGenerator.exportToExcel(data, config);
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
+    const brandCount: Record<string, number> = {};
+    
+    cleanChanges.forEach(change => {
+      const brand = change.marcaAceite || 'Sin especificar';
+      brandCount[brand] = (brandCount[brand] || 0) + 1;
+    });
+    
+    const total = cleanChanges.length;
+    return Object.entries(brandCount).map(([marca, cantidad]) => ({
+      marca,
+      cantidad,
+      porcentaje: Math.round((cantidad / total) * 100)
+    }));
   }
   
-  // ===========================================
-  // ANÁLISIS AVANZADO - NUEVA FUNCIONALIDAD
-  // ===========================================
-  
-  /**
-   * Genera análisis avanzado completo con métricas detalladas
-   */
-  async generateAdvancedAnalysis(
-    oilChanges: OilChange[],
-    lubricentroName: string,
-    dateRange: string,
-    config?: ReportConfig
-  ): Promise<void> {
-    // Procesar datos para análisis avanzado
-    const analysis = analyzeOilChanges(oilChanges);
+  private analyzeOilTypes(oilChanges: OilChange[]): { tipo: string; cantidad: number; porcentaje: number }[] {
+    if (!oilChanges || oilChanges.length === 0) return [];
     
-    const data: AdvancedAnalysisData = {
-      lubricentroName,
-      dateRange,
-      generatedAt: new Date(),
-      vehicleAnalysis: {
-        brandDistribution: analysis.vehicleAnalysis.brands,
-        modelsByBrand: this.groupModelsByBrand(oilChanges),
-        yearDistribution: this.analyzeVehicleYears(oilChanges),
-        averageKmByBrand: this.calculateAverageKmByBrand(oilChanges),
-        fleetAnalysis: this.analyzeFleetTypes(oilChanges)
-      },
-      lubricantAnalysis: {
-        oilBrands: analysis.lubricantAnalysis.brands,
-        oilTypes: analysis.lubricantAnalysis.types,
-        viscosities: analysis.lubricantAnalysis.viscosities,
-        brandVehicleCorrelation: this.analyzeBrandVehicleCorrelation(oilChanges)
-      },
-      serviceAnalysis: {
-        airFilterPercentage: analysis.serviceAnalysis.airFilterPercentage || 0,
-        fuelFilterPercentage: analysis.serviceAnalysis.fuelFilterPercentage || 0,
-        cabinFilterPercentage: analysis.serviceAnalysis.cabinFilterPercentage || 0,
-        additionalServicesRevenue: 0, // Se puede calcular si se tienen precios
-        servicesByVehicleType: this.analyzeServicesByVehicleType(oilChanges)
-      },
-      profitabilityAnalysis: {
-        averageTicketByVehicleType: this.calculateTicketByVehicleType(oilChanges),
-        mostProfitableServices: this.analyzeMostProfitableServices(oilChanges),
-        topCustomers: this.analyzeTopCustomers(oilChanges),
-        monthlyRevenue: this.calculateMonthlyRevenue(oilChanges)
-      }
-    };
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
+    const typeCount: Record<string, number> = {};
     
-    return this.advancedGenerator.generatePDF(data, config);
+    cleanChanges.forEach(change => {
+      const type = change.tipoAceite || 'Sin especificar';
+      typeCount[type] = (typeCount[type] || 0) + 1;
+    });
+    
+    const total = cleanChanges.length;
+    return Object.entries(typeCount).map(([tipo, cantidad]) => ({
+      tipo,
+      cantidad,
+      porcentaje: Math.round((cantidad / total) * 100)
+    }));
   }
   
-  /**
-   * Exporta análisis avanzado a Excel
-   */
-  async exportAdvancedAnalysisToExcel(
-    oilChanges: OilChange[],
-    lubricentroName: string,
-    dateRange: string,
-    config?: ReportConfig
-  ): Promise<void> {
-    const analysis = analyzeOilChanges(oilChanges);
+  private analyzeViscosities(oilChanges: OilChange[]): { viscosidad: string; cantidad: number; porcentaje: number }[] {
+    if (!oilChanges || oilChanges.length === 0) return [];
     
-    const data: AdvancedAnalysisData = {
-      lubricentroName,
-      dateRange,
-      generatedAt: new Date(),
-      vehicleAnalysis: {
-        brandDistribution: analysis.vehicleAnalysis.brands,
-        modelsByBrand: this.groupModelsByBrand(oilChanges),
-        yearDistribution: this.analyzeVehicleYears(oilChanges),
-        averageKmByBrand: this.calculateAverageKmByBrand(oilChanges),
-        fleetAnalysis: this.analyzeFleetTypes(oilChanges)
-      },
-      lubricantAnalysis: {
-        oilBrands: analysis.lubricantAnalysis.brands,
-        oilTypes: analysis.lubricantAnalysis.types,
-        viscosities: analysis.lubricantAnalysis.viscosities,
-        brandVehicleCorrelation: this.analyzeBrandVehicleCorrelation(oilChanges)
-      },
-      serviceAnalysis: {
-        airFilterPercentage: analysis.serviceAnalysis.airFilterPercentage || 0,
-        fuelFilterPercentage: analysis.serviceAnalysis.fuelFilterPercentage || 0,
-        cabinFilterPercentage: analysis.serviceAnalysis.cabinFilterPercentage || 0,
-        additionalServicesRevenue: 0,
-        servicesByVehicleType: this.analyzeServicesByVehicleType(oilChanges)
-      },
-      profitabilityAnalysis: {
-        averageTicketByVehicleType: this.calculateTicketByVehicleType(oilChanges),
-        mostProfitableServices: this.analyzeMostProfitableServices(oilChanges),
-        topCustomers: this.analyzeTopCustomers(oilChanges),
-        monthlyRevenue: this.calculateMonthlyRevenue(oilChanges)
-      }
-    };
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
+    const viscosityCount: Record<string, number> = {};
     
-    return this.advancedGenerator.exportToExcel(data, config);
+    cleanChanges.forEach(change => {
+      const viscosity = change.sae || 'Sin especificar';
+      viscosityCount[viscosity] = (viscosityCount[viscosity] || 0) + 1;
+    });
+    
+    const total = cleanChanges.length;
+    return Object.entries(viscosityCount).map(([viscosidad, cantidad]) => ({
+      viscosidad,
+      cantidad,
+      porcentaje: Math.round((cantidad / total) * 100)
+    }));
   }
   
-  // ===========================================
-  // FUNCIONES DE ANÁLISIS DETALLADO
-  // ===========================================
+  private calculateFilterPercentages(oilChanges: OilChange[]) {
+    if (!oilChanges || oilChanges.length === 0) {
+      return {
+        airFilterPercentage: 0,
+        fuelFilterPercentage: 0,
+        cabinFilterPercentage: 0
+      };
+    }
+    
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
+    const total = cleanChanges.length;
+    
+    const airFilterCount = cleanChanges.filter(c => c.filtroAire).length;
+    const fuelFilterCount = cleanChanges.filter(c => c.filtroCombustible).length;
+    const cabinFilterCount = cleanChanges.filter(c => c.filtroHabitaculo).length;
+    
+    return {
+      airFilterPercentage: Math.round((airFilterCount / total) * 100),
+      fuelFilterPercentage: Math.round((fuelFilterCount / total) * 100),
+      cabinFilterPercentage: Math.round((cabinFilterCount / total) * 100)
+    };
+  }
   
-  /**
-   * Agrupa modelos por marca de vehículo
-   */
   private groupModelsByBrand(oilChanges: OilChange[]) {
     const brandModels: { [key: string]: { [key: string]: number } } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const brand = change.marcaVehiculo;
-      const model = change.modeloVehiculo;
+    cleanChanges.forEach(change => {
+      const brand = change.marcaVehiculo || 'Sin especificar';
+      const model = change.modeloVehiculo || 'Sin especificar';
       
       if (!brandModels[brand]) {
         brandModels[brand] = {};
@@ -200,17 +153,14 @@ class ReportService {
     }));
   }
   
-  /**
-   * Analiza distribución por años de vehículos
-   */
   private analyzeVehicleYears(oilChanges: OilChange[]) {
     const yearCounts: { [key: number]: number } = {};
     const currentYear = new Date().getFullYear();
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      if (change.añoVehiculo) {
-        yearCounts[change.añoVehiculo] = (yearCounts[change.añoVehiculo] || 0) + 1;
-      }
+    cleanChanges.forEach(change => {
+      const year = change.añoVehiculo || currentYear;
+      yearCounts[year] = (yearCounts[year] || 0) + 1;
     });
     
     return Object.entries(yearCounts).map(([año, cantidad]) => ({
@@ -220,18 +170,16 @@ class ReportService {
     })).sort((a, b) => b.año - a.año);
   }
   
-  /**
-   * Calcula kilometraje promedio por marca
-   */
   private calculateAverageKmByBrand(oilChanges: OilChange[]) {
     const brandKm: { [key: string]: number[] } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const brand = change.marcaVehiculo;
+    cleanChanges.forEach(change => {
+      const brand = change.marcaVehiculo || 'Sin especificar';
       if (!brandKm[brand]) {
         brandKm[brand] = [];
       }
-      brandKm[brand].push(change.kmActuales);
+      brandKm[brand].push(change.kmActuales || 0);
     });
     
     return Object.entries(brandKm).map(([marca, kms]) => ({
@@ -240,17 +188,14 @@ class ReportService {
     }));
   }
   
-  /**
-   * Analiza tipos de flota (particular vs comercial)
-   */
   private analyzeFleetTypes(oilChanges: OilChange[]) {
-    // Heurística: vehículos comerciales suelen ser utilitarios, pick-ups, etc.
     const comercialTypes = ['utilitario', 'pickup', 'camion', 'van', 'furgon'];
     let particular = 0;
     let comercial = 0;
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const tipo = change.tipoVehiculo.toLowerCase();
+    cleanChanges.forEach(change => {
+      const tipo = (change.tipoVehiculo || '').toLowerCase();
       if (comercialTypes.some(ct => tipo.includes(ct))) {
         comercial++;
       } else {
@@ -258,22 +203,20 @@ class ReportService {
       }
     });
     
-    const total = particular + comercial;
+    const total = particular + comercial || 1;
     return [
       { tipo: 'particular' as const, cantidad: particular, porcentaje: (particular / total) * 100 },
       { tipo: 'comercial' as const, cantidad: comercial, porcentaje: (comercial / total) * 100 }
     ];
   }
   
-  /**
-   * Analiza correlación entre marca de vehículo y aceite preferido
-   */
   private analyzeBrandVehicleCorrelation(oilChanges: OilChange[]) {
     const correlations: { [key: string]: { [key: string]: number } } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const vehicleBrand = change.marcaVehiculo;
-      const oilBrand = change.marcaAceite;
+    cleanChanges.forEach(change => {
+      const vehicleBrand = change.marcaVehiculo || 'Sin especificar';
+      const oilBrand = change.marcaAceite || 'Sin especificar';
       
       if (!correlations[vehicleBrand]) {
         correlations[vehicleBrand] = {};
@@ -294,14 +237,12 @@ class ReportService {
     });
   }
   
-  /**
-   * Analiza servicios por tipo de vehículo
-   */
   private analyzeServicesByVehicleType(oilChanges: OilChange[]) {
     const servicesByType: { [key: string]: { filtroAire: number; filtroCombustible: number; filtroHabitaculo: number; total: number } } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const tipo = change.tipoVehiculo;
+    cleanChanges.forEach(change => {
+      const tipo = change.tipoVehiculo || 'Sin especificar';
       if (!servicesByType[tipo]) {
         servicesByType[tipo] = { filtroAire: 0, filtroCombustible: 0, filtroHabitaculo: 0, total: 0 };
       }
@@ -326,21 +267,17 @@ class ReportService {
     });
   }
   
-  /**
-   * Calcula ticket promedio por tipo de vehículo
-   */
   private calculateTicketByVehicleType(oilChanges: OilChange[]) {
-    // Para este cálculo necesitaríamos precios, por ahora estimamos basado en cantidad de aceite
     const ticketsByType: { [key: string]: number[] } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const tipo = change.tipoVehiculo;
+    cleanChanges.forEach(change => {
+      const tipo = change.tipoVehiculo || 'Sin especificar';
       if (!ticketsByType[tipo]) {
         ticketsByType[tipo] = [];
       }
       
-      // Estimación básica: cantidad de aceite * precio estimado + servicios adicionales
-      let estimatedTicket = change.cantidadAceite * 800; // Precio estimado por litro
+      let estimatedTicket = (change.cantidadAceite || 0) * 800;
       if (change.filtroAceite) estimatedTicket += 1500;
       if (change.filtroAire) estimatedTicket += 1200;
       if (change.filtroCombustible) estimatedTicket += 2000;
@@ -355,37 +292,32 @@ class ReportService {
     }));
   }
   
-  /**
-   * Analiza servicios más rentables
-   */
   private analyzeMostProfitableServices(oilChanges: OilChange[]) {
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     const services = [
-      { servicio: 'Cambio de Aceite', margen: 40, frecuencia: oilChanges.length },
-      { servicio: 'Filtro de Aceite', margen: 60, frecuencia: oilChanges.filter(c => c.filtroAceite).length },
-      { servicio: 'Filtro de Aire', margen: 70, frecuencia: oilChanges.filter(c => c.filtroAire).length },
-      { servicio: 'Filtro de Combustible', margen: 65, frecuencia: oilChanges.filter(c => c.filtroCombustible).length },
-      { servicio: 'Filtro de Habitáculo', margen: 75, frecuencia: oilChanges.filter(c => c.filtroHabitaculo).length }
+      { servicio: 'Cambio de Aceite', margen: 40, frecuencia: cleanChanges.length },
+      { servicio: 'Filtro de Aceite', margen: 60, frecuencia: cleanChanges.filter(c => c.filtroAceite).length },
+      { servicio: 'Filtro de Aire', margen: 70, frecuencia: cleanChanges.filter(c => c.filtroAire).length },
+      { servicio: 'Filtro de Combustible', margen: 65, frecuencia: cleanChanges.filter(c => c.filtroCombustible).length },
+      { servicio: 'Filtro de Habitáculo', margen: 75, frecuencia: cleanChanges.filter(c => c.filtroHabitaculo).length }
     ];
     
     return services.sort((a, b) => (b.margen * b.frecuencia) - (a.margen * a.frecuencia));
   }
   
-  /**
-   * Analiza top clientes más valiosos
-   */
   private analyzeTopCustomers(oilChanges: OilChange[]) {
     const customerStats: { [key: string]: { servicios: number; gasto: number } } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
-      const cliente = change.nombreCliente;
+    cleanChanges.forEach(change => {
+      const cliente = change.nombreCliente || 'Sin especificar';
       if (!customerStats[cliente]) {
         customerStats[cliente] = { servicios: 0, gasto: 0 };
       }
       
       customerStats[cliente].servicios++;
       
-      // Estimación de gasto
-      let estimatedCost = change.cantidadAceite * 800;
+      let estimatedCost = (change.cantidadAceite || 0) * 800;
       if (change.filtroAceite) estimatedCost += 1500;
       if (change.filtroAire) estimatedCost += 1200;
       if (change.filtroCombustible) estimatedCost += 2000;
@@ -400,18 +332,15 @@ class ReportService {
       .slice(0, 20);
   }
   
-  /**
-   * Calcula ingresos mensuales estimados
-   */
   private calculateMonthlyRevenue(oilChanges: OilChange[]) {
     const monthlyRevenue: { [key: string]: number } = {};
+    const cleanChanges = oilChanges.map(cleanOilChangeData);
     
-    oilChanges.forEach(change => {
+    cleanChanges.forEach(change => {
       const date = toDate(change.fecha);
       const monthKey = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
       
-      // Estimación de ingresos
-      let revenue = change.cantidadAceite * 800;
+      let revenue = (change.cantidadAceite || 0) * 800;
       if (change.filtroAceite) revenue += 1500;
       if (change.filtroAire) revenue += 1200;
       if (change.filtroCombustible) revenue += 2000;
@@ -427,10 +356,150 @@ class ReportService {
   }
   
   // ===========================================
-  // FUNCIONES DE EXPORTACIÓN HEREDADAS (MANTENEMOS COMPATIBILIDAD)
+  // MÉTODOS PRINCIPALES
+  // ===========================================
+  
+  async generateWarrantyReport(
+    warranties: Warranty[],
+    stats: WarrantyStats,
+    lubricentroName: string,
+    dateRange: string,
+    config?: ReportConfig
+  ): Promise<void> {
+    const data: WarrantyReportData = {
+      lubricentroName,
+      dateRange,
+      generatedAt: new Date(),
+      warranties,
+      stats
+    };
+    
+    return this.warrantyGenerator.generatePDF(data, config);
+  }
+  
+  async exportWarrantiesToExcel(
+    warranties: Warranty[],
+    stats: WarrantyStats,
+    lubricentroName: string,
+    dateRange: string,
+    config?: ReportConfig
+  ): Promise<void> {
+    const data: WarrantyReportData = {
+      lubricentroName,
+      dateRange,
+      generatedAt: new Date(),
+      warranties,
+      stats
+    };
+    
+    return this.warrantyGenerator.exportToExcel(data, config);
+  }
+  
+
+  // ===========================================
+  // ANÁLISIS AVANZADO - NUEVA FUNCIONALIDAD
   // ===========================================
   
   /**
+   * Genera análisis avanzado completo con métricas detalladas - CORREGIDO
+   */
+  async generateAdvancedAnalysis(
+    oilChanges: OilChange[],
+    lubricentroName: string,
+    dateRange: string,
+    config?: ReportConfig
+  ): Promise<void> {
+    // Usar funciones corregidas en lugar de analysis
+    const filterPercentages = this.calculateFilterPercentages(oilChanges);
+    
+    const data: AdvancedAnalysisData = {
+      lubricentroName,
+      dateRange,
+      generatedAt: new Date(),
+      vehicleAnalysis: {
+        brandDistribution: this.analyzeBrandDistribution(oilChanges),
+        modelsByBrand: this.groupModelsByBrand(oilChanges),
+        yearDistribution: this.analyzeVehicleYears(oilChanges),
+        averageKmByBrand: this.calculateAverageKmByBrand(oilChanges),
+        fleetAnalysis: this.analyzeFleetTypes(oilChanges)
+      },
+      lubricantAnalysis: {
+        oilBrands: this.analyzeOilBrands(oilChanges),
+        oilTypes: this.analyzeOilTypes(oilChanges),
+        viscosities: this.analyzeViscosities(oilChanges),
+        brandVehicleCorrelation: this.analyzeBrandVehicleCorrelation(oilChanges)
+      },
+      serviceAnalysis: {
+        ...filterPercentages,
+        additionalServicesRevenue: 0, // Se puede calcular si se tienen precios
+        servicesByVehicleType: this.analyzeServicesByVehicleType(oilChanges)
+      },
+      profitabilityAnalysis: {
+        averageTicketByVehicleType: this.calculateTicketByVehicleType(oilChanges),
+        mostProfitableServices: this.analyzeMostProfitableServices(oilChanges),
+        topCustomers: this.analyzeTopCustomers(oilChanges),
+        monthlyRevenue: this.calculateMonthlyRevenue(oilChanges)
+      }
+    };
+    
+    return this.advancedGenerator.generatePDF(data, config);
+  }
+  
+  /**
+   * Exporta análisis avanzado a Excel - CORREGIDO
+   */
+  async exportAdvancedAnalysisToExcel(
+    oilChanges: OilChange[],
+    lubricentroName: string,
+    dateRange: string,
+    config?: ReportConfig
+  ): Promise<void> {
+    // Usar funciones corregidas en lugar de analysis
+    const filterPercentages = this.calculateFilterPercentages(oilChanges);
+    
+    const data: AdvancedAnalysisData = {
+      lubricentroName,
+      dateRange,
+      generatedAt: new Date(),
+      vehicleAnalysis: {
+        brandDistribution: this.analyzeBrandDistribution(oilChanges),
+        modelsByBrand: this.groupModelsByBrand(oilChanges),
+        yearDistribution: this.analyzeVehicleYears(oilChanges),
+        averageKmByBrand: this.calculateAverageKmByBrand(oilChanges),
+        fleetAnalysis: this.analyzeFleetTypes(oilChanges)
+      },
+      lubricantAnalysis: {
+        oilBrands: this.analyzeOilBrands(oilChanges),
+        oilTypes: this.analyzeOilTypes(oilChanges),
+        viscosities: this.analyzeViscosities(oilChanges),
+        brandVehicleCorrelation: this.analyzeBrandVehicleCorrelation(oilChanges)
+      },
+      serviceAnalysis: {
+        ...filterPercentages,
+        additionalServicesRevenue: 0,
+        servicesByVehicleType: this.analyzeServicesByVehicleType(oilChanges)
+      },
+      profitabilityAnalysis: {
+        averageTicketByVehicleType: this.calculateTicketByVehicleType(oilChanges),
+        mostProfitableServices: this.analyzeMostProfitableServices(oilChanges),
+        topCustomers: this.analyzeTopCustomers(oilChanges),
+        monthlyRevenue: this.calculateMonthlyRevenue(oilChanges)
+      }
+    };
+    
+    return this.advancedGenerator.exportToExcel(data, config);
+  }
+  
+  // ===========================================
+  // FUNCIONES DE ANÁLISIS DETALLADO
+  // ===========================================
+  
+  /**
+   * Agrupa modelos por marca de vehículo
+   */
+  
+  
+    /**
    * Exporta datos genéricos a Excel
    */
   async exportToExcel(data: any[], sheetName: string = 'Reporte'): Promise<void> {
@@ -554,7 +623,7 @@ class ReportService {
   }
   
   /**
-   * Exporta estadísticas de operadores a Excel (COMPATIBILIDAD)
+   * Exporta estadísticas de operadores a Excel (COMPATIBILIDAD) - CORREGIDO
    */
   async exportOperatorStatsToExcel(
     operatorStats: OperatorStats[],

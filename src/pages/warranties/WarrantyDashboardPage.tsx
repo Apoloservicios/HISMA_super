@@ -140,12 +140,32 @@ const WarrantyDashboardPage: React.FC = () => {
     );
   };
 
-  const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: any) => {
+  // Validar entrada
+  if (amount === null || amount === undefined || amount === '') {
+    return '$0,00';
+  }
+  
+  // Convertir a número
+  const numAmount = typeof amount === 'number' ? amount : parseFloat(String(amount));
+  
+  // Verificar si es un número válido
+  if (isNaN(numAmount)) {
+    return '$0,00';
+  }
+  
+  try {
     return new Intl.NumberFormat('es-AR', {
       style: 'currency',
-      currency: 'ARS'
-    }).format(amount);
-  };
+      currency: 'ARS',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(numAmount);
+  } catch (error) {
+    console.warn('Error formateando moneda:', error);
+    return `$${numAmount.toFixed(2)}`;
+  }
+};
 
   const formatDate = (timestamp: any) => {
     return toDate(timestamp).toLocaleDateString('es-ES');
@@ -284,7 +304,7 @@ const handleViewWarranty = (id: string) => {
               { label: 'Por Vencer', value: stats.vencenEn30Dias, color: 'yellow', icon: '⏰' },
               { label: 'Vencidas', value: stats.vencidas, color: 'red', icon: '❌' },
               { label: 'Reclamadas', value: stats.reclamadas, color: 'purple', icon: '🔄' },
-              { label: 'Facturado', value: formatCurrency(stats.totalFacturado), color: 'indigo', icon: '💰' }
+              { label: 'Facturado', value: formatCurrency(stats.totalFacturado || 0), color: 'indigo', icon: '💰' }
             ].map((stat, index) => (
               <div key={index} className="bg-white overflow-hidden shadow rounded-lg">
                 <div className="p-5">
