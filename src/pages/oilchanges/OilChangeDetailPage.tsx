@@ -10,6 +10,7 @@ import { OilChange, Lubricentro } from '../../types';
 
 import enhancedPdfService from '../../services/enhancedPdfService';
 import EnhancedPrintComponent from '../../components/print/EnhancedPrintComponent';
+import QRCodeGeneratorNative from '../../components/qr/QRCodeGeneratorNative';
 
 
 
@@ -255,6 +256,15 @@ const shareViaWhatsApp = () => {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* NUEVA SECCIÓN: Código QR */}
+      <div className="mt-6">
+        <QRCodeGeneratorNative
+          oilChange={oilChange}
+          lubricentro={lubricentro}
+          showPreview={true}
+        />
       </div>
       
       {/* Información detallada */}

@@ -75,7 +75,7 @@ export const STATIC_FALLBACK_PLANS: Record<string, SubscriptionPlan> = {
     name: 'Plan Iniciante',
     description: 'Ideal para lubricentros que están comenzando',
     planType: PlanType.MONTHLY,
-    price: { monthly: 1500, semiannual: 8000 },
+    price: { monthly: 19900, semiannual: 8000 },
     maxUsers: 1,
     maxMonthlyServices: 25,
     features: [
@@ -86,6 +86,7 @@ export const STATIC_FALLBACK_PLANS: Record<string, SubscriptionPlan> = {
       'Soporte por email'
     ]
   },
+
   basic: {
     id: 'basic',
     name: 'Plan Básico',

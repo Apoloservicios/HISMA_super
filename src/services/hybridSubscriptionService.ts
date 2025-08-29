@@ -1,5 +1,5 @@
 // src/services/hybridSubscriptionService.ts
-// ✅ VERSIÓN COMPLETA: Mantiene toda la funcionalidad, elimina solo el mapeo problemático
+// ✅ VERSIÓN CORREGIDA: Solo usa fallback cuando NO hay planes de Firebase
 
 import { 
   getActivePlans, 
@@ -17,12 +17,12 @@ import {
 import { TRIAL_LIMITS } from '../config/constants';
 
 /**
- * Servicio híbrido que combina planes dinámicos de Firestore con fallback a planes estáticos
- * ✅ REFACTORIZADO: Eliminado mapeo problemático, mantenida funcionalidad completa
+ * Servicio híbrido que prioriza planes dinámicos de Firestore
+ * ✅ CORREGIDO: Fallback solo en caso de emergencia
  */
 
 // Cache en memoria para mejorar el rendimiento
-let plansCache: Record<string, SubscriptionPlan> | null = null; // ✅ CAMBIO: ahora es Record<string, ...>
+let plansCache: Record<string, SubscriptionPlan> | null = null;
 let cacheTimestamp: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
@@ -30,7 +30,6 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
  * Convierte un ManagedSubscriptionPlan a SubscriptionPlan para compatibilidad
  */
 const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionPlan => {
-  console.log(`🔄 Convirtiendo plan gestionado: ${managedPlan.id}`);
 
   // Para planes por servicios, necesitamos crear una estructura de precios compatible
   let priceStructure = managedPlan.price;
@@ -41,7 +40,7 @@ const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionP
       monthly: managedPlan.servicePrice,
       semiannual: managedPlan.servicePrice // Para planes por servicios, no hay diferencia semestral
     };
-    console.log(`💰 Plan por servicios detectado: ${managedPlan.id}, precio: ${managedPlan.servicePrice}`);
+
   }
 
   return {
@@ -62,62 +61,55 @@ const convertManagedPlan = (managedPlan: ManagedSubscriptionPlan): SubscriptionP
 };
 
 /**
- * ✅ FUNCIÓN PRINCIPAL ACTUALIZADA: Obtiene todos los planes disponibles
- * ELIMINADO: Mapeo a tipos estándar problemático
+ * ✅ FUNCIÓN PRINCIPAL CORREGIDA: Prioriza planes de Firebase
  */
 export const getSubscriptionPlans = async (): Promise<Record<string, SubscriptionPlan>> => {
-  console.log('🔄 Cargando planes de suscripción...');
+
   
   // Verificar cache
   const now = Date.now();
   if (plansCache && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('✅ Planes cargados desde cache');
+
     return plansCache;
   }
 
   try {
-    console.log('🔍 Intentando cargar planes dinámicos desde Firebase...');
+
     
     // Intentar cargar planes dinámicos desde Firestore
     const managedPlans = await getActivePlans();
-    console.log(`📊 Encontrados ${managedPlans.length} planes dinámicos en Firebase`);
+
     
     if (managedPlans.length > 0) {
-      // ✅ NUEVA ESTRATEGIA: Crear mapa simple con todos los planes
-      const allPlansMap: Record<string, SubscriptionPlan> = {};
+      // ✅ ESTRATEGIA CORREGIDA: Solo usar planes de Firebase
+      const firebasePlansMap: Record<string, SubscriptionPlan> = {};
       
-      // Agregar todos los planes dinámicos con sus IDs originales
+      // Procesar solo los planes de Firebase
       managedPlans.forEach((managedPlan) => {
-        console.log(`📋 Procesando plan: ${managedPlan.id} - ${managedPlan.name}`);
-        
-        const convertedPlan = convertManagedPlan(managedPlan);
-        allPlansMap[managedPlan.id] = convertedPlan;
-      });
+        // Filtrar solo planes publicados en homepage
+        if (managedPlan.isActive && (managedPlan.isPublished || managedPlan.publishOnHomepage)) {
+   
+          const convertedPlan = convertManagedPlan(managedPlan);
+          firebasePlansMap[managedPlan.id] = convertedPlan;
+        } else {
       
-      // ✅ ASEGURAR: Si no hay planes con IDs estándar, agregar fallbacks
-      const standardIds = ['starter', 'basic', 'premium', 'enterprise'];
-      standardIds.forEach(id => {
-        if (!allPlansMap[id]) {
-          console.log(`📦 Agregando plan fallback estándar: ${id}`);
-          allPlansMap[id] = STATIC_PLANS[id as keyof typeof STATIC_PLANS];
         }
       });
       
-      console.log(`✅ ${Object.keys(allPlansMap).length} planes cargados exitosamente`);
-      console.log(`📋 Planes disponibles: ${Object.keys(allPlansMap).join(', ')}`);
+
       
       // Actualizar cache
-      plansCache = allPlansMap;
+      plansCache = firebasePlansMap;
       cacheTimestamp = now;
-      return allPlansMap;
+      return firebasePlansMap;
     }
     
   } catch (error) {
     console.error('❌ Error al cargar planes dinámicos:', error);
   }
   
-  // ✅ FALLBACK: Usar planes estáticos si no hay dinámicos
-  console.log('🔄 Usando planes estáticos como fallback');
+  // ✅ FALLBACK: Solo usar planes estáticos si NO hay planes de Firebase
+  console.log('🔄 No hay planes en Firebase - Usando planes estáticos como fallback de emergencia');
   const fallbackPlans = { ...STATIC_PLANS };
   
   // Actualizar cache con fallback
@@ -127,43 +119,77 @@ export const getSubscriptionPlans = async (): Promise<Record<string, Subscriptio
 };
 
 /**
- * ✅ MANTENER: Función para obtener planes separados por tipo
+ * ✅ NUEVA: Obtiene planes publicados específicamente para homepage
+ */
+export const getPublishedPlansForHomepage = async (): Promise<SubscriptionPlan[]> => {
+  try {
+    const managedPlans = await getActivePlans();
+    
+    return managedPlans
+      .filter(plan => 
+        plan.isActive && 
+        (plan.isPublished || plan.publishOnHomepage) // Verificar ambos campos por compatibilidad
+      )
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+      .map(convertManagedPlan);
+      
+  } catch (error) {
+    console.error('Error al obtener planes publicados:', error);
+    // Solo en caso de error extremo, devolver algunos estáticos
+    return [STATIC_PLANS.premium]; // Solo el plan premium como ejemplo
+  }
+};
+
+/**
+ * ✅ FUNCIÓN PARA DEBUG: Separar planes por origen
  */
 export const getAllDynamicPlans = async (): Promise<{
-  standardPlans: Record<string, SubscriptionPlan>;
-  dynamicPlans: Record<string, SubscriptionPlan>;
+  firebasePlans: Record<string, SubscriptionPlan>;
+  fallbackPlans: Record<string, SubscriptionPlan>;
   allPlans: Record<string, SubscriptionPlan>;
   totalCount: number;
+  source: 'firebase' | 'fallback';
 }> => {
   try {
-    const allPlans = await getSubscriptionPlans();
+    const managedPlans = await getActivePlans();
     
-    // Separar planes estándar de dinámicos
-    const standardPlans: Record<string, SubscriptionPlan> = {};
-    const dynamicPlans: Record<string, SubscriptionPlan> = {};
-    
-    Object.entries(allPlans).forEach(([key, plan]) => {
-      if (['starter', 'basic', 'premium', 'enterprise'].includes(key)) {
-        standardPlans[key] = plan;
-      } else {
-        dynamicPlans[key] = plan;
-      }
-    });
-    
-    return {
-      standardPlans,
-      dynamicPlans,
-      allPlans,
-      totalCount: Object.keys(allPlans).length
-    };
+    if (managedPlans.length > 0) {
+      // Hay planes en Firebase
+      const firebasePlans: Record<string, SubscriptionPlan> = {};
+      
+      managedPlans
+        .filter(plan => plan.isActive && (plan.isPublished || plan.publishOnHomepage))
+        .forEach((managedPlan) => {
+          const convertedPlan = convertManagedPlan(managedPlan);
+          firebasePlans[managedPlan.id] = convertedPlan;
+        });
+      
+      return {
+        firebasePlans,
+        fallbackPlans: {},
+        allPlans: firebasePlans,
+        totalCount: Object.keys(firebasePlans).length,
+        source: 'firebase'
+      };
+    } else {
+      // No hay planes en Firebase, usar fallback
+      return {
+        firebasePlans: {},
+        fallbackPlans: STATIC_PLANS,
+        allPlans: STATIC_PLANS,
+        totalCount: Object.keys(STATIC_PLANS).length,
+        source: 'fallback'
+      };
+    }
     
   } catch (error) {
     console.error('Error al obtener planes con metadata:', error);
     return {
-      standardPlans: STATIC_PLANS,
-      dynamicPlans: {},
+      firebasePlans: {},
+      fallbackPlans: STATIC_PLANS,
       allPlans: STATIC_PLANS,
-      totalCount: Object.keys(STATIC_PLANS).length
+      totalCount: Object.keys(STATIC_PLANS).length,
+      source: 'fallback'
     };
   }
 };
@@ -173,7 +199,7 @@ export const getAllDynamicPlans = async (): Promise<{
  */
 export const getSubscriptionPlan = async (planId: string): Promise<SubscriptionPlan | null> => {
   try {
-    console.log(`🔍 Buscando plan: ${planId}`);
+   
     const plans = await getSubscriptionPlans();
     const plan = plans[planId] || null;
     
@@ -186,7 +212,7 @@ export const getSubscriptionPlan = async (planId: string): Promise<SubscriptionP
     return plan;
   } catch (error) {
     console.error('❌ Error al obtener plan específico:', error);
-    // Fallback: buscar en planes estáticos
+    // Fallback: buscar en planes estáticos solo si no hay alternativa
     return STATIC_PLANS[planId as keyof typeof STATIC_PLANS] || null;
   }
 };
@@ -228,7 +254,21 @@ export const getTrialLimits = async (): Promise<{
 };
 
 /**
- * ✅ MANTENER: Valida si un plan existe y está disponible
+ * ✅ NUEVA: Limpia cache de planes
+ */
+export const clearPlansCache = (): void => {
+  plansCache = null;
+  cacheTimestamp = 0;
+
+};
+
+/**
+ * ✅ ALIAS: Para compatibilidad con código existente
+ */
+export const invalidatePlansCache = clearPlansCache;
+
+/**
+ * ✅ FUNCIÓN PARA COMPATIBILIDAD: Verifica si un plan está disponible
  */
 export const isPlanAvailable = async (planId: string): Promise<boolean> => {
   try {
@@ -236,34 +276,12 @@ export const isPlanAvailable = async (planId: string): Promise<boolean> => {
     return planId in plans;
   } catch (error) {
     console.error('Error al validar disponibilidad del plan:', error);
-    return planId in STATIC_PLANS;
+    return false;
   }
 };
 
 /**
- * ✅ MANTENER: Obtiene todos los IDs de planes disponibles
- */
-export const getAvailablePlanIds = async (): Promise<string[]> => {
-  try {
-    const plans = await getSubscriptionPlans();
-    return Object.keys(plans);
-  } catch (error) {
-    console.error('Error al obtener IDs de planes:', error);
-    return Object.keys(STATIC_PLANS);
-  }
-};
-
-/**
- * ✅ MANTENER: Invalida el cache de planes
- */
-export const invalidatePlansCache = (): void => {
-  console.log('🗑️ Invalidando cache de planes');
-  plansCache = null;
-  cacheTimestamp = 0;
-};
-
-/**
- * ✅ MANTENER: Obtiene el plan recomendado
+ * ✅ FUNCIÓN PARA COMPATIBILIDAD: Obtiene el plan recomendado
  */
 export const getRecommendedPlan = async (): Promise<SubscriptionPlan | null> => {
   try {
@@ -276,42 +294,22 @@ export const getRecommendedPlan = async (): Promise<SubscriptionPlan | null> => 
       }
     }
     
-    // Si no hay plan recomendado, devolver premium por defecto
-    return plans.premium || null;
+    // Si no hay plan recomendado, devolver premium por defecto si existe
+    return plans.premium || Object.values(plans)[0] || null;
     
   } catch (error) {
     console.error('Error al obtener plan recomendado:', error);
-    return STATIC_PLANS.premium || null;
+    return null;
   }
 };
 
 /**
- * ✅ MANTENER: Obtiene planes ordenados por precio
- */
-export const getPlansByPrice = async (ascending: boolean = true): Promise<SubscriptionPlan[]> => {
-  try {
-    const plans = await getSubscriptionPlans();
-    const plansArray = Object.values(plans);
-    
-    return plansArray.sort((a, b) => {
-      const priceA = a.price.monthly;
-      const priceB = b.price.monthly;
-      return ascending ? priceA - priceB : priceB - priceA;
-    });
-    
-  } catch (error) {
-    console.error('Error al ordenar planes por precio:', error);
-    return Object.values(STATIC_PLANS);
-  }
-};
-
-/**
- * ✅ MANTENER: Calcula descuento semestral
+ * ✅ FUNCIÓN PARA COMPATIBILIDAD: Calcula descuento semestral
  */
 export const calculateSemiannualDiscount = async (planId: string): Promise<number> => {
   try {
     const plan = await getSubscriptionPlan(planId);
-    if (!plan) return 0;
+    if (!plan || plan.planType === 'service') return 0;
     
     const monthlyTotal = plan.price.monthly * 6;
     const semiannualPrice = plan.price.semiannual;
@@ -327,12 +325,12 @@ export const calculateSemiannualDiscount = async (planId: string): Promise<numbe
 };
 
 /**
- * ✅ MANTENER: Verifica si los planes dinámicos están habilitados
+ * ✅ FUNCIÓN PARA COMPATIBILIDAD: Verifica si los planes dinámicos están habilitados
  */
 export const hasDynamicPlansEnabled = async (): Promise<boolean> => {
   try {
-    const managedPlans = await getActivePlans();
-    return managedPlans.length > 0;
+    const hasFirebase = await hasFirebasePlans();
+    return hasFirebase;
   } catch (error) {
     console.error('Error verificando planes dinámicos:', error);
     return false;
@@ -340,11 +338,104 @@ export const hasDynamicPlansEnabled = async (): Promise<boolean> => {
 };
 
 /**
- * ✅ MANTENER: Obtiene información de compatibilidad del plan
+ * ✅ NUEVA: Verifica si hay planes de Firebase disponibles
+ */
+export const hasFirebasePlans = async (): Promise<boolean> => {
+  try {
+    const managedPlans = await getActivePlans();
+    const activePlans = managedPlans.filter(plan => 
+      plan.isActive && (plan.isPublished || plan.publishOnHomepage)
+    );
+    
+
+    return activePlans.length > 0;
+  } catch (error) {
+    console.error('Error verificando planes de Firebase:', error);
+    return false;
+  }
+};
+
+/**
+ * ✅ NUEVA: Verifica si un plan existe
+ */
+export const planExists = async (planId: string): Promise<boolean> => {
+  try {
+    const plans = await getSubscriptionPlans();
+    return planId in plans;
+  } catch (error) {
+    console.error('Error al validar existencia del plan:', error);
+    return planId in STATIC_PLANS;
+  }
+};
+
+/**
+ * ✅ NUEVA: Obtiene información de debug del sistema
+ */
+export const getSystemDebugInfo = async () => {
+  try {
+    const hasFirebase = await hasFirebasePlans();
+    const plansInfo = await getAllDynamicPlans();
+    
+    return {
+      hasFirebasePlans: hasFirebase,
+      source: plansInfo.source,
+      totalPlans: plansInfo.totalCount,
+      firebasePlansCount: Object.keys(plansInfo.firebasePlans).length,
+      fallbackPlansCount: Object.keys(plansInfo.fallbackPlans).length,
+      cacheStatus: plansCache ? 'cached' : 'empty',
+      lastUpdate: new Date(cacheTimestamp).toISOString()
+    };
+  } catch (error) {
+    console.error('Error obteniendo info de debug:', error);
+    return null;
+  }
+};
+
+/**
+ * ✅ FUNCIONES ADICIONALES PARA COMPATIBILIDAD
+ */
+
+/**
+ * Obtiene todos los IDs de planes disponibles
+ */
+export const getAvailablePlanIds = async (): Promise<string[]> => {
+  try {
+    const plans = await getSubscriptionPlans();
+    return Object.keys(plans);
+  } catch (error) {
+    console.error('Error al obtener IDs de planes:', error);
+    return [];
+  }
+};
+
+/**
+ * Obtiene planes ordenados por precio
+ */
+export const getPlansByPrice = async (ascending: boolean = true): Promise<SubscriptionPlan[]> => {
+  try {
+    const plans = await getSubscriptionPlans();
+    const plansArray = Object.values(plans);
+    
+    return plansArray.sort((a, b) => {
+      const priceA = a.price.monthly;
+      const priceB = b.price.monthly;
+      return ascending ? priceA - priceB : priceB - priceA;
+    });
+    
+  } catch (error) {
+    console.error('Error al ordenar planes por precio:', error);
+    return [];
+  }
+};
+
+/**
+ * Obtiene información de compatibilidad del plan
  */
 export const getPlanCompatibilityInfo = async (planId: string) => {
   try {
     const plan = await getSubscriptionPlan(planId);
+    const hasFirebase = await hasFirebasePlans();
+    
     if (!plan) {
       return {
         exists: false,
@@ -354,8 +445,9 @@ export const getPlanCompatibilityInfo = async (planId: string) => {
       };
     }
     
-    const isStatic = planId in STATIC_PLANS;
-    const isDynamic = !isStatic;
+    // Si hay planes de Firebase, el plan es dinámico, sino es estático
+    const isDynamic = hasFirebase;
+    const isStatic = !isDynamic;
     
     return {
       exists: true,
@@ -374,46 +466,5 @@ export const getPlanCompatibilityInfo = async (planId: string) => {
       isDynamic: false,
       needsMigration: true
     };
-  }
-};
-
-/**
- * ✅ NUEVA: Obtiene planes publicados para homepage
- */
-export const getPublishedPlans = async (): Promise<SubscriptionPlan[]> => {
-  try {
-    const managedPlans = await getActivePlans();
-    
-    return managedPlans
-      .filter(plan => plan.isActive && plan.isPublished)
-      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-      .map(convertManagedPlan);
-      
-  } catch (error) {
-    console.error('Error al obtener planes publicados:', error);
-    // Fallback: devolver los primeros 3 planes estáticos
-    return Object.values(STATIC_PLANS).slice(0, 3);
-  }
-};
-
-/**
- * ✅ NUEVA: Limpia cache de planes
- */
-export const clearPlansCache = (): void => {
-  plansCache = null;
-  cacheTimestamp = 0;
-  console.log('🗑️ Cache de planes limpiado');
-};
-
-/**
- * ✅ NUEVA: Verifica si un plan existe
- */
-export const planExists = async (planId: string): Promise<boolean> => {
-  try {
-    const plans = await getSubscriptionPlans();
-    return !!plans[planId];
-  } catch (error) {
-    console.error('Error verificando existencia de plan:', error);
-    return false;
   }
 };

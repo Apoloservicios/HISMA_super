@@ -56,7 +56,7 @@ export const updateLubricentroFields = async (
     
     await updateDoc(lubricentroRef, updateData);
     
-    console.log('✅ SuperAdmin: Lubricentro actualizado exitosamente');
+
   } catch (error) {
     console.error('❌ SuperAdmin: Error al actualizar lubricentro:', error);
     throw error;
@@ -71,7 +71,7 @@ export const resetServiceCounters = async (
   newTotalServices?: number
 ): Promise<void> => {
   try {
-    console.log(`🔄 SuperAdmin: Reseteando contadores para ${lubricentroId}`);
+   
     
     const updateData: any = {
       servicesUsed: 0,
@@ -86,8 +86,7 @@ export const resetServiceCounters = async (
     
     const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
     await updateDoc(lubricentroRef, updateData);
-    
-    console.log('✅ SuperAdmin: Contadores reseteados');
+   
   } catch (error) {
     console.error('❌ SuperAdmin: Error al resetear contadores:', error);
     throw error;
@@ -103,7 +102,7 @@ export const extendSubscription = async (
   updatePaymentStatus: boolean = true
 ): Promise<void> => {
   try {
-    console.log(`📅 SuperAdmin: Extendiendo suscripción ${extensionMonths} meses para ${lubricentroId}`);
+
     
     const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
     
@@ -136,7 +135,7 @@ export const extendSubscription = async (
     
     await updateDoc(lubricentroRef, updateData);
     
-    console.log('✅ SuperAdmin: Suscripción extendida exitosamente');
+
   } catch (error) {
     console.error('❌ SuperAdmin: Error al extender suscripción:', error);
     throw error;
@@ -153,7 +152,7 @@ export const changeLubricentroPlan = async (
   resetCounters: boolean = false
 ): Promise<void> => {
   try {
-    console.log(`📋 SuperAdmin: Cambiando plan para ${lubricentroId} a ${newPlan}`);
+
     
     const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
     
@@ -174,7 +173,7 @@ export const changeLubricentroPlan = async (
     
     await updateDoc(lubricentroRef, updateData);
     
-    console.log('✅ SuperAdmin: Plan cambiado exitosamente');
+
   } catch (error) {
     console.error('❌ SuperAdmin: Error al cambiar plan:', error);
     throw error;
@@ -189,7 +188,7 @@ export const toggleLubricentroStatus = async (
   newStatus: 'activo' | 'inactivo' | 'trial'
 ): Promise<void> => {
   try {
-    console.log(`🔄 SuperAdmin: Cambiando estado de ${lubricentroId} a ${newStatus}`);
+
     
     const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
     
@@ -207,7 +206,7 @@ export const toggleLubricentroStatus = async (
     
     await updateDoc(lubricentroRef, updateData);
     
-    console.log('✅ SuperAdmin: Estado cambiado exitosamente');
+
   } catch (error) {
     console.error('❌ SuperAdmin: Error al cambiar estado:', error);
     throw error;
@@ -221,7 +220,7 @@ export const bulkUpdateLubricentros = async (
   updates: Array<{ id: string; data: Partial<Lubricentro> }>
 ): Promise<void> => {
   try {
-    console.log(`🔧 SuperAdmin: Actualizacion masiva de ${updates.length} lubricentros`);
+
     
     const batch = writeBatch(db);
     
@@ -235,7 +234,7 @@ export const bulkUpdateLubricentros = async (
     
     await batch.commit();
     
-    console.log('✅ SuperAdmin: Actualización masiva completada');
+
   } catch (error) {
     console.error('❌ SuperAdmin: Error en actualización masiva:', error);
     throw error;
@@ -247,7 +246,7 @@ export const bulkUpdateLubricentros = async (
  */
 export const getSuperAdminStats = async () => {
   try {
-    console.log('📊 SuperAdmin: Obteniendo estadísticas avanzadas...');
+
     
     // Obtener todos los lubricentros
     const lubricentrosSnapshot = await getDocs(collection(db, 'lubricentros'));
@@ -291,7 +290,7 @@ export const getSuperAdminStats = async () => {
       }, {} as Record<string, number>)
     };
     
-    console.log('✅ SuperAdmin: Estadísticas calculadas:', stats);
+
     return stats;
     
   } catch (error) {
@@ -309,7 +308,7 @@ export const validateAndFixLubricentroData = async (lubricentroId: string): Prom
   corrections: string[];
 }> => {
   try {
-    console.log(`🔍 SuperAdmin: Validando datos de ${lubricentroId}`);
+
     
     const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
     const lubricentroSnap = await getDoc(lubricentroRef);
@@ -352,7 +351,7 @@ export const validateAndFixLubricentroData = async (lubricentroId: string): Prom
       corrections.push('Datos corregidos en Firebase');
     }
     
-    console.log('✅ SuperAdmin: Validación completada', { issues, corrections });
+
     
     return {
       fixed: Object.keys(fixes).length > 0,

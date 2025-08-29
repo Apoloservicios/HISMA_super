@@ -491,7 +491,7 @@ export const initializeDefaultPlans = async (createdBy: string): Promise<void> =
         name: 'Plan Iniciante',
         description: 'Ideal para lubricentros que están comenzando',
         planType: PlanType.MONTHLY,
-        price: { monthly: 1500, semiannual: 8000 },
+        price: { monthly: 15000, semiannual: 8000 },
         maxUsers: 1,
         maxMonthlyServices: 25,
         features: [

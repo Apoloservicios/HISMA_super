@@ -33,10 +33,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'https://hisma-api.verc
  */
 export const createPayment = async (request: PaymentRequest): Promise<PaymentResponse> => {
   try {
-    console.log('💳 === INICIANDO PROCESO DE PAGO ===');
-    console.log('📋 Plan ID:', request.planId);
-    console.log('📋 Plan Type:', request.planType);
-    console.log('💰 Amount:', request.amount);
+
     
     // ✅ DETERMINAR TIPO DE PLAN BASADO EN EL PLAN ID O PLAN TYPE
     const isServicePlan = request.planType === 'service' || 
@@ -45,10 +42,10 @@ export const createPayment = async (request: PaymentRequest): Promise<PaymentRes
                          (request.amount && request.amount < 3000); // Heurística: planes baratos son por servicios
     
     if (isServicePlan) {
-      console.log('🔧 Detectado como PAGO ÚNICO para plan por servicios');
+  
       return await createSinglePayment(request);
     } else {
-      console.log('🔄 Detectado como SUSCRIPCIÓN para plan recurrente');
+   
       return await createSubscription(request);
     }
     
@@ -66,7 +63,7 @@ export const createPayment = async (request: PaymentRequest): Promise<PaymentRes
  */
 const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResponse> => {
   try {
-    console.log('🔧 === CREANDO PAGO ÚNICO ===');
+
     
     // ✅ EXTERNAL REFERENCE CORREGIDO
     const externalReference = request.external_reference || 
@@ -84,7 +81,7 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
       external_reference: externalReference
     };
 
-    console.log('📤 Enviando datos de pago único con external_reference:', externalReference);
+
 
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-payment`, {
       method: 'POST',
@@ -101,7 +98,7 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
       throw new Error(data.message || 'Error creando pago único');
     }
 
-    console.log('✅ Pago único creado exitosamente:', data);
+
     
     return {
       success: true,
@@ -125,7 +122,7 @@ const createSinglePayment = async (request: PaymentRequest): Promise<PaymentResp
  */
 const createSubscription = async (request: PaymentRequest): Promise<PaymentResponse> => {
   try {
-    console.log('🔄 === CREANDO SUSCRIPCIÓN ===');
+  
     
     if (!request.billingType) {
       throw new Error('billingType es requerido para suscripciones');
@@ -147,7 +144,7 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
       external_reference: externalReference
     };
 
-    console.log('📤 Enviando datos de suscripción con external_reference:', externalReference);
+   
 
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-subscription`, {
       method: 'POST',
@@ -164,7 +161,7 @@ const createSubscription = async (request: PaymentRequest): Promise<PaymentRespo
       throw new Error(data.message || 'Error creando suscripción');
     }
 
-    console.log('✅ Suscripción creada exitosamente:', data);
+
     
     return {
       success: true,
@@ -262,11 +259,7 @@ export const createMercadoPagoPaymentCompat = async (params: {
   // ✅ DETECTAR AUTOMÁTICAMENTE EL TIPO DE PLAN
   const detectedPlanType = isServicePlan(params.planType, undefined, params.amount) ? 'service' : 'monthly';
   
-  console.log('🔍 Plan detectado automáticamente:', {
-    originalPlanType: params.planType,
-    detectedPlanType,
-    amount: params.amount
-  });
+
 
   const paymentRequest: PaymentRequest = {
     lubricentroId: params.lubricentroId,

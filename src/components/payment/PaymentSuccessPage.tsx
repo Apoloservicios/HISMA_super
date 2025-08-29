@@ -44,8 +44,7 @@ const PaymentSuccessPage: React.FC = () => {
   useEffect(() => {
     const processPayment = async () => {
       try {
-        console.log('🎯 Iniciando procesamiento de pago exitoso...');
-        console.log('📋 Parámetros:', { paymentId, status, merchantOrderId, external_reference });
+
 
         // ✅ VALIDAR PARÁMETROS REQUERIDOS
         if (!paymentId) {
@@ -77,7 +76,7 @@ const PaymentSuccessPage: React.FC = () => {
           planId = planMatch ? planMatch[1] : null;
         }
 
-        console.log(`🔄 Procesando pago para lubricentro: ${lubricentroId}, plan: ${planId || 'no especificado'}`);
+
 
         // ✅ PROCESAR EL PAGO
         const result = await processSuccessfulPayment(

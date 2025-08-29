@@ -13,6 +13,15 @@ import { SortableOilChangeTable } from '../../components/tables/SortableOilChang
 
 import EnhancedPrintComponent from '../../components/print/EnhancedPrintComponent';
 import  enhancedPdfService  from '../../services/enhancedPdfService';
+
+
+import { 
+  globalSearchOilChanges, 
+  duplicateOilChangeToLubricentro 
+} from '../../services/oilChangeService';
+import GlobalSearchComponent from '../../components/oilchange/GlobalSearchComponent';
+import DuplicateOilChangeModal from '../../components/oilchange/DuplicateOilChangeModal';
+
 import { 
   QueryDocumentSnapshot,
   DocumentData
@@ -30,7 +39,8 @@ import {
   EyeIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  ClockIcon  
+  ClockIcon  ,
+  BuildingStorefrontIcon
 } from '@heroicons/react/24/outline';
 
 import { OilChangeStatusBadge } from '../../components/oilchange/OilChangeStatusButton';
@@ -72,28 +82,113 @@ const OilChangeListPage: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 const [isStale, setIsStale] = useState(false); // Para indicar si los datos pueden estar desactualizados
 
+const [showGlobalSearch, setShowGlobalSearch] = useState(false);
+const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+
+
   
   // Estados para búsqueda y filtrado
   const [searchTerm, setSearchTerm] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   
-  // Estados para el PDF y compartir
-  const [selectedOilChange, setSelectedOilChange] = useState<OilChange | null>(null);
-  const [selectedLubricentro, setSelectedLubricentro] = useState<Lubricentro | null>(null);
-  const [showingPdfPreview, setShowingPdfPreview] = useState(false);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
+    // Estados para el PDF y compartir
+    const [selectedOilChange, setSelectedOilChange] = useState<OilChange | null>(null);
+    const [selectedLubricentro, setSelectedLubricentro] = useState<Lubricentro | null>(null);
+    const [showingPdfPreview, setShowingPdfPreview] = useState(false);
+    const [generatingPdf, setGeneratingPdf] = useState(false);
   
-  // Estados para paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 10; // Cambiado de 20 a 10 para mejor usabilidad
+    // Estados para paginación
+    const [currentPage, setCurrentPage] = useState(1);
+    const PAGE_SIZE = 10; // Cambiado de 20 a 10 para mejor usabilidad
   
-  // Estados para ordenamiento
-const [sortBy, setSortBy] = useState<'nroCambio' | 'fechaServicio' | 'createdAt'>('fechaServicio');
-const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+      // Estados para ordenamiento
+    const [sortBy, setSortBy] = useState<'nroCambio' | 'fechaServicio' | 'createdAt'>('fechaServicio');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
- const debouncedSearchTerm = useDebounce(searchTerm, 300);
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-// ✅ FUNCIÓN CORREGIDA para OilChangeListPage.tsx
+    // Función para manejar búsqueda global
+    const handleGlobalSearch = async (searchTerm: string) => {
+      if (!userProfile?.lubricentroId) {
+        throw new Error('No se encontró información del lubricentro');
+      }
+      
+      setGlobalSearchLoading(true);
+      try {
+        const results = await globalSearchOilChanges(
+          searchTerm,
+          userProfile.lubricentroId
+        );
+        return results;
+      } finally {
+        setGlobalSearchLoading(false);
+      }
+    };
+
+
+    const handleViewExternalDetails = (oilChange: any) => {
+        // Mostrar información más detallada en un alert mejorado
+        const info = `
+      SERVICIO DE OTRO LUBRICENTRO
+
+      Lubricentro: ${oilChange.lubricentroName}
+      Fecha: ${new Date(oilChange.fechaServicio).toLocaleDateString('es-ES')}
+
+      CLIENTE:
+      ${oilChange.nombreCliente}
+      Tel: ${oilChange.celular || 'No registrado'}
+
+      VEHÍCULO:
+      ${oilChange.marcaVehiculo} ${oilChange.modeloVehiculo} (${oilChange.añoVehiculo || 'N/A'})
+      Dominio: ${oilChange.dominioVehiculo}
+      Km: ${oilChange.kmActuales?.toLocaleString() || 'N/A'}
+
+      ACEITE:
+      ${oilChange.marcaAceite} ${oilChange.tipoAceite} ${oilChange.sae}
+      Cantidad: ${oilChange.cantidadAceite}L
+
+      ¿Desea usar estos datos como base para un nuevo servicio?
+        `;
+        
+        if (window.confirm(info)) {
+            handleDuplicate(oilChange);
+          }
+      };
+    // Función para manejar duplicación
+  const handleDuplicate = (oilChange: any) => {
+  // En lugar de abrir modal, navegar al formulario con los datos precargados
+  const searchParams = new URLSearchParams({
+    useAsBase: 'true',
+    sourceData: JSON.stringify({
+      nombreCliente: oilChange.nombreCliente,
+      celular: oilChange.celular,
+      dominioVehiculo: oilChange.dominioVehiculo,
+      marcaVehiculo: oilChange.marcaVehiculo,
+      modeloVehiculo: oilChange.modeloVehiculo,
+      tipoVehiculo: oilChange.tipoVehiculo,
+      añoVehiculo: oilChange.añoVehiculo,
+      marcaAceite: oilChange.marcaAceite,
+      tipoAceite: oilChange.tipoAceite,
+      sae: oilChange.sae,
+      cantidadAceite: oilChange.cantidadAceite,
+      perioricidad_servicio: oilChange.perioricidad_servicio || 6,
+      // Datos del servicio original para referencia
+      originalLubricentro: oilChange.lubricentroName,
+      originalFecha: oilChange.fechaServicio,
+      originalKm: oilChange.kmActuales
+    })
+  });
+  
+  navigate(`/cambios-aceite/nuevo?${searchParams.toString()}`);
+};
+
+
+
+   
+
+
+
+ // ✅ FUNCIÓN CORREGIDA para OilChangeListPage.tsx
 
 const loadOilChanges = async (reset: boolean = false) => {
   if (loading && !reset) return;
@@ -311,16 +406,22 @@ const handleEdit = (id: string) => {
         }
       }
 
+      // Verificar número de teléfono
       const phoneNumber = oilChange.celular?.replace(/\D/g, '');
       if (!phoneNumber) {
         alert('No hay número de teléfono registrado para este cliente');
         return;
       }
 
-      const message = `¡Hola ${oilChange.nombreCliente}! Te envío el comprobante de tu cambio de aceite realizado el ${new Date(oilChange.fechaServicio).toLocaleDateString('es-ES')} en ${selectedLubricentro?.fantasyName}. Tu próximo cambio está programado para el ${new Date(oilChange.fechaProximoCambio).toLocaleDateString('es-ES')}.`;
+      // ✅ USAR LA FUNCIÓN COMPLETA DEL ENHANCED PDF SERVICE
+      const lubricentroName = selectedLubricentro?.fantasyName || 'Lubricentro';
+      const { whatsappUrl, whatsappUrlWithPhone } = enhancedPdfService.generateWhatsAppMessage(
+        oilChange,
+        lubricentroName
+      );
 
-      const whatsappUrl = `https://wa.me/54${phoneNumber}?text=${encodeURIComponent(message)}`;
-      window.open(whatsappUrl, '_blank');
+      // Abrir WhatsApp con el mensaje completo
+      window.open(whatsappUrlWithPhone || whatsappUrl, '_blank');
 
     } catch (error) {
       console.error('Error al compartir:', error);
@@ -446,6 +547,29 @@ useEffect(() => {
           </div>
         </CardBody>
       </Card>
+
+
+      {/* Búsqueda Global - Agregar después de la Card de búsqueda local */}
+        <div className="mb-6">
+          <Button
+            color={showGlobalSearch ? "secondary" : "primary"}
+            variant={showGlobalSearch ? "solid" : "outline"}
+            onClick={() => setShowGlobalSearch(!showGlobalSearch)}
+            icon={<BuildingStorefrontIcon className="h-5 w-5" />}
+          >
+            {showGlobalSearch ? 'Ocultar Búsqueda Global' : 'Buscar en Otros Lubricentros'}
+          </Button>
+        </div>
+
+        {/* Componente de búsqueda global */}
+        {showGlobalSearch && (
+          <GlobalSearchComponent
+            onSearch={handleGlobalSearch}
+            onDuplicate={handleDuplicate}
+            onViewDetails={handleViewExternalDetails}
+            loading={globalSearchLoading}
+          />
+        )}
 
       {/* Mostrar errores */}
       {error && (
@@ -665,6 +789,7 @@ useEffect(() => {
               </div>
             </div>
           )}
+          
         </Card>
       ) : !loading && !error ? (
         <Card>
@@ -739,6 +864,8 @@ useEffect(() => {
         </div>
       )}
 
+
+
       {/* Modal de vista previa del PDF (si se necesita) */}
       {showingPdfPreview && selectedOilChange && selectedLubricentro && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -759,7 +886,11 @@ useEffect(() => {
           </div>
         </div>
       )}
+      
+  
+      
     </PageContainer>
+    
   );
 };
 

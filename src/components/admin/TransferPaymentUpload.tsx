@@ -53,16 +53,12 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
     const loadLubricentroData = async () => {
       try {
         setLoadingLubricentro(true);
-        console.log('🏢 Cargando datos del lubricentro:', lubricentroId);
+    
         
         const data = await getLubricentroById(lubricentroId);
         if (data) {
           setLubricentroData(data);
-          console.log('✅ Datos del lubricentro cargados:', {
-            fantasyName: data.fantasyName,
-            cuit: data.cuit,
-            responsable: data.responsable
-          });
+       
         } else {
           console.warn('⚠️ No se encontraron datos del lubricentro');
         }
@@ -122,11 +118,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
       }
 
       setSelectedFile(file);
-      console.log('📄 Archivo seleccionado:', {
-        name: file.name,
-        size: file.size,
-        type: file.type
-      });
+ 
     }
   };
 
@@ -169,10 +161,10 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
     setResult(null);
 
     try {
-      console.log('🚀 Enviando pago por transferencia con datos completos...');
+      
 
       // ✅ CONVERTIR ARCHIVO A BASE64
-      console.log('📄 Convirtiendo archivo a base64...');
+   
       const base64Content = await convertFileToBase64(selectedFile);
       
       const fileData = {
@@ -200,12 +192,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
         currentPlan: lubricentroData.subscriptionPlan || 'Sin plan'
       };
 
-      console.log('🏢 Información completa del lubricentro preparada:', {
-        fantasyName: lubricentroInfo.fantasyName,
-        responsable: lubricentroInfo.responsable,
-        cuit: lubricentroInfo.cuit,
-        domicilio: lubricentroInfo.domicilio
-      });
+    
 
       // ✅ PREPARAR DATOS JSON CON INFORMACIÓN COMPLETA
       const requestData = {
@@ -217,7 +204,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
         lubricentroInfo: lubricentroInfo
       };
 
-      console.log('📤 Enviando datos completos al backend...');
+
 
       // ✅ ENVIAR AL BACKEND
       const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
@@ -232,7 +219,7 @@ export const TransferPaymentUpload: React.FC<TransferPaymentUploadProps> = ({
       const data = await response.json();
 
       if (data.success) {
-        console.log('✅ Transfer payment enviado exitosamente:', data.requestId);
+
         
         setResult({
           success: true,

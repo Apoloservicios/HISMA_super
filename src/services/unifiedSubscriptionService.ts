@@ -36,10 +36,10 @@ export class UnifiedSubscriptionService {
     }
 
     try {
-      console.log('🔄 Cargando planes de suscripción...');
+  
       this.plansCache = await getSubscriptionPlans();
       this.lastCacheUpdate = now;
-      console.log(`✅ ${Object.keys(this.plansCache).length} planes cargados`);
+
       return this.plansCache;
     } catch (error) {
       console.error('❌ Error cargando planes dinámicos, usando fallback:', error);
@@ -153,7 +153,7 @@ export class UnifiedSubscriptionService {
 
       await updateDoc(lubricentroRef, updateData);
       
-      console.log(`✅ Servicio consumido para lubricentro ${lubricentroId}`);
+ 
 
     } catch (error) {
       console.error('❌ Error consumiendo servicio:', error);
@@ -200,7 +200,7 @@ export class UnifiedSubscriptionService {
 
       await updateLubricentro(lubricentroId, updateData);
       
-      console.log(`✅ Suscripción activada: ${planId} para ${lubricentroId}`);
+
 
     } catch (error) {
       console.error('❌ Error activando suscripción:', error);
@@ -214,7 +214,7 @@ export class UnifiedSubscriptionService {
   clearPlansCache(): void {
     this.plansCache = {};
     this.lastCacheUpdate = 0;
-    console.log('🗑️ Cache de planes limpiado');
+
   }
 }
 

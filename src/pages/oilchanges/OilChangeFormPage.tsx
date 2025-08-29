@@ -19,6 +19,7 @@ import {
 import { ImprovedInput } from '../../components/ui/ImprovedInput';
 import OperatorSelect from '../../components/forms/OperatorSelect';
 import AutocompleteInput from '../../components/common/AutocompleteInput';
+import QRCodeGeneratorNative from '../../components/qr/QRCodeGeneratorNative';
 
 import { 
   createOilChange, 
@@ -217,6 +218,10 @@ const OilChangeFormPage: React.FC = () => {
 
           targetLubricentroId = oilChangeData.lubricentroId;
           lubricentroData = await getLubricentroById(targetLubricentroId);
+          if (!lubricentroData) {
+            setError('No se encontró información del lubricentro');
+            return;
+          }
           
           if (!lubricentroData) {
             setError('No se encontró información del lubricentro del servicio');
@@ -250,6 +255,10 @@ const OilChangeFormPage: React.FC = () => {
 
           targetLubricentroId = userProfile.lubricentroId;
           lubricentroData = await getLubricentroById(targetLubricentroId);
+          if (!lubricentroData) {
+            setError('No se encontró información del lubricentro');
+            return;
+          }
           
           const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
           const today = new Date();
@@ -303,6 +312,113 @@ const OilChangeFormPage: React.FC = () => {
           return;
         }
 
+      // 🆕 NUEVA LÓGICA: Manejar datos de búsqueda global
+              const useAsBase = queryParams.get('useAsBase');
+              const sourceDataParam = queryParams.get('sourceData');
+
+              if (useAsBase === 'true' && sourceDataParam) {
+                try {
+                  const sourceData = JSON.parse(decodeURIComponent(sourceDataParam));
+                  
+                  // Verificar userProfile primero
+                  if (!userProfile?.lubricentroId) {
+                    setError('No se encontró información del lubricentro para crear un nuevo servicio');
+                    return;
+                  }
+                  
+                  // Obtener datos del lubricentro actual
+                  targetLubricentroId = userProfile.lubricentroId;
+                  lubricentroData = await getLubricentroById(targetLubricentroId);
+                  
+                  if (!lubricentroData) {
+                    setError('No se encontró información del lubricentro');
+                    return;
+                  }
+                  
+                  const nextNumber = await getNextOilChangeNumber(targetLubricentroId, lubricentroData.ticketPrefix);
+                  const today = new Date();
+                  const nextChangeDate = calculateNextChangeDate(today, sourceData.perioricidad_servicio || 6);
+                  
+                  // Precargar formulario con datos del servicio encontrado
+                  setFormData({
+                    // Datos del lubricentro actual
+                    lubricentroId: targetLubricentroId,
+                    lubricentroNombre: lubricentroData.fantasyName,
+                    nroCambio: nextNumber,
+                    fecha: today,
+                    fechaServicio: today,
+                    fechaProximoCambio: nextChangeDate,
+                    
+                    // Datos del cliente y vehículo (precargados)
+                    nombreCliente: sourceData.nombreCliente || '',
+                    celular: sourceData.celular || '',
+                    dominioVehiculo: sourceData.dominioVehiculo || '',
+                    marcaVehiculo: sourceData.marcaVehiculo || '',
+                    modeloVehiculo: sourceData.modeloVehiculo || '',
+                    tipoVehiculo: sourceData.tipoVehiculo || 'Automóvil',
+                    añoVehiculo: sourceData.añoVehiculo,
+                    
+                    // Datos del aceite (precargados pero modificables)
+                    marcaAceite: sourceData.marcaAceite || '',
+                    tipoAceite: sourceData.tipoAceite || '',
+                    sae: sourceData.sae || '',
+                    cantidadAceite: sourceData.cantidadAceite || 4,
+                    perioricidad_servicio: sourceData.perioricidad_servicio || 6,
+                    
+                    // Campos en blanco para que el usuario complete
+                    kmActuales: 0,
+                    kmProximo: 0,
+                    observaciones: `Basado en servicio de ${sourceData.originalLubricentro} (${new Date(sourceData.originalFecha).toLocaleDateString('es-ES')}, ${sourceData.originalKm?.toLocaleString() || 'N/A'} km)`,
+                    
+                    // Filtros en false por defecto (usuario decide)
+                    filtroAceite: false,
+                    filtroAceiteNota: '',
+                    filtroAire: false,
+                    filtroAireNota: '',
+                    filtroHabitaculo: false,
+                    filtroHabitaculoNota: '',
+                    filtroCombustible: false,
+                    filtroCombustibleNota: '',
+                    aditivo: false,
+                    aditivoNota: '',
+                    refrigerante: false,
+                    refrigeranteNota: '',
+                    diferencial: false,
+                    diferencialNota: '',
+                    caja: false,
+                    cajaNota: '',
+                    engrase: false,
+                    engraseNota: '',
+                    
+                    // Operario actual (CORREGIDO)
+                    nombreOperario: userProfile ? `${userProfile.nombre || ''} ${userProfile.apellido || ''}`.trim() || userProfile.email || '' : '',
+                    operatorId: userProfile.id || '',
+                  });
+                  
+                  setLubricentro(lubricentroData);
+                  
+                  // Mostrar mensaje informativo
+                  setSuccess('Datos precargados desde búsqueda global. Revise y modifique según sea necesario.');
+                  
+                  return;
+                } catch (parseError) {
+                  console.error('Error al procesar datos de búsqueda global:', parseError);
+                  // Continuar con la carga normal si hay error
+                }
+              }
+
+              // Continuación del código normal para nuevo servicio...
+              if (!userProfile?.lubricentroId) {
+                setError('No se encontró información del lubricentro para crear un nuevo servicio');
+                return;
+              }
+
+
+
+
+
+
+
         if (!userProfile?.lubricentroId) {
           setError('No se encontró información del lubricentro para crear un nuevo servicio');
           return;
@@ -310,6 +426,10 @@ const OilChangeFormPage: React.FC = () => {
 
         targetLubricentroId = userProfile.lubricentroId;
         lubricentroData = await getLubricentroById(targetLubricentroId);
+        if (!lubricentroData) {
+          setError('No se encontró información del lubricentro');
+          return;
+        }
         
         if (!lubricentroData) {
           setError('No se encontró información del lubricentro');
@@ -1363,10 +1483,16 @@ const handleSubmit = async (e: React.FormEvent) => {
                     </div>
                   </div>
                 )}
+
+                
               </div>
+       
+              
             </CardBody>
           </Card>
         )}
+
+        
 
         {/* Botones de navegación mejorados */}
         <div className="flex justify-between mt-8">

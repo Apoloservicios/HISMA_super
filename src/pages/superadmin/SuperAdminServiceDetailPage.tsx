@@ -93,7 +93,7 @@ const SuperAdminServiceDetailPage: React.FC = () => {
 
   const handlePrintService = () => {
     // Implementar función de impresión/PDF
-    console.log('Imprimir servicio:', serviceId);
+
   };
 
   if (loading) {

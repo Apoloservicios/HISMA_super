@@ -47,18 +47,13 @@ const TransferPaymentEmailForm: React.FC<TransferPaymentEmailFormProps> = ({
       if (userProfile?.lubricentroId) {
         try {
           setLoadingLubricentro(true);
-          console.log('🏢 Cargando información completa del lubricentro:', userProfile.lubricentroId);
+          
           
           const lubricentro = await getLubricentroById(userProfile.lubricentroId);
           
           if (lubricentro) {
             setLubricentroInfo(lubricentro);
-            console.log('✅ Información del lubricentro cargada:', {
-              fantasyName: lubricentro.fantasyName,
-              cuit: lubricentro.cuit,
-              responsable: lubricentro.responsable,
-              domicilio: lubricentro.domicilio
-            });
+           
           }
         } catch (error) {
           console.error('❌ Error al obtener información del lubricentro:', error);
@@ -146,7 +141,7 @@ const TransferPaymentEmailForm: React.FC<TransferPaymentEmailFormProps> = ({
 
     try {
       // Convertir archivo a base64
-      console.log('📄 Convirtiendo archivo a base64...');
+     
       const base64Content = await convertFileToBase64(selectedFile);
       
       // ✅ PREPARAR INFORMACIÓN COMPLETA DEL LUBRICENTRO
@@ -262,12 +257,7 @@ Rol: ${userProfile?.role || 'No disponible'}
         }
       };
 
-      console.log('📧 Enviando email con información completa...');
-      console.log('🏢 Datos del lubricentro incluidos:', {
-        cuit: lubricentroCompleto.cuit,
-        responsable: lubricentroCompleto.responsable,
-        fantasyName: lubricentroCompleto.fantasyName
-      });
+   
 
       // ✅ ENVIAR EMAIL CON INFORMACIÓN COMPLETA
       const response = await fetch('https://hisma.com.ar/api/send-email-with-attachment.php', {
@@ -293,7 +283,7 @@ Rol: ${userProfile?.role || 'No disponible'}
       }
 
       if (result.success) {
-        console.log('✅ Email enviado exitosamente con información completa');
+       
         setSubmitted(true);
         if (onSuccess) onSuccess();
       } else {

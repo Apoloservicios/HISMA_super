@@ -41,12 +41,7 @@ export const createMercadoPagoSubscription = async (
   params: CreateSubscriptionParams
 ): Promise<SubscriptionResponse> => {
 
-  console.log('🎯 Iniciando creación de suscripción...');
-  console.log('📋 Parámetros:', {
-    ...params,
-    email: params.email.replace(/(.{2}).*(@.*)/, '$1***$2') // Ocultar email en logs
-  });
-  console.log('🔗 Backend URL:', BACKEND_URL);
+
 
   try {
     // ✅ VALIDACIONES EN EL FRONTEND
@@ -80,8 +75,7 @@ export const createMercadoPagoSubscription = async (
         `lubricentro_${params.lubricentroId}_plan_${params.planType}_${Date.now()}`
     };
 
-    console.log('✅ Validaciones pasadas, enviando solicitud...');
-    console.log('📋 External Reference final:', finalParams.external_reference);
+  
 
     // ✅ LLAMADA AL BACKEND CON EXTERNAL REFERENCE CORREGIDO
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/create-subscription`, {
@@ -94,14 +88,13 @@ export const createMercadoPagoSubscription = async (
       body: JSON.stringify(finalParams) // ✅ Incluye external_reference automáticamente
     });
 
-    console.log('📨 Response status:', response.status);
-    console.log('📨 Response URL:', response.url);
+
 
     // ✅ MANEJO DE RESPUESTA MEJORADO
     let responseData: MercadoPagoApiResponse;
     const responseText = await response.text();
     
-    console.log('📨 Response text preview:', responseText.substring(0, 200) + '...');
+   
 
     try {
       responseData = JSON.parse(responseText);
@@ -110,7 +103,7 @@ export const createMercadoPagoSubscription = async (
       throw new Error(`Respuesta inválida del servidor: ${responseText.substring(0, 100)}...`);
     }
 
-    console.log('📦 Respuesta parseada:', responseData);
+
 
     // ✅ MANEJO DE ERRORES HTTP
     if (!response.ok) {
@@ -146,12 +139,7 @@ export const createMercadoPagoSubscription = async (
       throw new Error('Datos de suscripción incompletos');
     }
 
-    console.log('✅ Suscripción creada exitosamente:', {
-      subscriptionId,
-      initUrl: initUrl.substring(0, 50) + '...',
-      status,
-      external_reference
-    });
+
 
     // ✅ ACTUALIZAR FIREBASE EN BACKGROUND
     try {
@@ -162,7 +150,7 @@ export const createMercadoPagoSubscription = async (
         updatedAt: new Date(),
   
       });
-      console.log('✅ Firebase actualizado correctamente');
+
     } catch (firebaseError) {
       console.error('⚠️ Error al actualizar Firebase (no crítico):', firebaseError);
       // No lanzar error aquí, la suscripción ya se creó
@@ -198,7 +186,7 @@ export const getMercadoPagoSubscription = async (subscriptionId: string) => {
   }
 
   try {
-    console.log('🔍 Obteniendo suscripción:', subscriptionId);
+
     
     const response = await fetch(
       `${BACKEND_URL}/api/mercadopago/get-subscription?id=${encodeURIComponent(subscriptionId)}`,
@@ -233,7 +221,7 @@ export const cancelMercadoPagoSubscription = async (subscriptionId: string): Pro
   }
 
   try {
-    console.log('❌ Cancelando suscripción:', subscriptionId);
+   
 
     const response = await fetch(`${BACKEND_URL}/api/mercadopago/cancel-subscription`, {
       method: 'POST',
@@ -260,7 +248,7 @@ export const cancelMercadoPagoSubscription = async (subscriptionId: string): Pro
             paymentStatus: 'cancelled' as any,
             updatedAt: new Date()
           });
-          console.log('✅ Suscripción cancelada en Firebase');
+    
         }
       } catch (firebaseError) {
         console.error('⚠️ Error al actualizar Firebase:', firebaseError);
@@ -308,7 +296,7 @@ export const findLubricentroBySubscriptionId = async (subscriptionId: string) =>
  */
 export const testMercadoPagoConnection = async (): Promise<boolean> => {
   try {
-    console.log('🧪 Probando conexión con backend...');
+
     
     const response = await fetch(`${BACKEND_URL}/api/health`, {
       method: 'GET',
@@ -318,11 +306,11 @@ export const testMercadoPagoConnection = async (): Promise<boolean> => {
     });
 
     const isHealthy = response.ok;
-    console.log(`${isHealthy ? '✅' : '❌'} Estado del backend:`, response.status);
+    
     
     if (isHealthy) {
       const data = await response.json();
-      console.log('📋 Respuesta del health check:', data);
+
     }
     
     return isHealthy;

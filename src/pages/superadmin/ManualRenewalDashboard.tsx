@@ -142,7 +142,6 @@ const ManualRenewalDashboard: React.FC = () => {
       setProcessing(true);
       setError(null);
 
-      console.log('🔄 Iniciando proceso manual de renovaciones...');
 
       const result: ProcessingResult = {
         processedCount: 0,
@@ -161,7 +160,7 @@ const ManualRenewalDashboard: React.FC = () => {
       ));
 
       result.processedCount = overdueSnapshot.size;
-      console.log(`📊 Encontrados ${result.processedCount} lubricentros para procesar`);
+
 
       // 2. Procesar cada lubricentro
       for (const docRef of overdueSnapshot.docs) {
@@ -172,11 +171,11 @@ const ManualRenewalDashboard: React.FC = () => {
             ...lubricentroData 
             };
     
-    console.log(`🔄 Procesando: ${lubricentro.fantasyName}`); 
+
 
           // Verificar auto-renovación
           if (!lubricentro.autoRenewal) {
-            console.log(`⏸️ Auto-renovación desactivada: ${lubricentro.fantasyName}`);
+   
             await expireSubscription(lubricentro);
             result.expiredCount++;
             continue;
@@ -210,7 +209,7 @@ const ManualRenewalDashboard: React.FC = () => {
       });
 
       setLastResult(result);
-      console.log('✅ Proceso manual completado:', result);
+
 
       // Recargar estadísticas
       await loadStats();

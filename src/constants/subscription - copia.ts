@@ -53,7 +53,7 @@ export const SUBSCRIPTION_CONSTANTS = {
       name: 'Plan Iniciante',
       maxUsers: 1,
       maxServices: 25,
-      price: { monthly: 50000, semiannual: 8000 }
+      price: { monthly: 1500, semiannual: 8000 }
     },
     basic: {
       id: 'basic', 

@@ -60,7 +60,6 @@ export const PlanSelector: React.FC<PlanSelectorProps> = ({
         ...(selectedPlan.planType !== 'service' && { billingType })
       };
 
-      console.log('🚀 Iniciando pago con datos:', paymentRequest);
       
       const result = await createPayment(paymentRequest);
       

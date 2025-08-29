@@ -103,7 +103,7 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
     setPaymentCheck(null);
 
     try {
-      console.log('🔍 Verificando Payment ID:', paymentId);
+     
 
       const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/admin/payment-history?action=check&paymentId=${paymentId.trim()}`);
@@ -111,7 +111,7 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
 
       if (data.success) {
         setPaymentCheck(data.data);
-        console.log('✅ Verificación completada:', data.data);
+        
       } else {
         setPaymentCheck({
           usado: false,
@@ -165,7 +165,7 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
     setResult(null);
 
     try {
-      console.log('🚀 Activando pago:', { paymentId, selectedPlan, lubricentroId });
+      
 
       const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/admin/activate-payment`, {
@@ -224,8 +224,7 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
   setLoading(true);
   
   try {
-    console.log('🚀 Creando pago para plan:', selectedPlan);
-    
+      
     const backendUrl = process.env.REACT_APP_BACKEND_URL || 'https://hisma-api.vercel.app';
     
     // ✅ CORRECCIÓN CRÍTICA: Usar el formato correcto que espera el backend
@@ -244,7 +243,7 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
       //                    ↑ Cambio principal: formato correcto
     };
     
-    console.log('📤 Enviando datos con external_reference corregido:', paymentData);
+ 
     
     // Llamar al endpoint correcto según el tipo de plan
     const endpoint = selectedPlanData?.isServicePlan ? 
@@ -261,12 +260,11 @@ export const PaymentActivator: React.FC<PaymentActivatorProps> = ({
 
     const data = await response.json();
     
-    console.log('📨 Respuesta del backend:', data);
+  
 
     if (data.success && data.data?.initUrl) {
-      console.log('✅ Redirigiendo a MercadoPago:', data.data.initUrl);
+     
       
-      // Mostrar mensaje informativo antes de redireccionar
       const confirmMessage = `
 🎯 Perfecto! Te redirigimos a MercadoPago para completar el pago.
 

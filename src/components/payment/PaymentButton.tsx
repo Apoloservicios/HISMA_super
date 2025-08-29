@@ -94,15 +94,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       setError(null);
 
       const detectedPlanType = detectPlanType();
-      
-      console.log('🎯 Iniciando proceso de pago...', { 
-        planType, 
-        detectedPlanType,
-        amount,
-        variant, 
-        currentPlanId,
-        isServicePlan
-      });
+     
 
       // ✅ VALIDACIONES BÁSICAS
       if (!userProfile?.lubricentroId) {
@@ -119,7 +111,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
 
       // ✅ MANEJAR UPGRADE DE PLAN (lubricentros activos)
       if (variant === 'upgrade' && currentPlanId) {
-        console.log('🔄 Preparando upgrade de plan...');
+  
         
         const upgradeResult = await changSubscriptionPlan(
           userProfile.lubricentroId,
@@ -131,20 +123,11 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
           throw new Error(upgradeResult.message);
         }
 
-        console.log('✅ Upgrade preparado, procediendo al pago...');
+    
       }
 
       const emailToSend = userProfile.email.trim() || 'soporte@hisma.com.ar';
 
-      console.log('📧 Datos de pago:', {
-        lubricentroId: userProfile.lubricentroId,
-        planId: planType,
-        planType: detectedPlanType, // ✅ USAR TIPO DETECTADO
-        billingType: detectedPlanType === 'service' ? 'monthly' : billingType, // Para servicios usar monthly
-        amount
-      });
-
-      // ✅ CREAR PAGO CON TIPO DETECTADO
       const result = await createPayment({
         lubricentroId: userProfile.lubricentroId,
         planId: planType, // ID del plan
@@ -153,14 +136,6 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
         amount,
         email: emailToSend,
         fantasyName: fantasyName || 'Lubricentro'
-      });
-
-      console.log('✅ Pago creado:', {
-        success: result.success,
-        type: result.data?.type,
-        hasInitUrl: !!result.data?.initUrl,
-        planSent: planType,
-        detectedType: detectedPlanType
       });
 
       // ✅ VERIFICAR QUE EL PAGO SE CREÓ CORRECTAMENTE
@@ -176,7 +151,7 @@ const PaymentButton: React.FC<PaymentButtonProps> = ({
       onPaymentInitiated?.();
 
       // ✅ REDIRECCIONAR A MERCADOPAGO
-      console.log('🚀 Redirigiendo a MercadoPago...');
+      
       window.location.href = result.data.initUrl;
 
     } catch (err) {

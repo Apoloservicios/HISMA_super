@@ -9,6 +9,9 @@ import OilChangeStatusButton from '../oilchange/OilChangeStatusButton';
 import { Button } from '../ui';
 import Tooltip from '../ui/Tooltip';
 
+import { QrCodeIcon } from '@heroicons/react/24/outline';
+import QRCodeGeneratorNative from '../../components/qr/QRCodeGeneratorNative';
+
 type SortField = 'nroCambio' | 'fechaServicio' | 'nombreCliente' | 'dominioVehiculo' | 'estado' | 'fechaProximoCambio';
 type SortDirection = 'asc' | 'desc';
 
@@ -47,6 +50,15 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
       setSortDirection('desc');
     }
   };
+
+  const handleQRClick = (oilChange: OilChange) => {
+  // Opción 1: Navegar a la página de detalle
+  onViewDetails(oilChange.id);
+  
+  // Opción 2: Abrir modal con QR (más complejo)
+  // setSelectedOilChangeForQR(oilChange);
+  // setShowQRModal(true);
+};
 
   // Función para extraer número del formato "AP-00005"
   const extractNumber = (nroCambio: string): number => {
@@ -284,6 +296,22 @@ export const SortableOilChangeTable: React.FC<SortableOilChangeTableProps> = ({
                       size="sm"
                     />
                   </div>
+
+                  {(oilChange.estado === 'completo' || oilChange.estado === 'enviado') && (
+                    <Tooltip content="Generar QR">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleQRClick(oilChange)}
+                      >
+                        <QrCodeIcon className="h-4 w-4" />
+                      </Button>
+                    </Tooltip>
+                  )}
+
+
+
+
                 </div>
               </td>
             </tr>

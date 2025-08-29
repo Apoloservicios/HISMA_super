@@ -554,7 +554,7 @@ const HomePage: React.FC = () => {
                 <a href="/consulta-historial" className="font-medium text-white hover:text-blue-100">
                   Consultar Historial
                 </a>
-                <a href="/login" className="font-medium text-primary-200 bg-primary-600 hover:bg-primary-500 px-4 py-2 rounded-md">
+                <a href="/login" className="font-medium text-white bg-primary-900 hover:bg-primary-600 px-4 py-2 rounded-md">
                   Iniciar Sesión
                 </a>
               </div>
@@ -579,10 +579,10 @@ const HomePage: React.FC = () => {
                   <div className="sm:text-center lg:text-left">
                     <h1 className="text-4xl tracking-tight font-extrabold text-white sm:text-5xl md:text-6xl">
                       <span className="block xl:inline">Sistema de Gestión</span>{' '}
-                      <span className="block text-primary-200 xl:inline">para Lubricentros</span>
+                      <span className="block text-primary-200 xl:inline">de cambios de Aceite para Lubricentros</span>
                     </h1>
                     <p className="mt-3 text-base text-gray-100 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0">
-                      Controla cambios de aceite, gestiona clientes, genera reportes y mejora la eficiencia de tu lubricentro con HISMA.
+                      Controla cambios de aceite, pasate a lo digital , genera reportes y mejora la eficiencia de tu lubricentro con HISMA.
                     </p>
                     
                     {/* Búsqueda rápida de dominio */}
@@ -671,10 +671,10 @@ const HomePage: React.FC = () => {
                       <div className="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary-500 text-white">
                         <UserIcon className="h-6 w-6" aria-hidden="true" />
                       </div>
-                      <p className="ml-16 text-lg leading-6 font-medium text-gray-900">Gestión de Clientes</p>
+                      <p className="ml-16 text-lg leading-6 font-medium text-gray-900">Gestión de Garantias</p>
                     </dt>
                     <dd className="mt-2 ml-16 text-base text-gray-500">
-                      Mantén un registro completo de tus clientes y su historial de servicios.
+                      Vendes productos con garantia, mantén un registro completo y una buena gestión con el modulo de Garantias.
                     </dd>
                   </div>
 
@@ -810,14 +810,14 @@ const HomePage: React.FC = () => {
                 <p className="text-gray-300 text-base">
                   Sistema completo de gestión para lubricentros en Argentina.
                 </p>
-                <div className="flex space-x-6">
+             {/*    <div className="flex space-x-6">
                   <a href="#" className="text-gray-400 hover:text-gray-300">
                     <span className="sr-only">Facebook</span>
                     <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path fillRule="evenodd" d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z" clipRule="evenodd" />
                     </svg>
                   </a>
-                </div>
+                </div> */}
               </div>
               <div className="mt-12 grid grid-cols-2 gap-8 xl:mt-0 xl:col-span-2">
                 <div className="md:grid md:grid-cols-2 md:gap-8">

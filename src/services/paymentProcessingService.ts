@@ -20,8 +20,7 @@ export const processSuccessfulPayment = async (
   planId?: string | null  // ✅ Aceptar null
 ): Promise<PaymentProcessingResult> => {
   try {
-    
-    console.log('🎯 Procesando pago exitoso:', { paymentId, lubricentroId, planId });
+ 
 
     // 1. Si no tenemos lubricentroId, intentar obtenerlo del external_reference
     let targetLubricentroId = lubricentroId;
@@ -52,8 +51,6 @@ export const processSuccessfulPayment = async (
       return { success: false, message: 'Plan no encontrado' };
     }
 
-    console.log(`📋 Activando plan: ${selectedPlan.name} para ${lubricentro.fantasyName}`);
-
     // 5. Calcular fechas de suscripción
     const now = new Date();
     const billingType = (lubricentro as any).pendingBillingType || 'monthly'; // ✅ Cast temporal
@@ -81,7 +78,7 @@ export const processSuccessfulPayment = async (
       paymentAmount = 0;
     }
 
-    console.log(`💰 Monto calculado: $${paymentAmount} para facturación ${billingType}`);
+
 
     // 6. Preparar datos de actualización
     const updateData: Partial<Lubricentro> = {
@@ -128,7 +125,6 @@ export const processSuccessfulPayment = async (
     // 7. Actualizar lubricentro
     await updateLubricentro(targetLubricentroId, updateData);
 
-    console.log('✅ Suscripción activada exitosamente');
 
     return {
       success: true,

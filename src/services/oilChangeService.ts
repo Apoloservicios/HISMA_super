@@ -1516,3 +1516,162 @@ export const markAsNotified = async (
     throw error;
   }
 };
+
+// Función para búsqueda global (sin filtro por lubricentroId)
+export const globalSearchOilChanges = async (
+  searchTerm: string,
+  currentLubricentroId: string,
+  pageSize: number = 50
+): Promise<Array<OilChange & { lubricentroName: string }>> => {
+  try {
+    const term = searchTerm.trim();
+    
+    if (!term) {
+      return [];
+    }
+
+    console.log('🔍 Búsqueda global para:', term);
+    
+    // Consulta GLOBAL (sin filtro de lubricentroId)
+    const q = query(
+      collection(db, COLLECTION_NAME),
+      orderBy('fechaServicio', 'desc'),
+      limit(pageSize * 3) // Más resultados para filtrar
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const allChanges = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
+    
+    // Filtrar localmente y excluir el lubricentro actual
+    const searchLower = term.toLowerCase();
+    const searchUpper = term.toUpperCase();
+    
+    const results = allChanges.filter(change => {
+      // Excluir cambios del propio lubricentro
+      if (change.lubricentroId === currentLubricentroId) {
+        return false;
+      }
+      
+      // Filtros de búsqueda
+      const matchesCliente = change.nombreCliente?.toLowerCase().includes(searchLower);
+      const matchesDominioExacto = change.dominioVehiculo === searchUpper;
+      const matchesDominioParcial = change.dominioVehiculo?.toLowerCase().includes(searchLower);
+      const matchesMarca = change.marcaVehiculo?.toLowerCase().includes(searchLower);
+      const matchesModelo = change.modeloVehiculo?.toLowerCase().includes(searchLower);
+      const matchesNroCambio = change.nroCambio?.toLowerCase().includes(searchLower);
+      
+      return matchesCliente || matchesDominioExacto || matchesDominioParcial || 
+             matchesMarca || matchesModelo || matchesNroCambio;
+    }).slice(0, pageSize);
+    
+    // Obtener información de los lubricentros
+    const uniqueLubricentroIds = [...new Set(results.map(r => r.lubricentroId))];
+    const lubricentrosMap = new Map<string, string>();
+    
+    for (const lubricentroId of uniqueLubricentroIds) {
+      try {
+        const lubricentro = await getLubricentroById(lubricentroId);
+        lubricentrosMap.set(lubricentroId, lubricentro?.fantasyName || 'Lubricentro no disponible');
+      } catch (error) {
+        lubricentrosMap.set(lubricentroId, 'Lubricentro no encontrado');
+      }
+    }
+    
+    // Agregar nombres de lubricentros
+    const resultsWithLubricentroInfo = results.map(change => ({
+      ...change,
+      lubricentroName: lubricentrosMap.get(change.lubricentroId) || 'No disponible'
+    }));
+    
+    console.log('✅ Resultados globales encontrados:', resultsWithLubricentroInfo.length);
+    
+    return resultsWithLubricentroInfo;
+  } catch (error) {
+    console.error('❌ Error en búsqueda global:', error);
+    throw error;
+  }
+};
+
+// Función para duplicar un cambio de aceite a otro lubricentro
+export const duplicateOilChangeToLubricentro = async (
+  originalOilChange: OilChange,
+  targetLubricentroId: string,
+  newOperario: string
+): Promise<string> => {
+  try {
+    console.log('🔄 Duplicando servicio:', originalOilChange.id);
+    
+    // Obtener datos del lubricentro destino
+    const targetLubricentro = await getLubricentroById(targetLubricentroId);
+    if (!targetLubricentro) {
+      throw new Error('Lubricentro destino no encontrado');
+    }
+    
+    // Generar nuevo número de cambio para el lubricentro destino
+       const newNroCambio = await getNextOilChangeNumber(
+          targetLubricentroId, 
+          targetLubricentro.ticketPrefix || 'SRV'
+        );
+    
+    // Crear el nuevo objeto con los datos del lubricentro destino
+    const duplicatedOilChange = {
+      // Datos del vehículo y cliente (se mantienen)
+      nombreCliente: originalOilChange.nombreCliente,
+      celular: originalOilChange.celular,
+      marcaVehiculo: originalOilChange.marcaVehiculo,
+      modeloVehiculo: originalOilChange.modeloVehiculo,
+      dominioVehiculo: originalOilChange.dominioVehiculo,
+      tipoVehiculo: originalOilChange.tipoVehiculo,
+      añoVehiculo: originalOilChange.añoVehiculo,
+      
+      // Datos del servicio (se mantienen)
+      kmActuales: originalOilChange.kmActuales,
+      marcaAceite: originalOilChange.marcaAceite,
+      tipoAceite: originalOilChange.tipoAceite,
+      sae: originalOilChange.sae,
+      cantidadAceite: originalOilChange.cantidadAceite,
+      filtroAceite: originalOilChange.filtroAceite,
+      filtroAire: originalOilChange.filtroAire,
+      filtroHabitaculo: originalOilChange.filtroHabitaculo,
+      filtroCombustible: originalOilChange.filtroCombustible,
+      observaciones: originalOilChange.observaciones || 'Servicio duplicado desde otro lubricentro',
+      
+      // Datos del próximo cambio (se mantienen)
+    
+      perioricidad_servicio: originalOilChange.perioricidad_servicio || 6,
+      kmProximo: originalOilChange.kmProximo,
+      fechaProximoCambio: originalOilChange.fechaProximoCambio,
+      
+      // DATOS NUEVOS del lubricentro destino
+      lubricentroId: targetLubricentroId,
+      nroCambio: newNroCambio,
+      nombreOperario: newOperario,
+      lubricentroNombre: targetLubricentro.fantasyName,
+      
+      // Fechas nuevas
+      fecha: new Date(),
+      fechaServicio: new Date(),
+      fechaCreacion: new Date(),
+      fechaCompletado: new Date(),
+      
+      // Estado
+      estado: 'completo' as OilChangeStatus,
+      
+      // Metadatos
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      duplicatedFrom: originalOilChange.id, // Referencia al original
+      duplicatedFromLubricentro: originalOilChange.lubricentroId
+    };
+    
+    // Crear el nuevo documento
+    const docRef = await addDoc(collection(db, COLLECTION_NAME), duplicatedOilChange);
+    
+    console.log('✅ Servicio duplicado con ID:', docRef.id);
+    
+    return docRef.id;
+  } catch (error) {
+    console.error('❌ Error al duplicar servicio:', error);
+    throw error;
+  }
+};
