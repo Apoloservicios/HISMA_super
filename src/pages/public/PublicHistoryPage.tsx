@@ -211,7 +211,7 @@ const PublicHistoryPage: React.FC = () => {
                                 {formatDate(oilChange.fecha)} - {oilChange.kmActuales.toLocaleString()} km
                               </h4>
                               <p className="text-xs text-gray-500">
-                                {oilChange.lubricentroNombre || 'Lubricentro'} - {oilChange.nroCambio}
+                                {oilChange.fantasyName || 'Lubricentro'} - {oilChange.nroCambio}
                               </p>
                             </div>
                           </div>
@@ -241,10 +241,12 @@ const PublicHistoryPage: React.FC = () => {
                                 
                                 <h5 className="text-sm font-medium text-gray-900 mb-2">Datos del Servicio</h5>
                                 <div className="space-y-1">
+                                  <p className="text-sm"><span className="font-medium">Lubricentro:</span> {oilChange.fantasyName}</p>
+                                  <p className="text-sm"><span className="font-medium">Operario:</span> {oilChange.nombreOperario}</p>
                                   <p className="text-sm"><span className="font-medium">Fecha:</span> {formatDate(oilChange.fechaServicio)}</p>
                                   <p className="text-sm"><span className="font-medium">Aceite:</span> {oilChange.marcaAceite} {oilChange.tipoAceite} {oilChange.sae}</p>
                                   <p className="text-sm"><span className="font-medium">Cantidad:</span> {oilChange.cantidadAceite} litros</p>
-                                  <p className="text-sm"><span className="font-medium">Operario:</span> {oilChange.nombreOperario}</p>
+                                  
                                 </div>
                               </div>
                               

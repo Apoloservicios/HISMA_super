@@ -1,4 +1,4 @@
-// src/pages/oilchanges/OilChangeDetailPage.tsx
+// src/pages/oilchanges/OilChangeDetailPage.tsx - TU ARCHIVO REAL CON QR AVANZADO
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
@@ -11,8 +11,7 @@ import { OilChange, Lubricentro } from '../../types';
 import enhancedPdfService from '../../services/enhancedPdfService';
 import EnhancedPrintComponent from '../../components/print/EnhancedPrintComponent';
 import QRCodeGeneratorNative from '../../components/qr/QRCodeGeneratorNative';
-
-
+import AdvancedQRManager from '../../components/qr/AdvancedQRManager'; // ✅ AGREGADO
 
 // Iconos
 import { 
@@ -24,8 +23,6 @@ import {
   ChevronLeftIcon,
   DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
-
-
 
 const OilChangeDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +38,9 @@ const OilChangeDetailPage: React.FC = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
+  // ✅ NUEVO ESTADO PARA ALTERNAR QR
+  const [useAdvancedQR, setUseAdvancedQR] = useState(true);
+  
   // Efecto para cargar los datos
   useEffect(() => {
     if (id) {
@@ -48,7 +48,7 @@ const OilChangeDetailPage: React.FC = () => {
     }
   }, [id]);
   
-  // Cargar datos del cambio de aceite
+  // ✅ FUNCIÓN REAL PARA CARGAR DATOS (sin datos mock)
   const loadData = async () => {
     try {
       setLoading(true);
@@ -59,7 +59,7 @@ const OilChangeDetailPage: React.FC = () => {
         return;
       }
       
-      // Obtener cambio de aceite
+      // ✅ USAR TUS SERVICIOS REALES
       const oilChangeData = await getOilChangeById(id);
       setOilChange(oilChangeData);
       
@@ -82,29 +82,24 @@ const OilChangeDetailPage: React.FC = () => {
     onAfterPrint: () => {
     },
     content: () => printRef.current,
-    // Opciones adicionales para mejorar el manejo de imágenes
     onBeforeGetContent: async () => {
-      // Este hook se ejecuta antes de capturar el contenido
-      // Podemos usar un timeout para asegurar que las imágenes estén cargadas
       return new Promise((resolve) => {
         setTimeout(resolve, 1000);
       });
     }
   });
   
-const handleGeneratePDF = () => {
-  if (!oilChange) return;
-  
-  try {
-    enhancedPdfService.generateDirectPDF(oilChange, lubricentro);
-  } catch (err) {
-    console.error('Error al generar PDF:', err);
-    setError('Error al generar el PDF. Por favor, intente nuevamente.');
-  }
-};
+  const handleGeneratePDF = () => {
+    if (!oilChange) return;
+    
+    try {
+      enhancedPdfService.generateDirectPDF(oilChange, lubricentro);
+    } catch (err) {
+      console.error('Error al generar PDF:', err);
+      setError('Error al generar el PDF. Por favor, intente nuevamente.');
+    }
+  };
 
-  
-  // Manejar la eliminación
   const handleDelete = async () => {
     if (!id) return;
     
@@ -121,19 +116,17 @@ const handleGeneratePDF = () => {
     }
   };
   
-  // Compartir por WhatsApp usando el formato mejorado
-const shareViaWhatsApp = () => {
-  if (!oilChange || !lubricentro) return;
+  const shareViaWhatsApp = () => {
+    if (!oilChange || !lubricentro) return;
+    
+    const { whatsappUrl, whatsappUrlWithPhone } = enhancedPdfService.generateWhatsAppMessage(
+      oilChange,
+      lubricentro.fantasyName || 'Lubricentro'
+    );
+    
+    window.open(whatsappUrlWithPhone || whatsappUrl, '_blank');
+  };
   
-  const { whatsappUrl, whatsappUrlWithPhone } = enhancedPdfService.generateWhatsAppMessage(
-    oilChange,
-    lubricentro.fantasyName || 'Lubricentro'
-  );
-  
-  window.open(whatsappUrlWithPhone || whatsappUrl, '_blank');
-};
-  
-  // Formatear fecha
   const formatDate = (date: Date): string => {
     return new Date(date).toLocaleDateString('es-ES', {
       day: '2-digit',
@@ -156,216 +149,267 @@ const shareViaWhatsApp = () => {
         <Alert type="error" className="mb-4">
           {error || 'No se pudo cargar la información del cambio de aceite.'}
         </Alert>
-
-        <Button
-          color="primary"
-          onClick={() => navigate('/cambios-aceite')}
-          icon={<ChevronLeftIcon className="h-5 w-5" />}
-        >
-          Volver a la lista
+        <Button onClick={() => navigate('/cambios-aceite')}>
+          Volver a la Lista
         </Button>
-
       </PageContainer>
     );
   }
-  
+
   return (
-    <PageContainer
-    title={`Cambio de Aceite - ${oilChange.nroCambio}`}
-    subtitle={`Cliente: ${oilChange.nombreCliente} - Vehículo: ${oilChange.marcaVehiculo} ${oilChange.modeloVehiculo}`}
-    action={
-      <div className="flex space-x-2">
-        <Button
-          color="primary"
-          icon={<PrinterIcon className="h-5 w-5" />}
-          onClick={handleGeneratePDF}
-        >
-          Generar PDF
-        </Button>
-        <Button
-          color="secondary"
-          icon={<ShareIcon className="h-5 w-5" />}
-          onClick={shareViaWhatsApp}
-        >
-          Compartir
-        </Button>
-      </div>
-      
-    }
-    >
-      {error && (
-        <Alert type="error" className="mb-6" dismissible onDismiss={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-      
-      {/* Acciones principales */}
-      <div className="flex justify-between mb-6">
-        <Button
-          color="primary"
-          variant="outline"
-          icon={<ChevronLeftIcon className="h-5 w-5" />}
-          onClick={() => navigate('/cambios-aceite')}
-        >
-          Volver
-        </Button>
-        
+    <PageContainer 
+      title={`Cambio de Aceite #${oilChange.nroCambio}`}
+      action={
         <div className="flex space-x-2">
           <Button
-            color="secondary"
+            size="sm"
             variant="outline"
-            icon={<PencilIcon className="h-5 w-5" />}
+            onClick={() => navigate('/cambios-aceite')}
+            icon={<ChevronLeftIcon className="h-4 w-4" />}
+          >
+            Volver
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => navigate(`/cambios-aceite/editar/${id}`)}
+            icon={<PencilIcon className="h-4 w-4" />}
           >
             Editar
           </Button>
           
           <Button
-            color="success"
+            size="sm"
             variant="outline"
-            icon={<DocumentDuplicateIcon className="h-5 w-5" />}
-            onClick={() => navigate(`/cambios-aceite/nuevo?clone=${id}`)}
+            onClick={handleGeneratePDF}
+            icon={<DocumentDuplicateIcon className="h-4 w-4" />}
           >
-            Duplicar
+            PDF
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handlePrint}
+            icon={<PrinterIcon className="h-4 w-4" />}
+          >
+            Imprimir
+          </Button>
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={shareViaWhatsApp}
+            icon={<ShareIcon className="h-4 w-4" />}
+          >
+            WhatsApp
           </Button>
           
           {!deleteConfirm ? (
             <Button
-              color="error"
+              size="sm"
               variant="outline"
-              icon={<TrashIcon className="h-5 w-5" />}
+              color="error" 
               onClick={() => setDeleteConfirm(true)}
+              icon={<TrashIcon className="h-4 w-4" />}
             >
               Eliminar
             </Button>
           ) : (
-            <Button
-              color="error"
-              icon={<TrashIcon className="h-5 w-5" />}
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <>
-                  <Spinner size="sm" color="white" className="mr-2" />
-                  Eliminando...
-                </>
-              ) : (
-                'Confirmar Eliminación'
-              )}
-            </Button>
+            <div className="flex space-x-1">
+              <Button
+                size="sm"
+                color="error"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? 'Eliminando...' : 'Confirmar'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setDeleteConfirm(false)}
+              >
+                Cancelar
+              </Button>
+            </div>
           )}
         </div>
-      </div>
-
-      {/* NUEVA SECCIÓN: Código QR */}
-      <div className="mt-6">
-        <QRCodeGeneratorNative
-          oilChange={oilChange}
-          lubricentro={lubricentro}
-          showPreview={true}
-        />
-      </div>
-      
-      {/* Información detallada */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        {/* Datos del cliente */}
-        <Card>
-          <CardHeader title="Datos del Cliente" />
-          <CardBody>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Nombre</p>
-                <p className="font-medium">{oilChange.nombreCliente}</p>
-              </div>
-              
-              {oilChange.celular && (
-                <div>
-                  <p className="text-sm text-gray-500">Teléfono</p>
-                  <p className="font-medium">{oilChange.celular}</p>
-                </div>
-              )}
-              
-              <div>
-                <p className="text-sm text-gray-500">Atendido por</p>
-                <p className="font-medium">{oilChange.nombreOperario}</p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-        
-        {/* Datos del vehículo */}
-        <Card>
-          <CardHeader title="Datos del Vehículo" />
-          <CardBody>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Dominio</p>
-                <p className="font-medium">{oilChange.dominioVehiculo}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500">Marca / Modelo</p>
-                <p className="font-medium">{oilChange.marcaVehiculo} {oilChange.modeloVehiculo}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500">Tipo</p>
-                <p className="font-medium">{oilChange.tipoVehiculo}</p>
-              </div>
-              
-              {oilChange.añoVehiculo && (
-                <div>
-                  <p className="text-sm text-gray-500">Año</p>
-                  <p className="font-medium">{oilChange.añoVehiculo}</p>
-                </div>
-              )}
-              
-              <div>
-                <p className="text-sm text-gray-500">Kilometraje</p>
-                <p className="font-medium">{oilChange.kmActuales.toLocaleString()} km</p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-        
-        {/* Datos del servicio */}
-        <Card>
-          <CardHeader title="Datos del Servicio" />
-          <CardBody>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm text-gray-500">Fecha del Servicio</p>
-                <p className="font-medium">{formatDate(oilChange.fechaServicio)}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500">Aceite</p>
-                <p className="font-medium">{oilChange.marcaAceite} {oilChange.tipoAceite} {oilChange.sae}</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500">Cantidad</p>
-                <p className="font-medium">{oilChange.cantidadAceite} litros</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500">Próximo Cambio (Km)</p>
-                <p className="font-medium">{oilChange.kmProximo.toLocaleString()} km</p>
-              </div>
-              
-              <div>
-                <p className="text-sm text-gray-500">Próximo Cambio (Fecha)</p>
-                <p className="font-medium">{formatDate(oilChange.fechaProximoCambio)}</p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
-      
-      {/* Filtros y servicios adicionales */}
+      }
+    >
+      {/* Información básica */}
       <Card className="mb-6">
-        <CardHeader title="Filtros y Servicios Adicionales" />
+        <CardHeader title="Información General" />
+        <CardBody>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Cliente</p>
+              <p className="font-medium">{oilChange.nombreCliente}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Dominio</p>
+              <p className="font-medium text-lg">{oilChange.dominioVehiculo}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Fecha de Servicio</p>
+              <p className="font-medium">{formatDate(oilChange.fechaServicio)}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Próximo Cambio</p>
+              <p className="font-medium">{formatDate(oilChange.fechaProximoCambio)}</p>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Información del vehículo */}
+      <Card className="mb-6">
+        <CardHeader title="Información del Vehículo" />
+        <CardBody>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Marca</p>
+              <p className="font-medium">{oilChange.marcaVehiculo}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Modelo</p>
+              <p className="font-medium">{oilChange.modeloVehiculo}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Tipo</p>
+              <p className="font-medium">{oilChange.tipoVehiculo}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Año</p>
+              <p className="font-medium">{oilChange.añoVehiculo || 'No especificado'}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">KM Actuales</p>
+              <p className="font-medium">{oilChange.kmActuales.toLocaleString()} km</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Próximos KM</p>
+              <p className="font-medium">{oilChange.kmProximo.toLocaleString()} km</p>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Información del aceite */}
+      <Card className="mb-6">
+        <CardHeader title="Información del Aceite" />
+        <CardBody>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-sm text-gray-500">Marca</p>
+              <p className="font-medium">{oilChange.marcaAceite}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Tipo</p>
+              <p className="font-medium">{oilChange.tipoAceite}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">SAE</p>
+              <p className="font-medium">{oilChange.sae}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm text-gray-500">Cantidad</p>
+              <p className="font-medium">{oilChange.cantidadAceite} litros</p>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* ✅ SECCIÓN QR CON BOTÓN DE ALTERNANCIA */}
+      {oilChange && lubricentro && (
+        <Card className="mb-6">
+          <CardHeader 
+            title="Código QR para Cliente"
+            subtitle="Permite al cliente consultar su historial de servicios"
+            action={
+              <div className="flex items-center space-x-3">
+                {/* Toggle Switch Visual */}
+                <div className="flex items-center space-x-2">
+                  <span className={`text-sm ${!useAdvancedQR ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                    Simple
+                  </span>
+                  <button
+                    onClick={() => setUseAdvancedQR(!useAdvancedQR)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                      useAdvancedQR ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        useAdvancedQR ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className={`text-sm ${useAdvancedQR ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                    Avanzado
+                  </span>
+                </div>
+                
+                {/* Badge del modo actual */}
+                <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                  useAdvancedQR 
+                    ? 'bg-blue-100 text-blue-800' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {useAdvancedQR ? '✨ Personalizado' : '📱 Estándar'}
+                </span>
+              </div>
+            }
+          />
+          <CardBody>
+            {/* Descripción del modo actual */}
+            <div className={`mb-4 p-3 rounded-lg border-l-4 ${
+              useAdvancedQR 
+                ? 'bg-blue-50 border-blue-400 text-blue-800' 
+                : 'bg-gray-50 border-gray-400 text-gray-700'
+            }`}>
+              <p className="text-sm">
+                {useAdvancedQR 
+                  ? '🎨 Modo Personalizado: QR con texto "Escanea y revisa tu Servicio" y nombre del lubricentro integrados.'
+                  : '📱 Modo Simple: QR básico para consulta rápida del historial.'
+                }
+              </p>
+            </div>
+
+            {/* Componente QR dinámico */}
+            {useAdvancedQR ? (
+              <AdvancedQRManager 
+                oilChange={oilChange} 
+                lubricentro={lubricentro} 
+                showPreview={true}
+                defaultMode="custom"
+              />
+            ) : (
+              <QRCodeGeneratorNative 
+                oilChange={oilChange} 
+                lubricentro={lubricentro}
+                showPreview={true}
+              />
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      {/* Servicios adicionales */}
+      <Card className="mb-6">
+        <CardHeader title="Servicios Adicionales" />
         <CardBody>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {/* Filtro de aceite */}
@@ -388,7 +432,7 @@ const shareViaWhatsApp = () => {
               </div>
             )}
             
-            {/* Filtro de habitáculo */}
+            {/* Filtro habitáculo */}
             {oilChange.filtroHabitaculo && (
               <div className="bg-green-50 p-3 rounded-md">
                 <p className="font-medium text-green-800">Filtro de Habitáculo</p>
@@ -398,7 +442,7 @@ const shareViaWhatsApp = () => {
               </div>
             )}
             
-            {/* Filtro de combustible */}
+            {/* Filtro combustible */}
             {oilChange.filtroCombustible && (
               <div className="bg-green-50 p-3 rounded-md">
                 <p className="font-medium text-green-800">Filtro de Combustible</p>

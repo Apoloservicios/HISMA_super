@@ -413,8 +413,6 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
   try {
     const dominio = dominioVehiculo.toUpperCase();
     
-    
-    
     // Consulta simple sin orderBy
     const q = query(
       collection(db, COLLECTION_NAME),
@@ -423,19 +421,39 @@ export const getOilChangesByVehicle = async (dominioVehiculo: string): Promise<O
     
     const querySnapshot = await getDocs(q);
     
-
-    
     // Convertir documentos a objetos OilChange
     const results = querySnapshot.docs.map(doc => convertFirestoreOilChange(doc));
     
+    // ✅ OBTENER INFORMACIÓN DE LUBRICENTROS
+    const lubricentroIds = [...new Set(results.map(result => result.lubricentroId))];
+    const lubricentrosMap = new Map();
+    
+    // Obtener información de todos los lubricentros involucrados
+    for (const lubricentroId of lubricentroIds) {
+      try {
+        const lubricentro = await getLubricentroById(lubricentroId);
+        lubricentrosMap.set(lubricentroId, lubricentro);
+      } catch (error) {
+        console.warn(`No se pudo obtener información del lubricentro ${lubricentroId}`);
+        lubricentrosMap.set(lubricentroId, { fantasyName: 'Lubricentro' });
+      }
+    }
+    
+    // ✅ AGREGAR NOMBRE DEL LUBRICENTRO A CADA RESULTADO
+    const resultsWithLubricentro = results.map(result => ({
+      ...result,
+      fantasyName: lubricentrosMap.get(result.lubricentroId)?.fantasyName || 'Lubricentro',
+      lubricentroNombre: lubricentrosMap.get(result.lubricentroId)?.fantasyName || 'Lubricentro'
+    }));
+    
     // Ordenar manualmente por fecha de servicio (más reciente primero)
-    results.sort((a, b) => {
+    resultsWithLubricentro.sort((a, b) => {
       const dateA = new Date(a.fechaServicio);
       const dateB = new Date(b.fechaServicio);
       return dateB.getTime() - dateA.getTime();
     });
     
-    return results;
+    return resultsWithLubricentro;
   } catch (error) {
     console.error('Error al obtener los cambios de aceite del vehículo:', error);
     throw error;

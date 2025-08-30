@@ -90,7 +90,7 @@ const enhancedPdfService = {
 
     // Crear un mensaje más atractivo con emojis y mejor formato
     const message = `
-🔧 *${cleanData.lubricentroName}* 🔧
+🔧Lubricentro : *${cleanData.lubricentroName}* 🔧
 ────────────────────
 *CAMBIO DE ACEITE N°: ${cleanData.nroCambio}*
 ────────────────────

@@ -143,6 +143,8 @@ export interface OilChange {
   nombreCliente: string;
   celular?: string;
   lubricentroNombre?: string;
+  fantasyName?: string;
+  
   
   // ✅ NUEVOS CAMPOS PARA ESTADOS
   estado: OilChangeStatus;              // Estado actual del cambio

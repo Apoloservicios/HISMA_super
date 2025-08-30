@@ -43,21 +43,23 @@ const QRCodeGeneratorNative: React.FC<QRCodeGeneratorNativeProps> = ({
     }
   };
 
-  const handleDownloadQR = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      await qrServiceNative.downloadQRImage(
-        oilChange.dominioVehiculo, 
-        `qr-${oilChange.dominioVehiculo}-${oilChange.nroCambio}.png`
-      );
-    } catch (err: any) {
-      console.error('Error descargando QR:', err);
-      setError(err.message || 'Error al descargar código QR');
-    } finally {
-      setLoading(false);
-    }
-  };
+const handleDownloadQR = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    // ✅ LÍNEA CORREGIDA:
+    await qrServiceNative.downloadQRImage(oilChange.dominioVehiculo, {
+      filename: `qr-${oilChange.dominioVehiculo}-${oilChange.nroCambio}.png`,
+      useCustom: false,
+      customOptions: {}
+    });
+  } catch (err: any) {
+    console.error('Error descargando QR:', err);
+    setError(err.message || 'Error al descargar código QR');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleOpenConsultation = () => {
     window.open(consultationURL, '_blank');
