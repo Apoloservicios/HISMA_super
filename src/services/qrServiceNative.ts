@@ -1,75 +1,170 @@
-// src/services/qrServiceNative.ts - Versión actualizada con funciones personalizadas
-import { customQRService, QRCustomOptions } from './customQRService';
+// src/services/qrServiceNative.ts - VERSIÓN CORREGIDA
+import { collection, doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase'; // ✅ Corregido: usar lib/firebase
+
+// Interfaz para configuración de QR - Compatible con sistema existente
+export interface QRConfiguration {
+  lubricentroId: string;
+  logoUrl?: string;
+  headerText?: string;
+  footerText?: string;
+  includeDate: boolean;
+  includeCompanyName: boolean;
+  paperSize: 'thermal' | 'A4';
+  qrSize: number;
+  fontSize: number;
+  margins: {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+  };
+  colors: {
+    background: string;
+    text: string;
+    border: string;
+  };
+  instructions?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // ✅ COMPATIBILIDAD con sistema existente
+  useCustomQR?: boolean;
+  customOptions?: QRCustomOptions;
+  autoPrint?: boolean;
+}
+
+// ✅ COMPATIBILIDAD: Interfaz del sistema existente
+export interface QRCustomOptions {
+  headerText?: string;
+  footerText?: string;
+  includeDate?: boolean;
+  includeCompanyName?: boolean;
+  paperSize?: 'thermal' | 'A4';
+  qrSize?: number;
+  fontSize?: number;
+  margins?: {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+  };
+  colors?: {
+    background: string;
+    text: string;
+    border: string;
+  };
+  instructions?: string;
+}
 
 class QRServiceNative {
+  private defaultConfig: Omit<QRConfiguration, 'lubricentroId' | 'createdAt' | 'updatedAt'> = {
+    includeDate: true,
+    includeCompanyName: true,
+    paperSize: 'thermal',
+    qrSize: 120,
+    fontSize: 10,
+    margins: {
+      top: 10,
+      bottom: 10,
+      left: 5,
+      right: 5
+    },
+    colors: {
+      background: '#ffffff',
+      text: '#000000',
+      border: '#333333'
+    },
+    headerText: 'Historial de Mantenimiento',
+    footerText: 'Escanee para consultar historial',
+    instructions: '📱 Escanee para ver historial completo del vehículo en su celular'
+  };
+
   private getPublicConsultationURL = (domain: string): string => {
     const baseURL = window.location.origin;
     return `${baseURL}/consulta-historial?dominio=${encodeURIComponent(domain.toUpperCase())}`;
   };
 
-  // Mantener compatibilidad con el método original
+  // Usar servicio externo para generar QR
   generateQRURL(domain: string, size: number = 150): string {
     const url = this.getPublicConsultationURL(domain);
     return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(url)}&format=png&margin=10`;
   }
 
-  // NUEVA FUNCIÓN: Generar QR personalizado como alternativa
-  async generateCustomQRURL(
-    domain: string, 
-    options: QRCustomOptions & { asDataURL?: boolean } = {}
-  ): Promise<string> {
-    const { asDataURL = true, ...qrOptions } = options;
-    
-    if (asDataURL) {
-      // Retornar imagen personalizada como data URL
-      return await customQRService.generateCustomQRImage(domain, qrOptions);
-    } else {
-      // Retornar URL del servicio externo (compatibilidad)
-      return this.generateQRURL(domain, qrOptions.qrSize || 150);
+  // 🔥 NUEVA: Guardar configuración en Firebase
+  async saveQRConfiguration(lubricentroId: string, config: Partial<QRConfiguration>): Promise<void> {
+    try {
+      const configRef = doc(db, 'qr_configurations', lubricentroId);
+      const configData: QRConfiguration = {
+        ...this.defaultConfig,
+        ...config,
+        lubricentroId,
+        updatedAt: new Date(),
+        createdAt: config.createdAt || new Date()
+      };
+      
+      await setDoc(configRef, configData, { merge: true });
+      console.log('✅ Configuración QR guardada exitosamente');
+    } catch (error) {
+      console.error('❌ Error guardando configuración QR:', error);
+      throw new Error('No se pudo guardar la configuración');
     }
   }
 
-  // Generar SVG usando Google Charts API (mantener original)
-  generateQRSVGURL(domain: string, size: number = 150): string {
-    const url = this.getPublicConsultationURL(domain);
-    return `https://chart.googleapis.com/chart?chs=${size}x${size}&cht=qr&chl=${encodeURIComponent(url)}&choe=UTF-8`;
+  // 🔥 NUEVA: Cargar configuración desde Firebase
+  async loadQRConfiguration(lubricentroId: string): Promise<QRConfiguration> {
+    try {
+      const configRef = doc(db, 'qr_configurations', lubricentroId);
+      const configDoc = await getDoc(configRef);
+      
+      if (configDoc.exists()) {
+        const data = configDoc.data() as QRConfiguration;
+        console.log('✅ Configuración QR cargada desde Firebase');
+        return data;
+      } else {
+        console.log('⚠️ No existe configuración, usando valores por defecto');
+        return {
+          ...this.defaultConfig,
+          lubricentroId,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+    } catch (error) {
+      console.error('❌ Error cargando configuración QR:', error);
+      return {
+        ...this.defaultConfig,
+        lubricentroId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    }
   }
 
-  // VERSIÓN MEJORADA de generateThermalLabel con opciones personalizables
-  async generateThermalLabel(
-    oilChange: any, 
-    lubricentro: any, 
-    customOptions: QRCustomOptions = {}
-  ): Promise<string> {
-    // Decidir si usar QR personalizado o simple basado en las opciones
-    const useCustomQR = customOptions.primaryText || customOptions.lubricentroName;
-    
-    let qrImageSrc: string;
-    
-    if (useCustomQR) {
-      // Usar QR personalizado
-      qrImageSrc = await customQRService.generateCustomQRImage(
-        oilChange.dominioVehiculo,
-        {
-          canvasWidth: 150,
-          canvasHeight: 180,
-          qrSize: 120,
-          primaryText: 'Escanea y revisa tu Servicio',
-          lubricentroName: lubricentro?.fantasyName || '',
-          fontSize: 8,
-          ...customOptions
-        }
-      );
-    } else {
-      // Usar QR simple original
-      qrImageSrc = this.generateQRURL(oilChange.dominioVehiculo, 120);
+  // 🔥 MEJORADA: Generar etiqueta térmica con configuración personalizada
+  async generateThermalLabel(oilChange: any, lubricentro: any, customConfig?: Partial<QRConfiguration>): Promise<string> {
+    // Cargar configuración desde Firebase si no se proporciona una personalizada
+    let config = customConfig;
+    if (!config && lubricentro?.id) {
+      config = await this.loadQRConfiguration(lubricentro.id);
     }
-
+    
+    // ✅ COMPATIBILIDAD: Manejar customOptions del sistema existente
+    if (config?.customOptions) {
+      config = { ...config, ...config.customOptions };
+    }
+    
+    // Usar configuración por defecto si no hay personalizada
+    const finalConfig = { ...this.defaultConfig, ...config };
+    
+    const qrURL = this.generateQRURL(oilChange.dominioVehiculo, finalConfig.qrSize);
+    
     const labelHTML = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8">
+        <title>Etiqueta QR - ${oilChange.dominioVehiculo}</title>
         <style>
           * {
             margin: 0;
@@ -77,173 +172,261 @@ class QRServiceNative {
             box-sizing: border-box;
           }
           
-          body {
-            font-family: 'Arial', sans-serif;
-            font-size: 9px;
-            line-height: 1.3;
-            background: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+          @media print {
+            body {
+              margin: 0;
+              padding: 0;
+            }
+            
+            .no-print {
+              display: none !important;
+            }
+            
+            .print-container {
+              width: 100%;
+              height: auto;
+              page-break-inside: avoid;
+            }
           }
           
-          .label-container {
-            width: 58mm;
-            background: white;
-            border: 2px solid #000;
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: ${finalConfig.fontSize}px;
+            line-height: 1.2;
+            color: ${finalConfig.colors.text};
+            background-color: ${finalConfig.colors.background};
+            padding: ${finalConfig.margins.top}mm ${finalConfig.margins.right}mm ${finalConfig.margins.bottom}mm ${finalConfig.margins.left}mm;
+            width: ${finalConfig.paperSize === 'thermal' ? '58mm' : '210mm'};
+            max-width: ${finalConfig.paperSize === 'thermal' ? '58mm' : '210mm'};
+            
+            /* ✅ OPTIMIZACIÓN PARA IMPRESORAS TÉRMICAS */
+            ${finalConfig.paperSize === 'thermal' ? `
+              /* Configuración específica para térmica */
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+              margin: 0 !important;
+              
+              /* Evitar saltos de página */
+              page-break-inside: avoid;
+              break-inside: avoid;
+              
+              /* Configuración de página térmica */
+              @page {
+                size: 58mm auto;
+                margin: 0;
+                padding: 0;
+              }
+            ` : `
+              /* Configuración para A4 */
+              @page {
+                size: A4;
+                margin: 10mm;
+              }
+            `}
+          }
+          
+          .print-container {
             text-align: center;
-            padding: 2mm;
+            border: 1px solid ${finalConfig.colors.border};
+            padding: 5mm;
+            background: white;
+            
+            /* ✅ CONFIGURACIÓN PARA TÉRMICA */
+            ${finalConfig.paperSize === 'thermal' ? `
+              /* Ancho fijo para térmica */
+              width: 48mm;
+              max-width: 48mm;
+              margin: 0 auto;
+              
+              /* Sin bordes en térmica para ahorrar espacio */
+              border: none;
+              padding: 2mm;
+              
+              /* Texto más compacto */
+              font-size: ${Math.max(8, finalConfig.fontSize - 1)}px;
+            ` : ''}
           }
           
           .header {
-            font-size: 10px;
             font-weight: bold;
-            margin-bottom: 2mm;
-            border-bottom: 1px solid #000;
-            padding-bottom: 1mm;
+            margin-bottom: 3mm;
+            font-size: ${finalConfig.fontSize + 2}px;
             text-transform: uppercase;
+            border-bottom: 1px solid ${finalConfig.colors.border};
+            padding-bottom: 2mm;
           }
           
-          .vehicle-info {
-            font-size: 14px;
-            font-weight: bold;
+          .company-name {
+            font-size: ${finalConfig.fontSize + 1}px;
             margin-bottom: 2mm;
-            padding: 1mm;
-            background: #f0f0f0;
-            border: 1px solid #ccc;
+            font-weight: bold;
           }
           
           .qr-container {
             margin: 3mm 0;
             display: flex;
             justify-content: center;
+            align-items: center;
           }
           
-          .qr-code {
-            max-width: ${useCustomQR ? '45mm' : '40mm'};
+          .qr-image {
+            max-width: ${finalConfig.qrSize}px;
             height: auto;
-            border: 1px solid #ddd;
+            border: 1px solid ${finalConfig.colors.border};
+            padding: 2mm;
+            background: white;
+            
+            /* ✅ OPTIMIZACIÓN QR PARA TÉRMICA */
+            ${finalConfig.paperSize === 'thermal' ? `
+              /* QR más pequeño en térmica pero legible */
+              max-width: ${Math.min(finalConfig.qrSize, 100)}px;
+              border: none;
+              padding: 1mm;
+              
+              /* Mejorar contraste para impresoras térmicas */
+              filter: contrast(1.2);
+            ` : ''}
           }
           
-          .service-info {
-            font-size: 7px;
-            margin-top: 2mm;
-            text-align: left;
-            line-height: 1.4;
-            border: 1px solid #ddd;
-            padding: 1mm;
-            background: #fafafa;
-          }
-          
-          .service-info strong {
-            display: inline-block;
-            width: 18mm;
-            color: #333;
-          }
-          
-          .instructions {
-            font-size: 6px;
-            margin: 2mm 0;
-            text-align: center;
-            font-style: italic;
-            color: #666;
-            border: 1px dashed #999;
-            padding: 1mm;
-          }
-          
-          .footer {
-            font-size: 6px;
-            margin-top: 2mm;
-            border-top: 2px solid #000;
-            padding-top: 1mm;
-            text-align: center;
+          .vehicle-info {
+            margin: 3mm 0;
+            font-size: ${finalConfig.fontSize + 1}px;
             font-weight: bold;
           }
           
-          @media print {
-            body { 
-              margin: 0;
-              min-height: auto;
-            }
-            .label-container { 
-              border: 2px solid #000;
-              page-break-inside: avoid;
-            }
-            @page {
-              size: 58mm auto;
-              margin: 0;
-            }
+          .instructions {
+            font-size: ${finalConfig.fontSize - 1}px;
+            margin: 2mm 0;
+            line-height: 1.3;
+            white-space: pre-line;
+          }
+          
+          .footer {
+            margin-top: 3mm;
+            font-size: ${finalConfig.fontSize - 1}px;
+            border-top: 1px solid ${finalConfig.colors.border};
+            padding-top: 2mm;
+          }
+
+          .loading-placeholder {
+            width: ${finalConfig.qrSize}px;
+            height: ${finalConfig.qrSize}px;
+            border: 2px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 12px;
+            margin: 0 auto;
+          }
+
+          /* Botones para vista previa (no se imprimen) */
+          .preview-controls {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+
+          .btn {
+            margin: 2px;
+            padding: 8px 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+          }
+
+          .btn:hover {
+            background: #0056b3;
+          }
+
+          .btn-print {
+            background: #28a745;
+          }
+
+          .btn-print:hover {
+            background: #1e7e34;
           }
         </style>
       </head>
       <body>
-        <div class="label-container">
-          <div class="header">
-            ${(lubricentro?.fantasyName || 'Sistema HISMA').substring(0, 25)}
-          </div>
+        <div class="preview-controls no-print">
+          <button class="btn btn-print" onclick="window.print()">🖨️ Imprimir</button>
+          <button class="btn" onclick="window.close()">❌ Cerrar</button>
+        </div>
+
+        <div class="print-container">
+          ${finalConfig.headerText ? `<div class="header">${finalConfig.headerText}</div>` : ''}
+          
+          ${finalConfig.includeCompanyName && lubricentro?.fantasyName ? 
+            `<div class="company-name">${lubricentro.fantasyName}</div>` : ''}
           
           <div class="vehicle-info">
-            ${oilChange.dominioVehiculo}
+            Vehículo: ${oilChange.dominioVehiculo.toUpperCase()}
           </div>
           
           <div class="qr-container">
+            <div id="qr-placeholder" class="loading-placeholder">
+              Cargando QR...
+            </div>
             <img 
-              src="${qrImageSrc}" 
-              alt="QR Code" 
-              class="qr-code"
-              onload="window.qrLoaded = true"
-              onerror="console.error('Error cargando QR')"
+              id="qr-image"
+              src="${qrURL}" 
+              alt="QR Code"
+              class="qr-image"
+              style="display: none;"
+              onload="handleQRLoad()"
+              onerror="handleQRError()"
             />
           </div>
           
-          <div class="service-info">
-            <strong>Vehículo:</strong><br>
-            ${oilChange.marcaVehiculo || ''} ${oilChange.modeloVehiculo || ''}<br>
-            <strong>Servicio:</strong> ${new Date(oilChange.fechaServicio).toLocaleDateString('es-ES')}<br>
-            <strong>Próximo:</strong> ${new Date(oilChange.fechaProximoCambio).toLocaleDateString('es-ES')}<br>
-            <strong>KM Actual:</strong> ${(oilChange.kmActuales || 0).toLocaleString()}<br>
-            <strong>Próx. KM:</strong> ${(oilChange.kmProximo || 0).toLocaleString()}
-          </div>
-          
-          ${!useCustomQR ? `
-          <div class="instructions">
-            📱 Escanee para ver historial completo<br>
-            del vehículo en su celular
-          </div>
-          ` : ''}
+          ${finalConfig.instructions ? 
+            `<div class="instructions">${finalConfig.instructions}</div>` : ''}
           
           <div class="footer">
-            Cambio N° ${oilChange.nroCambio}<br>
-            ${new Date().toLocaleDateString('es-ES')} - ${new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+            ${finalConfig.footerText || 'Escanee para consultar historial'}<br>
+            ${finalConfig.includeDate ? `Cambio N° ${oilChange.nroCambio} - ${new Date().toLocaleDateString('es-ES')}` : `Cambio N° ${oilChange.nroCambio}`}
           </div>
         </div>
         
         <script>
-          window.qrLoaded = false;
+          let qrLoaded = false;
           
-          function checkQRLoaded() {
-            if (window.qrLoaded) {
+          function handleQRLoad() {
+            console.log('✅ QR cargado exitosamente');
+            document.getElementById('qr-placeholder').style.display = 'none';
+            document.getElementById('qr-image').style.display = 'block';
+            qrLoaded = true;
+            
+            // Auto-imprimir si se especifica en la URL o configuración
+            if (window.location.search.includes('autoprint=true') || ${customConfig?.autoPrint || false}) {
               setTimeout(() => {
                 window.print();
               }, 500);
-            } else {
-              setTimeout(checkQRLoaded, 100);
             }
           }
           
-          // Auto-print si se solicita
-          if (window.location.search.includes('autoprint=true')) {
-            checkQRLoaded();
+          function handleQRError() {
+            console.error('❌ Error cargando QR');
+            const placeholder = document.getElementById('qr-placeholder');
+            placeholder.innerHTML = '❌ Error cargando QR';
+            placeholder.style.color = 'red';
           }
           
-          // Backup: imprimir después de 3 segundos si no se carga el QR
+          // Timeout de respaldo por si la imagen no carga
           setTimeout(() => {
-            if (!window.qrLoaded) {
-              console.warn('QR no cargado, imprimiendo de todas formas');
-              window.print();
+            if (!qrLoaded) {
+              console.warn('⚠️ QR no cargó en 5 segundos, mostrando mensaje de error');
+              handleQRError();
             }
-          }, 3000);
+          }, 5000);
         </script>
       </body>
       </html>
@@ -252,208 +435,190 @@ class QRServiceNative {
     return labelHTML;
   }
 
-  // NUEVA FUNCIÓN: Generar múltiples etiquetas en una sola página
-  async generateBatchThermalLabels(
-    oilChanges: any[], 
-    lubricentro: any,
-    customOptions: QRCustomOptions = {}
-  ): Promise<string> {
-    const labelsPerRow = 2; // Ajustable según el ancho de tu impresora
-    
-    let batchHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>
-          * { margin: 0; padding: 0; box-sizing: border-box; }
-          body { 
-            font-family: 'Arial', sans-serif; 
-            background: white;
-            padding: 5mm;
-          }
-          .batch-container {
-            display: grid;
-            grid-template-columns: repeat(${labelsPerRow}, 1fr);
-            gap: 5mm;
-            width: 100%;
-          }
-          .label-item {
-            width: 58mm;
-            border: 1px solid #000;
-            padding: 2mm;
-            text-align: center;
-            font-size: 8px;
-            page-break-inside: avoid;
-          }
-          @media print {
-            body { margin: 0; padding: 2mm; }
-            @page { size: A4; margin: 5mm; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="batch-container">
-    `;
+  // 🔥 NUEVA: Vista previa sin impresión (para compatibilidad)
+  async previewThermalLabel(oilChange: any, lubricentro: any, customConfig?: Partial<QRConfiguration>): Promise<void> {
+    try {
+      const labelHTML = await this.generateThermalLabel(oilChange, lubricentro, customConfig);
+      
+      const previewWindow = window.open('', '_blank', 'width=400,height=600');
+      
+      if (!previewWindow) {
+        throw new Error('No se pudo abrir la ventana de vista previa. Verifique que no esté bloqueada por el navegador.');
+      }
 
-    // Generar cada etiqueta
-    for (const oilChange of oilChanges) {
-      const qrImageSrc = await customQRService.generateCustomQRImage(
-        oilChange.dominioVehiculo,
-        {
-          canvasWidth: 120,
-          canvasHeight: 150,
-          qrSize: 100,
-          fontSize: 6,
-          primaryText: 'Escanea tu Servicio',
-          lubricentroName: lubricentro?.fantasyName || '',
-          ...customOptions
-        }
-      );
+      previewWindow.document.write(labelHTML);
+      previewWindow.document.close();
+      previewWindow.focus();
 
-      batchHTML += `
-        <div class="label-item">
-          <div style="font-weight: bold; font-size: 7px; margin-bottom: 1mm;">
-            ${lubricentro?.fantasyName?.substring(0, 20) || 'HISMA'}
-          </div>
-          <div style="font-weight: bold; margin-bottom: 2mm;">
-            ${oilChange.dominioVehiculo}
-          </div>
-          <img src="${qrImageSrc}" style="width: 35mm; height: auto; margin-bottom: 1mm;" alt="QR ${oilChange.dominioVehiculo}">
-          <div style="font-size: 6px; text-align: left;">
-            <strong>Servicio:</strong> ${new Date(oilChange.fechaServicio).toLocaleDateString('es-ES')}<br>
-            <strong>Cambio N°:</strong> ${oilChange.nroCambio}
-          </div>
-        </div>
-      `;
+      console.log('✅ Vista previa QR generada exitosamente');
+      
+    } catch (error) {
+      console.error('❌ Error generando vista previa:', error);
+      throw error;
     }
-
-    batchHTML += `
-        </div>
-        <script>
-          setTimeout(() => window.print(), 1000);
-        </script>
-      </body>
-      </html>
-    `;
-
-    return batchHTML;
   }
 
-  // Método original actualizado con nuevas opciones
-  async printThermalLabel(
-    oilChange: any, 
-    lubricentro: any, 
-    options: { 
-      useCustomQR?: boolean, 
-      customOptions?: QRCustomOptions,
-      autoPrint?: boolean 
-    } = {}
-  ): Promise<void> {
-    const { useCustomQR = false, customOptions = {}, autoPrint = true } = options;
-    
-    const finalOptions = useCustomQR ? customOptions : {};
-    const labelHTML = await this.generateThermalLabel(oilChange, lubricentro, finalOptions);
-    
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
+  // 🔥 NUEVA: Impresión en lote (para compatibilidad)
+  async printBatchLabels(oilChanges: any[], lubricentro: any, customConfig?: Partial<QRConfiguration>): Promise<void> {
+    try {
+      for (const oilChange of oilChanges) {
+        await this.printThermalLabel(oilChange, lubricentro, customConfig);
+        // Pequeña pausa entre impresiones para evitar sobrecargar
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      console.log(`✅ ${oilChanges.length} etiquetas impresas en lote exitosamente`);
+    } catch (error) {
+      console.error('❌ Error imprimiendo etiquetas en lote:', error);
+      throw error;
+    }
+  }
+
+  // 🔥 MEJORADA: Imprimir etiqueta térmica con manejo de errores
+  async printThermalLabel(oilChange: any, lubricentro: any, customConfig?: Partial<QRConfiguration>): Promise<void> {
+    try {
+      const labelHTML = await this.generateThermalLabel(oilChange, lubricentro, customConfig);
+      
+      const printWindow = window.open('', '_blank', 'width=400,height=600');
+      
+      if (!printWindow) {
+        throw new Error('No se pudo abrir la ventana de impresión. Verifique que no esté bloqueada por el navegador.');
+      }
+
       printWindow.document.write(labelHTML);
       printWindow.document.close();
       
-      if (autoPrint) {
-        printWindow.location.search = '?autoprint=true';
-      }
-      
+      // Esperar a que cargue completamente antes de mostrar
       printWindow.onload = () => {
-        if (autoPrint) {
-          setTimeout(() => {
-            printWindow.print();
-          }, 1000);
-        }
+        console.log('✅ Ventana de impresión cargada');
       };
-    } else {
-      throw new Error('No se pudo abrir la ventana de impresión. Verifique que no esté bloqueada por el navegador.');
+
+      console.log('✅ Etiqueta QR generada exitosamente');
+      
+    } catch (error) {
+      console.error('❌ Error generando etiqueta:', error);
+      throw error;
     }
   }
 
-  // NUEVA FUNCIÓN: Imprimir etiquetas en lote
-  async printBatchLabels(
-    oilChanges: any[], 
-    lubricentro: any, 
-    customOptions: QRCustomOptions = {}
-  ): Promise<void> {
-    const batchHTML = await this.generateBatchThermalLabels(oilChanges, lubricentro, customOptions);
-    
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
-    if (printWindow) {
-      printWindow.document.write(batchHTML);
+  // 🔥 NUEVA: Imprimir etiqueta optimizada para impresoras térmicas
+  async printOptimizedThermalLabel(oilChange: any, lubricentro: any, customConfig?: Partial<QRConfiguration>): Promise<void> {
+    try {
+      // Cargar configuración con optimizaciones térmicas
+      const config = customConfig || (lubricentro?.id ? await this.loadQRConfiguration(lubricentro.id) : null);
+      
+      // Aplicar optimizaciones para térmica
+      const thermalOptimizedConfig = {
+        ...this.defaultConfig,
+        ...config,
+        // ✅ OPTIMIZACIONES ESPECÍFICAS
+        paperSize: 'thermal' as const,
+        qrSize: Math.min(config?.qrSize || 120, 100), // QR más pequeño
+        fontSize: Math.max(8, (config?.fontSize || 10) - 1), // Fuente ligeramente más pequeña
+        margins: {
+          top: 2,
+          bottom: 2, 
+          left: 2,
+          right: 2
+        },
+        // Configuración térmica optimizada
+        autoPrint: config?.autoPrint || false
+      };
+
+      const labelHTML = await this.generateThermalLabel(oilChange, lubricentro, thermalOptimizedConfig);
+      
+      const printWindow = window.open('', '_blank', 'width=220,height=400');
+      
+      if (!printWindow) {
+        throw new Error('No se pudo abrir la ventana de impresión. Verifique que no esté bloqueada por el navegador.');
+      }
+
+      printWindow.document.write(labelHTML);
       printWindow.document.close();
-    } else {
-      throw new Error('No se pudo abrir la ventana de impresión en lote');
+      
+      // ✅ CONFIGURACIÓN ESPECÍFICA PARA IMPRESORAS TÉRMICAS
+      printWindow.onload = () => {
+        setTimeout(() => {
+          // Instrucciones para el usuario
+          console.log(`
+🖨️ CONFIGURACIÓN RECOMENDADA PARA IMPRESORA TÉRMICA:
+- Ancho de papel: 58mm
+- Tipo: Térmico directo  
+- Velocidad: Media
+- Densidad: Alta
+- Corte automático: Activado
+          `);
+          
+          // Auto-imprimir si está configurado
+          if (thermalOptimizedConfig.autoPrint) {
+            printWindow.print();
+          }
+        }, 1000);
+      };
+
+      console.log('✅ Etiqueta térmica optimizada generada exitosamente');
+      
+    } catch (error) {
+      console.error('❌ Error generando etiqueta térmica optimizada:', error);
+      throw error;
     }
   }
 
-  // Método original de descarga con opciones mejoradas
-  async downloadQRImage(
-    domain: string, 
-    options: { 
-      filename?: string, 
-      useCustom?: boolean, 
-      customOptions?: QRCustomOptions 
-    } = {}
-  ): Promise<void> {
-    const { filename, useCustom = false, customOptions = {} } = options;
+  // 🔥 COMPATIBILIDAD: Descargar QR con opciones del sistema existente
+  async downloadQRImage(domain: string, options?: string | { filename?: string; useCustom?: boolean; customOptions?: QRCustomOptions; }): Promise<void> {
+    let filename: string;
+    let customOptions: QRCustomOptions | undefined;
+    
+    // ✅ COMPATIBILIDAD: Manejar tanto string como object
+    if (typeof options === 'string') {
+      filename = options;
+    } else if (options && typeof options === 'object') {
+      filename = options.filename || `qr-${domain.toUpperCase()}.png`;
+      customOptions = options.customOptions;
+    } else {
+      filename = `qr-${domain.toUpperCase()}.png`;
+    }
+    
+    // Usar tamaño personalizado si está en las opciones
+    const qrSize = customOptions?.qrSize || 300;
+    const qrURL = this.generateQRURL(domain, qrSize);
     
     try {
-      if (useCustom) {
-        // Usar servicio personalizado
-        await customQRService.downloadCustomQRImage(
-          domain,
-          customOptions,
-          filename || `qr-personalizado-${domain.toUpperCase()}.png`
-        );
-      } else {
-        // Método original
-        const qrURL = this.generateQRURL(domain, 200);
-        const response = await fetch(qrURL);
-        const blob = await response.blob();
-        
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        
-        link.href = url;
-        link.download = filename || `qr-${domain.toUpperCase()}.png`;
-        document.body.appendChild(link);
-        link.click();
-        
+      const response = await fetch(qrURL);
+      if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Limpiar
+      setTimeout(() => {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
-      }
+      }, 100);
+      
+      console.log('✅ QR descargado exitosamente:', filename);
+      
     } catch (error) {
-      console.error('Error descargando QR:', error);
+      console.error('❌ Error descargando QR:', error);
       // Fallback: abrir en nueva ventana
-      const fallbackURL = this.generateQRURL(domain, 200);
-      window.open(fallbackURL, '_blank');
+      const fallbackWindow = window.open(qrURL, '_blank');
+      if (fallbackWindow) {
+        console.log('⚠️ Usando método de respaldo: abriendo QR en nueva ventana');
+      } else {
+        throw new Error('No se pudo descargar el QR y falló el método de respaldo');
+      }
     }
-  }
-
-  // NUEVA FUNCIÓN: Preview de etiqueta térmica
-  async previewThermalLabel(
-    oilChange: any, 
-    lubricentro: any, 
-    customOptions: QRCustomOptions = {}
-  ): Promise<string> {
-    const labelHTML = await this.generateThermalLabel(oilChange, lubricentro, customOptions);
-    
-    const previewWindow = window.open('', '_blank', 'width=400,height=600,scrollbars=yes');
-    if (previewWindow) {
-      previewWindow.document.write(labelHTML.replace('?autoprint=true', ''));
-      previewWindow.document.close();
-      previewWindow.document.title = `Vista Previa - ${oilChange.dominioVehiculo}`;
-    }
-    
-    return labelHTML;
   }
 }
 
 export const qrServiceNative = new QRServiceNative();
+
+// ✅ Los tipos ya están declarados arriba como interfaces, no necesitamos re-exportar
