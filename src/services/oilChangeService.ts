@@ -1548,7 +1548,7 @@ export const globalSearchOilChanges = async (
       return [];
     }
 
-    console.log('🔍 Búsqueda global para:', term);
+    
     
     // Consulta GLOBAL (sin filtro de lubricentroId)
     const q = query(
@@ -1601,7 +1601,7 @@ export const globalSearchOilChanges = async (
       lubricentroName: lubricentrosMap.get(change.lubricentroId) || 'No disponible'
     }));
     
-    console.log('✅ Resultados globales encontrados:', resultsWithLubricentroInfo.length);
+
     
     return resultsWithLubricentroInfo;
   } catch (error) {
@@ -1685,7 +1685,7 @@ export const duplicateOilChangeToLubricentro = async (
     // Crear el nuevo documento
     const docRef = await addDoc(collection(db, COLLECTION_NAME), duplicatedOilChange);
     
-    console.log('✅ Servicio duplicado con ID:', docRef.id);
+
     
     return docRef.id;
   } catch (error) {

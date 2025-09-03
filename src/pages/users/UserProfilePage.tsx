@@ -7,6 +7,7 @@ import { updateUser } from '../../services/userService';
 import ImageUploader from '../../components/common/ImageUploader';
 import { Lubricentro, User } from '../../types';
 import LogoUploader from '../../components/common/LogoUploader';
+import ColorCustomizer from '../../components/settings/ColorCustomizer';
 
 const UserProfilePage: React.FC = () => {
   const { userProfile, updateUserProfile } = useAuth();
@@ -570,6 +571,13 @@ const UserProfilePage: React.FC = () => {
               </form>
             </CardBody>
           </Card>
+
+          <ColorCustomizer
+            lubricentro={lubricentro}
+            onColorsUpdated={(updatedLubricentro) => {
+              setLubricentro(updatedLubricentro);
+            }}
+          />
 
           {/* Información adicional */}
           <Card>

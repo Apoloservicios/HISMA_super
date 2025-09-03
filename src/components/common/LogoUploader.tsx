@@ -1,111 +1,158 @@
 // src/components/common/LogoUploader.tsx
-import React, { useState, useRef, ChangeEvent ,useEffect} from 'react';
-import { PhotoIcon } from '@heroicons/react/24/outline';
+import React, { useState, useRef, ChangeEvent, useEffect } from 'react';
+import { PhotoIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '../ui';
 import cloudinaryService from '../../services/cloudinaryService';
-
-
 
 interface LogoUploaderProps {
   currentLogoUrl?: string;
   onLogoUploaded: (logoData: { url: string, base64: string }) => void;
   className?: string;
+  fallbackToBase64?: boolean; // Nueva prop para permitir fallback
 }
-
 
 const LogoUploader: React.FC<LogoUploaderProps> = ({ 
   currentLogoUrl, 
   onLogoUploaded,
-  className = ''
+  className = '',
+  fallbackToBase64 = true
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(currentLogoUrl);
+  const [uploadMethod, setUploadMethod] = useState<'cloudinary' | 'base64'>('cloudinary');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Manejar clic en el logo para abrir selector de archivo
+  useEffect(() => {
+    if (currentLogoUrl && cloudinaryService.isValidUrl(currentLogoUrl)) {
+      setPreviewUrl(currentLogoUrl);
+    }
+  }, [currentLogoUrl]);
+  
   const handleLogoClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     }
   };
   
-
-// En LogoUploader.tsx
-useEffect(() => {
-  // Actualizar el estado de previsualización cuando cambien las props
-  if (currentLogoUrl) {
-    setPreviewUrl(currentLogoUrl);
-  }
-}, [currentLogoUrl]);
-
-  // Manejar selección de archivo
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    // Validar tipo de archivo
-    if (!file.type.startsWith('image/')) {
-      setError('Por favor, seleccione una imagen válida');
-      return;
-    }
-    
-    // Validar tamaño de archivo (2MB máximo para logos)
-    if (file.size > 2 * 1024 * 1024) {
-      setError('La imagen no debe exceder de 2MB');
-      return;
-    }
     
     try {
       setLoading(true);
       setError(null);
       
-      // Mostrar vista previa local
+      // Crear vista previa local inmediatamente
       const reader = new FileReader();
       reader.onload = (event) => {
-        setPreviewUrl(event.target?.result as string);
+        const result = event.target?.result as string;
+        if (result) {
+          setPreviewUrl(result);
+        }
       };
       reader.readAsDataURL(file);
       
-      // Subir a Cloudinary
-      const result = await cloudinaryService.uploadImage(file);
+      let result;
       
-      // Notificar al componente padre con URL y base64
-      onLogoUploaded({
-        url: result.url,
-        base64: result.base64
-      });
+      // Intentar subir a Cloudinary primero
+      if (uploadMethod === 'cloudinary') {
+        try {
+          result = await cloudinaryService.uploadImage(file);
+          console.log('Logo subido exitosamente a Cloudinary:', result.url);
+          
+        } catch (cloudinaryError: any) {
+          console.warn('Error al subir a Cloudinary:', cloudinaryError.message);
+          
+          if (fallbackToBase64) {
+            console.log('Intentando método de respaldo (base64)...');
+            setUploadMethod('base64');
+            result = await cloudinaryService.uploadImageBase64(file);
+          } else {
+            throw cloudinaryError;
+          }
+        }
+      } else {
+        // Usar directamente el método base64
+        result = await cloudinaryService.uploadImageBase64(file);
+      }
       
-    } catch (err) {
-      console.error('Error al subir logo:', err);
-      setError('Error al subir el logo. Por favor, intente nuevamente.');
+      if (result) {
+        onLogoUploaded({
+          url: result.url,
+          base64: result.base64
+        });
+        
+        // Mostrar mensaje informativo si se usó fallback
+        if (uploadMethod === 'base64') {
+          console.info('Logo guardado localmente. Se recomienda verificar la configuración de Cloudinary.');
+        }
+      }
+      
+    } catch (err: any) {
+      console.error('Error al procesar logo:', err);
+      setError(err.message || 'Error al procesar el logo. Por favor, intente nuevamente.');
+      
+      // Restaurar vista previa anterior si hay error
+      if (currentLogoUrl && cloudinaryService.isValidUrl(currentLogoUrl)) {
+        setPreviewUrl(currentLogoUrl);
+      } else {
+        setPreviewUrl(undefined);
+      }
+      
     } finally {
       setLoading(false);
     }
   };
   
+  const renderPreview = () => {
+    if (!previewUrl) return null;
+    
+    const imageUrl = cloudinaryService.isValidUrl(previewUrl) ? previewUrl : previewUrl;
+    
+    return (
+      <img 
+        src={imageUrl}
+        alt="Logo del lubricentro" 
+        className="max-w-full max-h-full object-contain"
+        style={{ maxHeight: '120px', maxWidth: '250px' }}
+        onError={(e) => {
+          console.warn('Error al cargar imagen de vista previa');
+          const target = e.target as HTMLImageElement;
+          target.style.display = 'none';
+        }}
+      />
+    );
+  };
+  
   return (
     <div className={`flex flex-col items-center ${className}`}>
+      {/* Indicador de método de subida */}
+      {uploadMethod === 'base64' && (
+        <div className="mb-2 px-3 py-1 bg-yellow-100 border border-yellow-300 rounded-md">
+          <div className="flex items-center text-sm text-yellow-800">
+            <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
+            Modo offline - Logo guardado localmente
+          </div>
+        </div>
+      )}
+      
       <div 
         className="relative cursor-pointer group"
         onClick={handleLogoClick}
       >
         {/* Vista previa de logo o placeholder */}
         {previewUrl ? (
-          <div className="w-64 h-32 rounded-md overflow-hidden bg-gray-100 flex items-center justify-center">
-            <img 
-              src={`${previewUrl}?t=${new Date().getTime()}`} 
-              alt="Logo del lubricentro" 
-              className="max-w-full max-h-full object-contain"
-              style={{ maxHeight: '120px', maxWidth: '250px' }}
-            />
+          <div className="w-64 h-32 rounded-md overflow-hidden bg-gray-100 flex items-center justify-center border">
+            {renderPreview()}
           </div>
         ) : (
           <div className="w-64 h-32 rounded-md bg-gray-100 flex items-center justify-center border border-dashed border-gray-300">
             <div className="text-center p-4">
               <PhotoIcon className="h-10 w-10 text-gray-400 mx-auto" />
               <p className="mt-2 text-sm text-gray-500">Subir logo</p>
+              <p className="text-xs text-gray-400 mt-1">PNG, JPG - Max 5MB</p>
             </div>
           </div>
         )}
@@ -113,7 +160,12 @@ useEffect(() => {
         {/* Overlay de carga */}
         {loading && (
           <div className="absolute inset-0 bg-gray-800 bg-opacity-70 rounded-md flex items-center justify-center">
-            <Spinner size="md" color="white" />
+            <div className="text-center">
+              <Spinner size="md" color="white" />
+              <p className="text-white text-xs mt-2">
+                {uploadMethod === 'cloudinary' ? 'Subiendo...' : 'Procesando...'}
+              </p>
+            </div>
           </div>
         )}
         
@@ -136,15 +188,39 @@ useEffect(() => {
       
       {/* Mensaje de error */}
       {error && (
-        <p className="mt-2 text-sm text-red-600">{error}</p>
+        <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-sm text-red-600">{error}</p>
+          {fallbackToBase64 && uploadMethod === 'cloudinary' && (
+            <button
+              onClick={() => setUploadMethod('base64')}
+              className="text-sm text-red-700 underline mt-1 hover:text-red-800"
+            >
+              Intentar método alternativo
+            </button>
+          )}
+        </div>
       )}
       
-      <p className="mt-2 text-sm text-gray-500">
-        Haz clic para {previewUrl ? 'cambiar' : 'subir'} el logo del lubricentro
-      </p>
-      <p className="text-xs text-gray-400 mt-1">
-        Formatos recomendados: PNG o JPG. Tamaño máximo: 2MB.
-      </p>
+      {/* Información */}
+      <div className="mt-2 text-center">
+        <p className="text-sm text-gray-500">
+          Haz clic para {previewUrl ? 'cambiar' : 'subir'} el logo del lubricentro
+        </p>
+        <p className="text-xs text-gray-400 mt-1">
+          Formatos: PNG, JPG • Tamaño máximo: 5MB
+        </p>
+        
+        {/* Botón para cambiar método de subida */}
+        {fallbackToBase64 && (
+          <button
+            onClick={() => setUploadMethod(uploadMethod === 'cloudinary' ? 'base64' : 'cloudinary')}
+            className="text-xs text-blue-600 hover:text-blue-700 underline mt-1"
+            type="button"
+          >
+            {uploadMethod === 'cloudinary' ? 'Usar modo offline' : 'Usar subida en línea'}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

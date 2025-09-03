@@ -625,7 +625,7 @@ useEffect(() => {
                     </span>
                   )}
                   
-                  {/* Botón actualizar */}
+                  {/* Botón actualizar
 
                   <Button
                     color="secondary"
@@ -648,7 +648,7 @@ useEffect(() => {
                     disabled={loading}
                   >
                     🔧 Arreglar Fechas
-                  </Button>
+                  </Button>  */}
                   <Button
                     color={isStale ? "warning" : "primary"}
                     size="sm"

@@ -104,7 +104,7 @@ class QRServiceNative {
       };
       
       await setDoc(configRef, configData, { merge: true });
-      console.log('✅ Configuración QR guardada exitosamente');
+ 
     } catch (error) {
       console.error('❌ Error guardando configuración QR:', error);
       throw new Error('No se pudo guardar la configuración');
@@ -119,7 +119,7 @@ class QRServiceNative {
       
       if (configDoc.exists()) {
         const data = configDoc.data() as QRConfiguration;
-        console.log('✅ Configuración QR cargada desde Firebase');
+       
         return data;
       } else {
         console.log('⚠️ No existe configuración, usando valores por defecto');
@@ -217,11 +217,18 @@ class QRServiceNative {
                 padding: 0;
               }
             ` : `
-              /* Configuración para A4 */
+              /* ✅ CONFIGURACIÓN MEJORADA PARA A4 */
               @page {
                 size: A4;
-                margin: 10mm;
+                margin: 15mm;
               }
+              
+              /* Centrar contenido en A4 */
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+              min-height: 100vh;
+              padding: 20mm;
             `}
           }
           
@@ -244,7 +251,19 @@ class QRServiceNative {
               
               /* Texto más compacto */
               font-size: ${Math.max(8, finalConfig.fontSize - 1)}px;
-            ` : ''}
+            ` : `
+              /* ✅ CONFIGURACIÓN MEJORADA PARA A4 */
+              width: 80mm;
+              max-width: 80mm;
+              margin: 20mm auto;
+              border: 2px solid ${finalConfig.colors.border};
+              border-radius: 8px;
+              padding: 10mm;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+              
+              /* Fuente más grande para A4 */
+              font-size: ${finalConfig.fontSize + 2}px;
+            `}
           }
           
           .header {
@@ -450,7 +469,7 @@ class QRServiceNative {
       previewWindow.document.close();
       previewWindow.focus();
 
-      console.log('✅ Vista previa QR generada exitosamente');
+
       
     } catch (error) {
       console.error('❌ Error generando vista previa:', error);
@@ -466,7 +485,7 @@ class QRServiceNative {
         // Pequeña pausa entre impresiones para evitar sobrecargar
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-      console.log(`✅ ${oilChanges.length} etiquetas impresas en lote exitosamente`);
+
     } catch (error) {
       console.error('❌ Error imprimiendo etiquetas en lote:', error);
       throw error;
@@ -489,10 +508,10 @@ class QRServiceNative {
       
       // Esperar a que cargue completamente antes de mostrar
       printWindow.onload = () => {
-        console.log('✅ Ventana de impresión cargada');
+  
       };
 
-      console.log('✅ Etiqueta QR generada exitosamente');
+
       
     } catch (error) {
       console.error('❌ Error generando etiqueta:', error);
@@ -555,7 +574,7 @@ class QRServiceNative {
         }, 1000);
       };
 
-      console.log('✅ Etiqueta térmica optimizada generada exitosamente');
+ 
       
     } catch (error) {
       console.error('❌ Error generando etiqueta térmica optimizada:', error);
@@ -604,17 +623,50 @@ class QRServiceNative {
         URL.revokeObjectURL(url);
       }, 100);
       
-      console.log('✅ QR descargado exitosamente:', filename);
+
       
     } catch (error) {
       console.error('❌ Error descargando QR:', error);
       // Fallback: abrir en nueva ventana
       const fallbackWindow = window.open(qrURL, '_blank');
       if (fallbackWindow) {
-        console.log('⚠️ Usando método de respaldo: abriendo QR en nueva ventana');
+  
       } else {
         throw new Error('No se pudo descargar el QR y falló el método de respaldo');
       }
+    }
+  }
+
+  // 🔥 NUEVA: Generar y descargar como PDF (simulado)
+  async downloadAsPDF(oilChange: any, lubricentro: any, customConfig?: Partial<QRConfiguration>): Promise<void> {
+    try {
+      // Generar HTML optimizado para PDF
+      const config = customConfig || (lubricentro?.id ? await this.loadQRConfiguration(lubricentro.id) : null);
+      const finalConfig = { ...this.defaultConfig, ...config, paperSize: 'A4' as const };
+      
+      const labelHTML = await this.generateThermalLabel(oilChange, lubricentro, finalConfig);
+      
+      const pdfWindow = window.open('', '_blank', 'width=800,height=600');
+      
+      if (!pdfWindow) {
+        throw new Error('No se pudo abrir ventana para PDF');
+      }
+
+      pdfWindow.document.write(labelHTML);
+      pdfWindow.document.close();
+      
+      pdfWindow.onload = () => {
+        setTimeout(() => {
+          
+          
+          // Auto-abrir diálogo de impresión
+          pdfWindow.print();
+        }, 1000);
+      };
+      
+    } catch (error) {
+      console.error('❌ Error generando PDF:', error);
+      throw error;
     }
   }
 }

@@ -77,13 +77,7 @@ const AdvancedQRManager: React.FC<AdvancedQRManagerProps> = ({
     }
   };
 
-  // ⚠️ DEBUG TEMPORAL - QUITAR DESPUÉS DE PROBAR
-  console.log('🔍 AdvancedQRManager recibió:', {
-    oilChange: oilChange,
-    dominio: oilChange?.dominioVehiculo,
-    lubricentro: lubricentro?.fantasyName,
-    nroCambio: oilChange?.nroCambio
-  });
+ 
 
   // ✅ FUNCIÓN PARA GUARDAR CONFIGURACIONES CON PERSISTENCIA
   const saveCustomOptions = (newOptions: QRCustomOptions) => {

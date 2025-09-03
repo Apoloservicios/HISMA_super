@@ -44,7 +44,7 @@ const QRCodeGeneratorNative: React.FC<QRCodeGeneratorNativeProps> = ({
     try {
       const config = await qrServiceNative.loadQRConfiguration(userProfile.lubricentroId);
       setCurrentConfig(config);
-      console.log('✅ Configuración QR cargada:', config); // Debug
+    
     } catch (err) {
       console.error('Error cargando configuración QR:', err);
       // Continuar con configuración por defecto
@@ -99,6 +99,19 @@ const QRCodeGeneratorNative: React.FC<QRCodeGeneratorNativeProps> = ({
     }
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await qrServiceNative.downloadAsPDF(oilChange, lubricentro, currentConfig || undefined);
+    } catch (err: any) {
+      console.error('Error generando PDF:', err);
+      setError(err.message || 'Error al generar PDF');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDownloadQR = async () => {
     try {
       setLoading(true);
@@ -121,9 +134,8 @@ const QRCodeGeneratorNative: React.FC<QRCodeGeneratorNativeProps> = ({
 
   const handleConfigSaved = (newConfig: QRConfiguration) => {
     setCurrentConfig(newConfig);
-    console.log('✅ Nueva configuración aplicada y guardada:', newConfig);
-    
-    // ✅ FORZAR RECARGA para asegurar persistencia
+
+
     setTimeout(() => {
       loadConfiguration();
     }, 500);
@@ -204,7 +216,7 @@ const QRCodeGeneratorNative: React.FC<QRCodeGeneratorNativeProps> = ({
           {loading ? 'Preparando...' : 'Imprimir Térmica'}
         </Button>
         
-        {/* Descargar QR */}
+        {/* Descargar solo QR */}
         <Button
           size="sm"
           color="secondary"
@@ -213,7 +225,19 @@ const QRCodeGeneratorNative: React.FC<QRCodeGeneratorNativeProps> = ({
           disabled={loading}
           icon={<ArrowDownTrayIcon className="h-4 w-4" />}
         >
-          Descargar QR
+          Descargar Solo QR
+        </Button>
+
+        {/* Descargar etiqueta completa como PDF */}
+        <Button
+          size="sm"
+          color="info"
+          variant="outline"
+          onClick={handleDownloadPDF}
+          disabled={loading}
+          icon={<ArrowDownTrayIcon className="h-4 w-4" />}
+        >
+          Descargar Etiqueta PDF
         </Button>
 
         {/* Probar consulta */}
