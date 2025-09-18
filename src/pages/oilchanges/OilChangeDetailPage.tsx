@@ -69,49 +69,6 @@ const OilChangeDetailPage: React.FC = () => {
     }
   };
 
-  // Función para imprimir usando window.print directamente
-  const handlePrint = () => {
-    if (!printRef.current) return;
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      alert('No se pudo abrir la ventana de impresión. Verifique que los pop-ups estén habilitados.');
-      return;
-    }
-    
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Cambio de Aceite - ${oilChange?.nroCambio}</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              margin: 20px;
-              color: #333;
-            }
-            @page { 
-              size: A4; 
-              margin: 20mm; 
-            }
-            @media print { 
-              body { -webkit-print-color-adjust: exact; }
-              .no-print { display: none !important; }
-            }
-          </style>
-        </head>
-        <body>
-          ${printRef.current.innerHTML}
-        </body>
-      </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
-  };
 
   // Función para generar PDF
   const handleGeneratePDF = async () => {
@@ -410,15 +367,7 @@ const OilChangeDetailPage: React.FC = () => {
             <CardHeader title="Acciones" />
             <CardBody>
               <div className="space-y-3">
-                <Button
-                  onClick={handlePrint}
-                  color="primary"
-                  className="w-full flex items-center justify-center"
-                >
-                  <PrinterIcon className="h-5 w-5 mr-2" />
-                  Imprimir Comprobante
-                </Button>
-                
+                                
                 <Button
                   onClick={handleGeneratePDF}
                   color="secondary"
