@@ -85,6 +85,7 @@ const OilChangeFormPage: React.FC = () => {
     sae: '',
     cantidadAceite: 4,
     filtroAceite: false,
+    
     filtroAceiteNota: '',
     filtroAire: false,
     filtroAireNota: '',
@@ -102,10 +103,15 @@ const OilChangeFormPage: React.FC = () => {
     cajaNota: '',
     engrase: false,
     engraseNota: '',
+
     observaciones: '',
     nombreOperario: `${userProfile?.nombre || ''} ${userProfile?.apellido || ''}`,
     operatorId: userProfile?.id || '',
+    
+    
   });
+  // Estado separado para el checkbox de sin cambio de aceite
+const [sinCambioAceite, setSinCambioAceite] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -504,25 +510,44 @@ const OilChangeFormPage: React.FC = () => {
             errors.celular = 'El teléfono debe tener al menos 7 dígitos';
           }
         }
-    } else if (currentStep === 'aceite') {
-      if (!formData.marcaAceite?.trim()) {
-        errors.marcaAceite = 'La marca del aceite es obligatoria';
-      }
-      
-      if (!formData.tipoAceite?.trim()) {
-        errors.tipoAceite = 'El tipo de aceite es obligatorio';
-      }
-      
-      if (!formData.sae?.trim()) {
-        errors.sae = 'La viscosidad SAE es obligatoria';
-      }
-      
-      if (!formData.cantidadAceite && formData.cantidadAceite !== 0) {
-        errors.cantidadAceite = 'La cantidad de aceite es obligatoria';
-      } else if (formData.cantidadAceite <= 0) {
-        errors.cantidadAceite = 'La cantidad debe ser mayor a 0';
-      }
-    }
+        } else if (currentStep === 'aceite') {
+          // NUEVA LÓGICA: Solo validar aceite si NO está marcado sinCambioAceite
+          if (!sinCambioAceite) {  // <-- Cambio aquí
+            if (!formData.marcaAceite?.trim()) {
+              errors.marcaAceite = 'La marca del aceite es obligatoria';
+            }
+            
+            if (!formData.tipoAceite?.trim()) {
+              errors.tipoAceite = 'El tipo de aceite es obligatorio';
+            }
+            
+            if (!formData.sae?.trim()) {
+              errors.sae = 'La viscosidad SAE es obligatoria';
+            }
+            
+            if (!formData.cantidadAceite && formData.cantidadAceite !== 0) {
+              errors.cantidadAceite = 'La cantidad de aceite es obligatoria';
+            } else if (formData.cantidadAceite <= 0) {
+              errors.cantidadAceite = 'La cantidad debe ser mayor a 0';
+            }
+          } else {
+            // Si no hay cambio de aceite, verificar que haya al menos un servicio adicional
+            const tieneServicioAdicional = 
+              formData.filtroAceite || 
+              formData.filtroAire || 
+              formData.filtroHabitaculo || 
+              formData.filtroCombustible || 
+              formData.aditivo || 
+              formData.refrigerante || 
+              formData.diferencial || 
+              formData.caja || 
+              formData.engrase;
+            
+            if (!tieneServicioAdicional) {
+              errors.serviciosAdicionales = 'Debe seleccionar al menos un servicio adicional cuando no se realiza cambio de aceite';
+            }
+          }
+        }
     
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -576,6 +601,41 @@ const OilChangeFormPage: React.FC = () => {
     } else if (formData.cantidadAceite <= 0) {
       errors.cantidadAceite = 'La cantidad debe ser mayor a 0';
     }
+        if (!sinCambioAceite) { 
+        if (!formData.marcaAceite?.trim()) {
+          errors.marcaAceite = 'La marca del aceite es obligatoria';
+        }
+        
+        if (!formData.tipoAceite?.trim()) {
+          errors.tipoAceite = 'El tipo de aceite es obligatorio';
+        }
+        
+        if (!formData.sae?.trim()) {
+          errors.sae = 'La viscosidad SAE es obligatoria';
+        }
+        
+        if (!formData.cantidadAceite && formData.cantidadAceite !== 0) {
+          errors.cantidadAceite = 'La cantidad de aceite es obligatoria';
+        } else if (formData.cantidadAceite <= 0) {
+          errors.cantidadAceite = 'La cantidad debe ser mayor a 0';
+        }
+      } else {
+        // Validar que haya al menos un servicio adicional
+        const tieneServicioAdicional = 
+          formData.filtroAceite || 
+          formData.filtroAire || 
+          formData.filtroHabitaculo || 
+          formData.filtroCombustible || 
+          formData.aditivo || 
+          formData.refrigerante || 
+          formData.diferencial || 
+          formData.caja || 
+          formData.engrase;
+        
+        if (!tieneServicioAdicional) {
+          errors.serviciosAdicionales = 'Debe seleccionar al menos un servicio adicional cuando no se realiza cambio de aceite';
+        }
+      }
     
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -614,10 +674,51 @@ const OilChangeFormPage: React.FC = () => {
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
   
-  // Validar formulario antes de continuar
-  if (!validateFullForm()) {
-    setError('Por favor, complete todos los campos obligatorios.');
-    return;
+ // Si hay cambio de aceite sin marcar, validar normalmente
+  if (!sinCambioAceite) {
+    if (!validateFullForm()) {
+      setError('Por favor, complete todos los campos obligatorios.');
+      return;
+    }
+  } else {
+    // Si NO hay cambio de aceite, validar solo cliente, vehículo y servicios adicionales
+    const errors: Record<string, string> = {};
+    
+    // Validar cliente y vehículo
+    if (!formData.nombreCliente?.trim()) {
+      errors.nombreCliente = 'El nombre del cliente es obligatorio';
+    }
+    if (!formData.dominioVehiculo?.trim()) {
+      errors.dominioVehiculo = 'El dominio del vehículo es obligatorio';
+    }
+    if (!formData.marcaVehiculo?.trim()) {
+      errors.marcaVehiculo = 'La marca del vehículo es obligatoria';
+    }
+    if (!formData.modeloVehiculo?.trim()) {
+      errors.modeloVehiculo = 'El modelo del vehículo es obligatorio';
+    }
+    
+    // Validar que haya al menos un servicio adicional
+    const tieneServicioAdicional = 
+      formData.filtroAceite || 
+      formData.filtroAire || 
+      formData.filtroHabitaculo || 
+      formData.filtroCombustible || 
+      formData.aditivo || 
+      formData.refrigerante || 
+      formData.diferencial || 
+      formData.caja || 
+      formData.engrase;
+    
+    if (!tieneServicioAdicional) {
+      errors.serviciosAdicionales = 'Debe seleccionar al menos un servicio adicional cuando no se realiza cambio de aceite';
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setError('Por favor, complete los campos obligatorios y seleccione al menos un servicio adicional.');
+      setValidationErrors(errors);
+      return;
+    }
   }
   
   setSaving(true);
@@ -642,12 +743,12 @@ const handleSubmit = async (e: React.FormEvent) => {
         kmActuales: formData.kmActuales,
         kmProximo: formData.kmProximo,
         
-        // Datos del aceite
-        marcaAceite: formData.marcaAceite,
-        tipoAceite: formData.tipoAceite,
-        sae: formData.sae,
-        cantidadAceite: formData.cantidadAceite,
+        // Datos del aceite             
         perioricidad_servicio: formData.perioricidad_servicio,
+        marcaAceite: sinCambioAceite ? 'N/A' : (formData.marcaAceite || ''),
+        tipoAceite: sinCambioAceite ? 'N/A' : (formData.tipoAceite || ''),
+        sae: sinCambioAceite ? 'N/A' : (formData.sae || ''),
+        cantidadAceite: sinCambioAceite ? 0 : (formData.cantidadAceite || 0),
         
         // Fechas
         fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
@@ -724,12 +825,15 @@ const handleSubmit = async (e: React.FormEvent) => {
         kmProximo: formData.kmProximo || ((formData.kmActuales || 0) + 10000),
         
         // Datos del aceite
-        marcaAceite: formData.marcaAceite || '',
-        tipoAceite: formData.tipoAceite || '',
-        sae: formData.sae || '',
-        cantidadAceite: formData.cantidadAceite || 0,
+         marcaAceite: sinCambioAceite ? 'N/A' : formData.marcaAceite,
+      tipoAceite: sinCambioAceite ? 'N/A' : formData.tipoAceite,
+      sae: sinCambioAceite ? 'N/A' : formData.sae,
+      cantidadAceite: sinCambioAceite ? 0 : formData.cantidadAceite,
         perioricidad_servicio: formData.perioricidad_servicio || 6,
         
+
+          
+
         // Fechas
         fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
         fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
@@ -1082,181 +1186,270 @@ const handleSubmit = async (e: React.FormEvent) => {
             <Card className="mb-6">
               <CardHeader title="Datos del Aceite" />
               <CardBody>
-                {isCloning && (
-                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <p className="text-sm text-blue-800">ℹ️ Se han mantenido las preferencias de aceite del servicio anterior. Puede modificarlas si es necesario.</p>
-                  </div>
-                )}
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                  <div className="relative">
-                    <label htmlFor="marcaAceite" className="block text-sm font-medium text-gray-700 mb-1">
-                      Marca de Aceite <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="marcaAceite"
-                        name="marcaAceite"
-                        value={formData.marcaAceite || ''}
-                        onChange={handleChange}
-                        placeholder="Marca del aceite"
-                        className={`
-                          block w-full rounded-lg border-2 px-3 py-2.5 text-sm
-                          transition-all duration-200 ease-in-out
-                          ${validationErrors.marcaAceite 
-                            ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
-                            : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                          }
-                          shadow-sm hover:shadow-md focus:shadow-lg
-                          placeholder:text-gray-400
-                        `}
-                        required
-                        list="marcasAceite"
-                      />
-                      <datalist id="marcasAceite">
-                        {autocompleteOptions.marcasAceite.map(marca => (
-                          <option key={marca} value={marca} />
-                        ))}
-                      </datalist>
-                    </div>
-                    {validationErrors.marcaAceite && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.marcaAceite}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="relative">
-                    <label htmlFor="tipoAceite" className="block text-sm font-medium text-gray-700 mb-1">
-                      Tipo de Aceite <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="tipoAceite"
-                        name="tipoAceite"
-                        value={formData.tipoAceite || ''}
-                        onChange={handleChange}
-                        placeholder="Tipo de aceite"
-                        className={`
-                          block w-full rounded-lg border-2 px-3 py-2.5 text-sm
-                          transition-all duration-200 ease-in-out
-                          ${validationErrors.tipoAceite 
-                            ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
-                            : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                          }
-                          shadow-sm hover:shadow-md focus:shadow-lg
-                          placeholder:text-gray-400
-                        `}
-                        required
-                        list="tiposAceite"
-                      />
-                      <datalist id="tiposAceite">
-                        {autocompleteOptions.tiposAceite.map(tipo => (
-                          <option key={tipo} value={tipo} />
-                        ))}
-                      </datalist>
-                    </div>
-                    {validationErrors.tipoAceite && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.tipoAceite}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="relative">
-                    <label htmlFor="sae" className="block text-sm font-medium text-gray-700 mb-1">
-                      Viscosidad (SAE) <span className="text-red-500">*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="sae"
-                        name="sae"
-                        value={formData.sae || ''}
-                        onChange={handleChange}
-                        placeholder="Ej: 5W-30"
-                        className={`
-                          block w-full rounded-lg border-2 px-3 py-2.5 text-sm
-                          transition-all duration-200 ease-in-out
-                          ${validationErrors.sae 
-                            ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
-                            : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
-                          }
-                          shadow-sm hover:shadow-md focus:shadow-lg
-                          placeholder:text-gray-400
-                        `}
-                        required
-                        list="viscosidadSae"
-                      />
-                      <datalist id="viscosidadSae">
-                        {autocompleteOptions.viscosidad.map(visc => (
-                          <option key={visc} value={visc} />
-                        ))}
-                      </datalist>
-                    </div>
-                    {validationErrors.sae && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.sae}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Cantidad (litros) *
-                    </label>
+                {/* NUEVO: Checkbox para indicar si NO se realiza cambio de aceite */}
+                <div className="mb-6 bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start">
                     <input
-                      type="number"
-                      name="cantidadAceite"
-                      value={formData.cantidadAceite || ''}
-                      onChange={handleChange}
-                      onFocus={(e) => e.target.select()} // Seleccionar todo al hacer foco
-                      placeholder="Ej: 4.5"
-                      min="0.5"
-                      max="20"
-                      step="0.5"
-                      className={`
-                        block w-full px-3 py-2 border rounded-md shadow-sm 
-                        focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
-                        ${validationErrors.cantidadAceite 
-                          ? 'border-red-300 text-red-900 placeholder-red-300 bg-red-50' 
-                          : 'border-gray-300 hover:border-gray-400 bg-white'
+                      type="checkbox"
+                      id="sinCambioAceite"
+                      name="sinCambioAceite"
+                      checked={sinCambioAceite}  // <-- Cambio aquí
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setSinCambioAceite(checked);  // <-- Cambio aquí
+                        
+                        // Si marca que no hay cambio, limpiamos los campos de aceite
+                        if (checked) {
+                          setFormData(prev => ({
+                            ...prev,
+                            marcaAceite: '',
+                            tipoAceite: '',
+                            sae: '',
+                            cantidadAceite: 0
+                          }));
                         }
-                        transition-colors duration-200
-                      `}
-                      required
+                        
+                        // Limpiar errores de validación de aceite si existen
+                        if (checked && validationErrors) {
+                          const newErrors = { ...validationErrors };
+                          delete newErrors.marcaAceite;
+                          delete newErrors.tipoAceite;
+                          delete newErrors.sae;
+                          delete newErrors.cantidadAceite;
+                          setValidationErrors(newErrors);
+                        }
+                      }}
+                      className="h-5 w-5 text-yellow-600 border-gray-300 rounded focus:ring-yellow-500 mt-1"
                     />
-                    {validationErrors.cantidadAceite && (
-                      <div className="mt-1 flex items-center">
-                        <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <p className="text-sm text-red-600">{validationErrors.cantidadAceite}</p>
-                      </div>
-                    )}
-                    <p className="mt-1 text-xs text-gray-500">
-                      Ingrese la cantidad en litros (ej: 4, 4.5, 5.5)
-                    </p>
+                    <div className="ml-3 flex-1">
+                      <label htmlFor="sinCambioAceite" className="font-medium text-gray-900 cursor-pointer">
+                        No se realizó cambio de aceite de motor
+                      </label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Marcar si solo se realizaron servicios adicionales (filtros, fluidos, etc.)
+                      </p>
+                      {sinCambioAceite && (  // <-- Sin formData
+                          <p className="text-sm text-red-600 mt-2 font-medium">
+                            ⚠️ Debe seleccionar al menos un servicio adicional
+                          </p>
+                        )}
+                    </div>
                   </div>
                 </div>
+
+                {/* Mostrar campos de aceite solo si NO está marcado el checkbox */}
+                {!sinCambioAceite ? (
+                  <>
+                    {isCloning && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                        <p className="text-sm text-blue-800">ℹ️ Se han mantenido las preferencias de aceite del servicio anterior. Puede modificarlas si es necesario.</p>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                      <div className="relative">
+                        <label htmlFor="marcaAceite" className="block text-sm font-medium text-gray-700 mb-1">
+                          Marca de Aceite <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="marcaAceite"
+                            name="marcaAceite"
+                            value={formData.marcaAceite || ''}
+                            onChange={handleChange}
+                            placeholder="Marca del aceite"
+                            className={`
+                              block w-full rounded-lg border-2 px-3 py-2.5 text-sm
+                              transition-all duration-200 ease-in-out
+                              ${validationErrors.marcaAceite 
+                                ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
+                                : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+                              }
+                              shadow-sm hover:shadow-md focus:shadow-lg
+                              placeholder:text-gray-400
+                            `}
+                            required
+                            list="marcasAceite"
+                          />
+                          <datalist id="marcasAceite">
+                            {autocompleteOptions.marcasAceite.map(marca => (
+                              <option key={marca} value={marca} />
+                            ))}
+                          </datalist>
+                        </div>
+                        {validationErrors.marcaAceite && (
+                          <div className="mt-1 flex items-center">
+                            <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-sm text-red-600">{validationErrors.marcaAceite}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="relative">
+                        <label htmlFor="tipoAceite" className="block text-sm font-medium text-gray-700 mb-1">
+                          Tipo de Aceite <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="tipoAceite"
+                            name="tipoAceite"
+                            value={formData.tipoAceite || ''}
+                            onChange={handleChange}
+                            placeholder="Tipo de aceite"
+                            className={`
+                              block w-full rounded-lg border-2 px-3 py-2.5 text-sm
+                              transition-all duration-200 ease-in-out
+                              ${validationErrors.tipoAceite 
+                                ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
+                                : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+                              }
+                              shadow-sm hover:shadow-md focus:shadow-lg
+                              placeholder:text-gray-400
+                            `}
+                            required
+                            list="tiposAceite"
+                          />
+                          <datalist id="tiposAceite">
+                            {autocompleteOptions.tiposAceite.map(tipo => (
+                              <option key={tipo} value={tipo} />
+                            ))}
+                          </datalist>
+                        </div>
+                        {validationErrors.tipoAceite && (
+                          <div className="mt-1 flex items-center">
+                            <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-sm text-red-600">{validationErrors.tipoAceite}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="relative">
+                        <label htmlFor="sae" className="block text-sm font-medium text-gray-700 mb-1">
+                          Viscosidad (SAE) <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="sae"
+                            name="sae"
+                            value={formData.sae || ''}
+                            onChange={handleChange}
+                            placeholder="Ej: 5W-30"
+                            className={`
+                              block w-full rounded-lg border-2 px-3 py-2.5 text-sm
+                              transition-all duration-200 ease-in-out
+                              ${validationErrors.sae 
+                                ? 'border-red-300 text-red-900 placeholder-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20 bg-red-50'
+                                : 'border-gray-300 hover:border-gray-400 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20'
+                              }
+                              shadow-sm hover:shadow-md focus:shadow-lg
+                              placeholder:text-gray-400
+                            `}
+                            required
+                            list="viscosidadSae"
+                          />
+                          <datalist id="viscosidadSae">
+                            {autocompleteOptions.viscosidad.map(visc => (
+                              <option key={visc} value={visc} />
+                            ))}
+                          </datalist>
+                        </div>
+                        {validationErrors.sae && (
+                          <div className="mt-1 flex items-center">
+                            <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-sm text-red-600">{validationErrors.sae}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Cantidad (litros) *
+                        </label>
+                        <input
+                          type="number"
+                          name="cantidadAceite"
+                          value={formData.cantidadAceite || ''}
+                          onChange={handleChange}
+                          onFocus={(e) => e.target.select()} // Seleccionar todo al hacer foco
+                          placeholder="Ej: 4.5"
+                          min="0.5"
+                          max="20"
+                          step="0.5"
+                          className={`
+                            block w-full px-3 py-2 border rounded-md shadow-sm 
+                            focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500
+                            ${validationErrors.cantidadAceite 
+                              ? 'border-red-300 text-red-900 placeholder-red-300 bg-red-50' 
+                              : 'border-gray-300 hover:border-gray-400 bg-white'
+                            }
+                            transition-colors duration-200
+                          `}
+                          required
+                        />
+                        {validationErrors.cantidadAceite && (
+                          <div className="mt-1 flex items-center">
+                            <svg className="h-4 w-4 text-red-500 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            <p className="text-sm text-red-600">{validationErrors.cantidadAceite}</p>
+                          </div>
+                        )}
+                        <p className="mt-1 text-xs text-gray-500">
+                          Ingrese la cantidad en litros (ej: 4, 4.5, 5.5)
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* Mostrar mensaje cuando no hay cambio de aceite */
+                  <div className="bg-gray-50 p-6 rounded-lg border border-gray-200 text-center">
+                    <svg className="h-12 w-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                    </svg>
+                    <p className="text-gray-500 font-medium">Los campos de aceite están deshabilitados</p>
+                    <p className="text-sm text-gray-400 mt-1">Se registrará como servicio sin cambio de aceite</p>
+                  </div>
+                )}
               </CardBody>
             </Card>
-           
+          
             <Card className="mb-6">
-              <CardHeader title="Filtros y Servicios Adicionales" />
-              <CardBody>
+              <CardHeader 
+                  title="Filtros y Servicios Adicionales"
+                />
+                <CardBody>
+                  {/* Mostrar el indicador dentro del body */}
+                  {sinCambioAceite && (
+                    <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                      <p className="text-sm text-yellow-800 font-medium">
+                        ⚠️ Obligatorio: Debe seleccionar al menos un servicio adicional cuando no se realiza cambio de aceite
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Mostrar error si no hay servicios seleccionados */}
+                  {validationErrors.serviciosAdicionales && sinCambioAceite && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                      <p className="text-sm text-red-800 font-medium">
+                        <svg className="h-4 w-4 text-red-500 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        {validationErrors.serviciosAdicionales}
+                      </p>
+                    </div>
+                  )}
+                               
                 {isCloning && (
                   <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                     <p className="text-sm text-yellow-800">⚠️ Se han seleccionado los mismos servicios del cambio anterior. Las notas específicas se han limpiado para que pueda agregar nueva información.</p>
                   </div>
                 )}
+                
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
                   {[
                     { id: 'filtroAceite', label: 'Filtro de Aceite', nota: 'filtroAceiteNota' },
