@@ -28,7 +28,8 @@ import {
   TruckIcon,
   ClockIcon,
   PlusIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  GiftIcon
 } from '@heroicons/react/24/outline';
 
 // Componente de carga
@@ -109,6 +110,12 @@ const MainLayout: React.FC = () => {
           text: 'Pagos por Transferencia', 
           icon: <BanknotesIcon className="w-5 h-5" />, 
           path: '/superadmin/pagos-transferencias',
+          divider: false
+        },
+        { 
+          text: 'Cupones de Descuento', 
+          icon: <GiftIcon className="w-5 h-5" />, 
+          path: '/superadmin/cupones',
           divider: false
         },
         { 
@@ -201,6 +208,8 @@ const MainLayout: React.FC = () => {
           path: '/admin/pagos',
           divider: false
         },
+
+      
       
         { 
           text: 'Usuarios', 

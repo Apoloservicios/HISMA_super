@@ -71,6 +71,9 @@ import PaymentSuccessPage from './pages/payment/PaymentSuccessPage';
 import PaymentPendingPage from './pages/payment/PaymentPendingPage';
 import PaymentFailurePage from './pages/payment/PaymentFailurePage';
 
+
+import SuperAdminCouponsPage from './pages/admin/SuperAdminCouponsPage';
+
 // Components
 import PrivateRoute from './components/common/PrivateRoute';
 
@@ -141,6 +144,16 @@ const App: React.FC = () => {
                   element={
                     <PrivateRoute requiredRoles={['admin']}>
                       <PaymentManagementPage />
+                    </PrivateRoute>
+                  } 
+                />
+
+                   {/* Gestión de Cupones de Descuento */}
+                <Route 
+                  path="/superadmin/cupones" 
+                  element={
+                    <PrivateRoute requiredRoles={['superadmin']}>
+                      <SuperAdminCouponsPage />
                     </PrivateRoute>
                   } 
                 />

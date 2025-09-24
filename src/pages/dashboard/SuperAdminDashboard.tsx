@@ -53,6 +53,7 @@ import {
   WrenchIcon,
   WrenchScrewdriverIcon,
   PencilIcon,
+  GiftIcon,
   CogIcon // 🆕 Nuevo icono para renovaciones
 } from '@heroicons/react/24/outline';
 
@@ -986,6 +987,18 @@ const SuperAdminDashboard: React.FC = () => {
           <CogIcon className="h-5 w-5 mr-2" />
           {stats.needingRenewal > 0 ? `Renovaciones (${stats.needingRenewal})` : 'Renovaciones'}
         </Button>
+
+        <Button 
+          color={stats.needingRenewal > 0 ? "error" : "warning"} 
+          size="lg" 
+          fullWidth 
+          onClick={() => navigate('/superadmin/cupones')}
+        >
+          <GiftIcon className="h-5 w-5 mr-2" />
+          {stats.needingRenewal > 0 ? `Cupones de Descuento (${stats.needingRenewal})` : 'Cupones de Descuento'}
+        </Button>
+
+        
         
         <Button 
           color="secondary" 

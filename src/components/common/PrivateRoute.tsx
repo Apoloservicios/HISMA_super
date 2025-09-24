@@ -20,9 +20,9 @@ const isAllowedRouteForExpiredTrial = (pathname: string): boolean => {
     '/dashboard',           // ✅ CRÍTICO: Permitir dashboard (tiene botones de renovación)
     '/perfil',              
     '/usuarios',            
-    '/suscripcion',         
-    '/reportes',            
-    '/cambios-aceite',      // Solo ver historial
+           
+    '/admin',
+
   ];
 
   // Permitir rutas de visualización (no creación)

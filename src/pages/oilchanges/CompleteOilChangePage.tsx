@@ -219,7 +219,7 @@ const CompleteOilChangePage: React.FC = () => {
       
       {/* Información del cliente y vehículo */}
       <Card className="mb-6">
-        <CardHeader title="Información del Servicio" />
+        <CardHeader title="IInformación del Servicio" />
         <CardBody>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>

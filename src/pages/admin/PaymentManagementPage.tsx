@@ -13,6 +13,10 @@ import { TransferPaymentUpload } from '../../components/admin/TransferPaymentUpl
 import { PaymentHistory } from '../../components/admin/PaymentHistory';
 import TransferPaymentEmailForm from '../../components/admin/TransferPaymentEmailForm';
 
+import CouponPaymentActivator from '../../components/admin/CouponPaymentActivator';
+
+
+
 // Iconos
 import {
   ExclamationTriangleIcon,
@@ -20,7 +24,9 @@ import {
   XCircleIcon,
   ClockIcon,
   CreditCardIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  GiftIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline';
 
 interface LubricentroInfo {
@@ -53,7 +59,7 @@ const PaymentManagementPage: React.FC = () => {
   const [availablePlans, setAvailablePlans] = useState<Record<string, SubscriptionPlan>>({});
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mercadopago' | 'transfer'>('mercadopago');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'mercadopago' | 'transfer' | 'coupon' | null>(null);
   const [renewalConditions, setRenewalConditions] = useState<RenewalConditions | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
 
@@ -392,106 +398,156 @@ const PaymentManagementPage: React.FC = () => {
         {/* Selector y opciones de pago - Solo si puede comprar */}
         {showPaymentOptions ? (
           <>
-            {/* Selector de Método de Pago */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-4">💳 Método de Pago</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Botón MercadoPago */}
-                <button
-                  className={`p-4 border rounded-lg transition-colors ${
-                    selectedPaymentMethod === 'mercadopago'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                  onClick={() => setSelectedPaymentMethod('mercadopago')}
-                >
-                  <div className="text-center">
-                    <h4 className="font-semibold">MercadoPago</h4>
-                    <p className="text-sm text-gray-600">Activación instantánea</p>
-                  </div>
-                </button>
+            {/* Selector de Método de Pago ACTUALIZADO CON CUPONES */}
+            <Card>
+              <CardBody>
+                <h3 className="text-lg font-semibold mb-4">💳 Método de Pago</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  
+                  {/* Botón Cupón - NUEVO */}
+                  <button
+                    className={`p-4 border-2 rounded-lg transition-all relative ${
+                      selectedPaymentMethod === 'coupon'
+                        ? 'border-purple-500 bg-purple-50 shadow-md'
+                        : 'border-gray-300 hover:border-purple-400 hover:bg-purple-50/50'
+                    }`}
+                    onClick={() => setSelectedPaymentMethod('coupon')}
+                  >
+                    <div className="absolute -top-2 -right-2">
+                      <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-semibold animate-pulse">
+                        ¡NUEVO!
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <GiftIcon className="h-8 w-8 mx-auto mb-2 text-purple-600" />
+                      <h4 className="font-semibold">Cupón</h4>
+                      <p className="text-sm text-gray-600">Sin costo - Patrocinado</p>
+                      <p className="text-xs text-purple-600 mt-1 font-medium">Activación inmediata</p>
+                    </div>
+                  </button>
 
-                {/* Botón Transferencia */}
-                <button
-                  className={`p-4 border rounded-lg transition-colors ${
-                    selectedPaymentMethod === 'transfer'
-                      ? 'border-green-500 bg-green-50'
-                      : 'border-gray-300 hover:border-gray-400'
-                  }`}
-                  onClick={() => setSelectedPaymentMethod('transfer')}
-                >
-                  <div className="text-center">
-                    <h4 className="font-semibold">Transferencia</h4>
-                    <p className="text-sm text-gray-600">Activación en 24-48hs</p>
-                  </div>
-                </button>
-              </div>
-            </div>
+                  {/* Botón MercadoPago - EXISTENTE */}
+                  <button
+                    className={`p-4 border-2 rounded-lg transition-all ${
+                      selectedPaymentMethod === 'mercadopago'
+                        ? 'border-blue-500 bg-blue-50 shadow-md'
+                        : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'
+                    }`}
+                    onClick={() => setSelectedPaymentMethod('mercadopago')}
+                  >
+                    <div className="text-center">
+                      <CreditCardIcon className="h-8 w-8 mx-auto mb-2 text-blue-600" />
+                      <h4 className="font-semibold">MercadoPago</h4>
+                      <p className="text-sm text-gray-600">Tarjetas y efectivo</p>
+                      <p className="text-xs text-blue-600 mt-1 font-medium">Activación instantánea</p>
+                    </div>
+                  </button>
+
+                  {/* Botón Transferencia - EXISTENTE */}
+                  <button
+                    className={`p-4 border-2 rounded-lg transition-all ${
+                      selectedPaymentMethod === 'transfer'
+                        ? 'border-green-500 bg-green-50 shadow-md'
+                        : 'border-gray-300 hover:border-green-400 hover:bg-green-50/50'
+                    }`}
+                    onClick={() => setSelectedPaymentMethod('transfer')}
+                  >
+                    <div className="text-center">
+                      <BanknotesIcon className="h-8 w-8 mx-auto mb-2 text-green-600" />
+                      <h4 className="font-semibold">Transferencia</h4>
+                      <p className="text-sm text-gray-600">Bancaria tradicional</p>
+                      <p className="text-xs text-orange-600 mt-1 font-medium">Activación en 24-48hs</p>
+                    </div>
+                  </button>
+                </div>
+              </CardBody>
+            </Card>
 
             {/* Renderizar componente según método seleccionado */}
-            {selectedPaymentMethod === 'mercadopago' ? (
-              <PaymentActivator
-                lubricentroId={userProfile?.lubricentroId || ''} // ✅ CORREGIDO: Manejar null
-                availablePlans={plansToShow}
-                onSuccess={handlePaymentSuccess}
-                userEmail={userProfile?.email || lubricentroInfo?.email}
-                fantasyName={lubricentroInfo?.fantasyName}
-              />
-            ) : (
-              // Formulario de transferencia por email
-              <div className="space-y-6">
-                {!selectedPlan ? (
-                  <Card>
-                    <CardBody>
-                      <h3 className="text-lg font-semibold mb-4">💰 Selecciona el plan para transferencia</h3>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {Object.values(plansToShow).map((plan: any) => (
-                          <div 
-                            key={plan.id}
-                            className="border border-gray-200 rounded-lg p-4 hover:border-green-500 cursor-pointer transition-colors"
-                            onClick={() => setSelectedPlan(plan)}
-                          >
-                            <h4 className="font-semibold text-lg text-gray-900">{plan.name}</h4>
-                            <p className="text-gray-600 text-sm mb-3">{plan.description}</p>
-                            <div className="text-2xl font-bold text-green-600 mb-3">
-                              ${plan.price?.monthly?.toLocaleString() || 'Consultar'}
-                              {plan.planType !== 'service' && <span className="text-sm font-normal">/mes</span>}
-                            </div>
-                            <Button 
-                              color="primary" 
-                              className="w-full"
+            <div className="mt-6">
+              {selectedPaymentMethod === 'coupon' ? (
+                <CouponPaymentActivator
+                  lubricentroId={userProfile?.lubricentroId || ''}
+                  onSuccess={handlePaymentSuccess}
+                  lubricentroInfo={{
+                    fantasyName: lubricentroInfo?.fantasyName,
+                    email: userProfile?.email || lubricentroInfo?.email
+                  }}
+                />
+              ) : selectedPaymentMethod === 'mercadopago' ? (
+                <PaymentActivator
+                  lubricentroId={userProfile?.lubricentroId || ''}
+                  availablePlans={plansToShow}
+                  onSuccess={handlePaymentSuccess}
+                  userEmail={userProfile?.email || lubricentroInfo?.email}
+                  fantasyName={lubricentroInfo?.fantasyName}
+                />
+              ) : selectedPaymentMethod === 'transfer' ? (
+                // Formulario de transferencia existente
+                <div className="space-y-6">
+                  {!selectedPlan ? (
+                    <Card>
+                      <CardBody>
+                        <h3 className="text-lg font-semibold mb-4">💰 Selecciona el plan para transferencia</h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {Object.values(plansToShow).map((plan: any) => (
+                            <div 
+                              key={plan.id}
+                              className="border border-gray-200 rounded-lg p-4 hover:border-green-500 cursor-pointer transition-colors"
                               onClick={() => setSelectedPlan(plan)}
                             >
-                              Pagar por Transferencia
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </CardBody>
-                  </Card>
-                ) : (
-                  <div className="space-y-4">
-                    <Button
-                      color="secondary"
-                      variant="outline"
-                      onClick={() => setSelectedPlan(null)}
-                      className="flex items-center"
-                    >
-                      ← Cambiar plan
-                    </Button>
+                              <h4 className="font-semibold text-lg text-gray-900">{plan.name}</h4>
+                              <p className="text-gray-600 text-sm mb-3">{plan.description}</p>
+                              <div className="text-2xl font-bold text-green-600 mb-3">
+                                ${plan.price?.monthly?.toLocaleString() || 'Consultar'}
+                                {plan.planType !== 'service' && <span className="text-sm font-normal">/mes</span>}
+                              </div>
+                              <Button 
+                                color="primary" 
+                                className="w-full"
+                                onClick={() => setSelectedPlan(plan)}
+                              >
+                                Pagar por Transferencia
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </CardBody>
+                    </Card>
+                  ) : (
+                    <div className="space-y-4">
+                      <Button
+                        color="secondary"
+                        variant="outline"
+                        onClick={() => setSelectedPlan(null)}
+                        className="flex items-center"
+                      >
+                        ← Cambiar plan
+                      </Button>
 
-                    <TransferPaymentEmailForm
-                      selectedPlan={selectedPlan}
-                      onSuccess={() => {
-                        setSelectedPlan(null);
-                        handlePaymentSuccess();
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+                      <TransferPaymentEmailForm
+                        selectedPlan={selectedPlan}
+                        onSuccess={() => {
+                          setSelectedPlan(null);
+                          handlePaymentSuccess();
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Mensaje cuando no hay método seleccionado
+                <Card>
+                  <CardBody>
+                    <div className="text-center py-8 text-gray-500">
+                      <ExclamationTriangleIcon className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+                      <p>Selecciona un método de pago para continuar</p>
+                    </div>
+                  </CardBody>
+                </Card>
+              )}
+            </div>
           </>
         ) : (
           <Card>

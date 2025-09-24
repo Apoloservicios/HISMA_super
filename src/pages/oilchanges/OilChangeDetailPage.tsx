@@ -190,7 +190,7 @@ const OilChangeDetailPage: React.FC = () => {
                   <Button
                     size="sm"
                     color="secondary"
-                    onClick={() => navigate(`/oil-changes/edit/${oilChange.id}`)}
+                    onClick={() => navigate(`/cambios-aceite/editar/${oilChange.id}`)}
                   >
                     <PencilIcon className="h-4 w-4 mr-1" />
                     Editar
