@@ -1,4 +1,4 @@
-// src/services/couponService.ts
+// src/services/couponService.ts - VERSIÓN CORREGIDA
 import { 
   doc, 
   getDoc, 
@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
-// Interfaces
+// ✅ INTERFACES ACTUALIZADAS
 export interface Coupon {
   id: string;
   code: string;
@@ -28,12 +28,20 @@ export interface Coupon {
   benefits: {
     membershipMonths: number;
     additionalServices?: string[];
+    totalServicesContracted?: number; // ✅ NUEVO: Límite de servicios
+    unlimitedServices?: boolean;       // ✅ NUEVO: Servicios ilimitados
+    customPlan?: string;               // ✅ NUEVO: Plan personalizado
   };
   usedBy?: {
     lubricentroId: string;
     lubricentroName: string;
     usedAt: Timestamp;
     activatedBy: string;
+  };
+  metadata?: {
+    note?: string;
+    generatedBy?: string;
+    originalCost?: number;
   };
 }
 
@@ -49,6 +57,7 @@ export interface Distributor {
     purchased: number;
     used: number;
     available: number;
+    lastPurchase?: Timestamp;
   };
   branding: {
     logoUrl?: string;
@@ -56,14 +65,39 @@ export interface Distributor {
     watermarkText: string;
     footerMessage: string;
     whatsappSignature: string;
+    showInPdf?: boolean;
+    showInWhatsapp?: boolean;
+    position?: 'header' | 'footer' | 'both';
   };
   stats: {
     totalCouponsGenerated: number;
     totalCouponsUsed: number;
     activeLubricentros: number;
+    totalOilChanges?: number;
+    monthlyGrowth?: number;
+    conversionRate?: number;
+  };
+  settings?: {
+    prefix: string;
+    defaultValidityDays: number;
+    defaultBenefitMonths: number;
+    allowedTypes: string[];
+    autoNotifications: boolean;
+  };
+  notifications?: {
+    email: {
+      enabled: boolean;
+      recipients: string[];
+      frequency: 'immediate' | 'daily' | 'weekly';
+    };
+    whatsapp?: {
+      enabled: boolean;
+      number: string;
+    };
   };
 }
 
+// ✅ INTERFACE DE VALIDACIÓN MEJORADA
 export interface CouponValidationResult {
   valid: boolean;
   message: string;
@@ -74,18 +108,28 @@ export interface CouponValidationResult {
     benefits: {
       membershipMonths: number;
       additionalServices?: string[];
+      totalServicesContracted?: number; // ✅ NUEVO
+      unlimitedServices?: boolean;       // ✅ NUEVO
+      customPlan?: string;               // ✅ NUEVO
     };
     expiresAt: Date;
+    metadata?: {
+      note?: string;
+      originalCost?: number;
+    };
   };
 }
 
-// Validar código de cupón
+// ✅ FUNCIÓN DE VALIDACIÓN MEJORADA
 export const validateCouponCode = async (code: string): Promise<CouponValidationResult> => {
   try {
+    console.log(`🔍 Validando cupón: ${code}`);
+    
     const couponRef = doc(db, 'coupons', code);
     const couponDoc = await getDoc(couponRef);
 
     if (!couponDoc.exists()) {
+      console.log(`❌ Cupón no existe: ${code}`);
       return {
         valid: false,
         message: 'El código de cupón no existe'
@@ -93,9 +137,11 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
     }
 
     const couponData = couponDoc.data() as Coupon;
+    console.log('📋 Datos del cupón:', couponData);
 
     // Verificar estado
     if (couponData.status === 'used') {
+      console.log(`❌ Cupón ya usado: ${code}`);
       return {
         valid: false,
         message: 'Este cupón ya ha sido utilizado'
@@ -103,6 +149,7 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
     }
 
     if (couponData.status === 'expired') {
+      console.log(`❌ Cupón expirado: ${code}`);
       return {
         valid: false,
         message: 'Este cupón ha expirado'
@@ -114,6 +161,8 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
     const validUntil = couponData.validUntil.toDate();
 
     if (now > validUntil) {
+      console.log(`⏰ Cupón vencido por fecha: ${code}`);
+      
       // Actualizar estado a expirado
       await updateDoc(couponRef, { 
         status: 'expired',
@@ -126,20 +175,31 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
       };
     }
 
-    return {
+    // ✅ PREPARAR RESPUESTA CON BENEFICIOS COMPLETOS
+    const validationResponse: CouponValidationResult = {
       valid: true,
       message: 'Cupón válido y listo para usar',
       couponData: {
         code: couponData.code,
         distributorId: couponData.distributorId,
         distributorName: couponData.distributorName,
-        benefits: couponData.benefits,
-        expiresAt: validUntil
+        benefits: {
+          membershipMonths: couponData.benefits.membershipMonths,
+          additionalServices: couponData.benefits.additionalServices || [],
+          totalServicesContracted: couponData.benefits.totalServicesContracted,
+          unlimitedServices: couponData.benefits.unlimitedServices || false,
+          customPlan: couponData.benefits.customPlan
+        },
+        expiresAt: validUntil,
+        metadata: couponData.metadata
       }
     };
 
+    console.log('✅ Cupón válido:', validationResponse);
+    return validationResponse;
+
   } catch (error) {
-    console.error('Error validando cupón:', error);
+    console.error('❌ Error validando cupón:', error);
     return {
       valid: false,
       message: 'Error al validar el cupón. Por favor intenta nuevamente.'
@@ -147,83 +207,130 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
   }
 };
 
-// Generar cupón (para distribuidores)
+// ✅ FUNCIÓN MEJORADA PARA GENERAR CUPONES
 export const generateCoupon = async (
   distributorId: string,
-  type: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom',
-  additionalServices?: string[]
+  type: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom' | 'unlimited',
+  options: {
+    additionalServices?: string[];
+    customMonths?: number;
+    totalServicesContracted?: number; // ✅ NUEVO
+    unlimitedServices?: boolean;       // ✅ NUEVO
+    customPlan?: string;               // ✅ NUEVO
+    validityDays?: number;
+    note?: string;
+  } = {}
 ): Promise<{ success: boolean; code?: string; error?: string }> => {
   try {
-    return await runTransaction(db, async (transaction) => {
-      // Obtener distribuidor
-      const distributorRef = doc(db, 'distributors', distributorId);
-      const distributorDoc = await transaction.get(distributorRef);
-
-      if (!distributorDoc.exists()) {
-        throw new Error('Distribuidor no encontrado');
-      }
-
-      const distributor = distributorDoc.data() as Distributor;
-
-      // Verificar créditos disponibles
-      if (distributor.credits.available < 1) {
-        throw new Error('No tienes créditos disponibles para generar cupones');
-      }
-
-      // Configurar duración según tipo
-      const monthsMap: Record<string, number> = {
-        monthly: 1,
-        quarterly: 3,
-        semiannual: 6,
-        annual: 12,
-        custom: 3 // valor por defecto para custom
+    // Obtener información del distribuidor
+    const distributorDoc = await getDoc(doc(db, 'distributors', distributorId));
+    
+    if (!distributorDoc.exists()) {
+      return {
+        success: false,
+        error: 'Distribuidor no encontrado'
       };
+    }
 
-      const months = monthsMap[type];
-      
-      // Generar código único
-      const code = generateUniqueCode(
-        distributor.companyInfo.name.substring(0, 4).toUpperCase(),
-        type
-      );
+    const distributorData = distributorDoc.data() as Distributor;
 
-      // Calcular fechas
-      const now = new Date();
-      const validUntil = new Date();
-      validUntil.setDate(validUntil.getDate() + 90); // 90 días de validez
+    // Verificar créditos disponibles
+    if ((distributorData.credits?.available || 0) < 1) {
+      return {
+        success: false,
+        error: 'No tienes créditos suficientes para generar cupones'
+      };
+    }
 
-      // Crear cupón
+    // ✅ CALCULAR BENEFICIOS SEGÚN EL TIPO Y OPCIONES
+    let membershipMonths: number;
+    let benefits: Coupon['benefits'];
+
+    switch (type) {
+      case 'monthly':
+        membershipMonths = 1;
+        break;
+      case 'quarterly':
+        membershipMonths = 3;
+        break;
+      case 'semiannual':
+        membershipMonths = 6;
+        break;
+      case 'annual':
+        membershipMonths = 12;
+        break;
+      case 'unlimited':
+        membershipMonths = options.customMonths || 12;
+        break;
+      case 'custom':
+        membershipMonths = options.customMonths || 3;
+        break;
+      default:
+        membershipMonths = 3;
+    }
+
+    // ✅ CONFIGURAR BENEFICIOS SEGÚN OPCIONES
+    benefits = {
+      membershipMonths,
+      additionalServices: options.additionalServices || [],
+      totalServicesContracted: options.totalServicesContracted,
+      unlimitedServices: options.unlimitedServices || type === 'unlimited',
+      customPlan: options.customPlan
+    };
+
+    // Generar código único
+    const prefix = distributorData.settings?.prefix || 'HISMA';
+    const code = generateUniqueCode(prefix, type);
+
+    // Calcular fecha de validez
+    const validityDays = options.validityDays || distributorData.settings?.defaultValidityDays || 90;
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + validityDays);
+
+    // Crear cupón en transacción
+    await runTransaction(db, async (transaction) => {
+      // Verificar que el código no exista
+      const existingCoupon = await transaction.get(doc(db, 'coupons', code));
+      if (existingCoupon.exists()) {
+        throw new Error('Código duplicado, intenta nuevamente');
+      }
+
+      // Crear el cupón
       const couponRef = doc(db, 'coupons', code);
       transaction.set(couponRef, {
         code,
         distributorId,
-        distributorName: distributor.companyInfo.name,
+        distributorName: distributorData.companyInfo.name,
         status: 'active',
+        benefits,
         createdAt: serverTimestamp(),
         validFrom: serverTimestamp(),
         validUntil: Timestamp.fromDate(validUntil),
-        benefits: {
-          membershipMonths: months,
-          additionalServices: additionalServices || []
+        metadata: {
+          note: options.note || `Cupón ${type} generado`,
+          generatedBy: 'distributor',
+          originalCost: calculateCouponCost(type, membershipMonths, options)
         }
       });
 
-      // Actualizar créditos y estadísticas del distribuidor
+      // Actualizar créditos del distribuidor
+      const distributorRef = doc(db, 'distributors', distributorId);
       transaction.update(distributorRef, {
         'credits.used': increment(1),
         'credits.available': increment(-1),
         'stats.totalCouponsGenerated': increment(1),
         updatedAt: serverTimestamp()
       });
-
-      return {
-        success: true,
-        code
-      };
     });
 
+    console.log(`✅ Cupón generado exitosamente: ${code}`);
+    return {
+      success: true,
+      code
+    };
+
   } catch (error: any) {
-    console.error('Error generando cupón:', error);
+    console.error('❌ Error generando cupón:', error);
     return {
       success: false,
       error: error.message || 'Error al generar el cupón'
@@ -231,60 +338,67 @@ export const generateCoupon = async (
   }
 };
 
-// Obtener cupones del distribuidor
-export const getDistributorCoupons = async (
-  distributorId: string,
-  status?: 'active' | 'used' | 'expired'
-): Promise<Coupon[]> => {
+// ✅ FUNCIÓN PARA OBTENER CUPONES DE UN DISTRIBUIDOR
+export const getDistributorCoupons = async (distributorId: string, limit: number = 50) => {
   try {
-    let q = query(
+    const q = query(
       collection(db, 'coupons'),
-      where('distributorId', '==', distributorId)
+      where('distributorId', '==', distributorId),
+      // orderBy('createdAt', 'desc'), // Comentado por problemas de índice
+      // limit(limit)
     );
 
-    if (status) {
-      q = query(q, where('status', '==', status));
-    }
+    const querySnapshot = await getDocs(q);
+    const coupons: Coupon[] = [];
 
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    } as Coupon));
+    querySnapshot.forEach((doc) => {
+      coupons.push({
+        id: doc.id,
+        ...doc.data()
+      } as Coupon);
+    });
+
+    // Ordenar por fecha en el cliente
+    coupons.sort((a, b) => {
+      const dateA = a.createdAt?.toDate() || new Date(0);
+      const dateB = b.createdAt?.toDate() || new Date(0);
+      return dateB.getTime() - dateA.getTime();
+    });
+
+    return coupons.slice(0, limit);
 
   } catch (error) {
     console.error('Error obteniendo cupones:', error);
-    return [];
+    throw error;
   }
 };
 
-// Obtener estadísticas del distribuidor
+// ✅ FUNCIÓN PARA OBTENER ESTADÍSTICAS DE DISTRIBUIDOR
 export const getDistributorStats = async (distributorId: string) => {
   try {
-    const distributorRef = doc(db, 'distributors', distributorId);
-    const distributorDoc = await getDoc(distributorRef);
-
+    const distributorDoc = await getDoc(doc(db, 'distributors', distributorId));
+    
     if (!distributorDoc.exists()) {
       return null;
     }
 
-    const data = distributorDoc.data();
-    
-    // Obtener cupones
-    const coupons = await getDistributorCoupons(distributorId);
-    
+    const data = distributorDoc.data() as Distributor;
+
+    // Obtener cupones para calcular estadísticas precisas
+    const coupons = await getDistributorCoupons(distributorId, 1000); // Sin límite para stats
+
     const stats = {
-      creditsAvailable: data.credits.available,
-      creditsPurchased: data.credits.purchased,
-      creditsUsed: data.credits.used,
-      totalCoupons: coupons.length,
-      activeCoupons: coupons.filter(c => c.status === 'active').length,
-      usedCoupons: coupons.filter(c => c.status === 'used').length,
-      expiredCoupons: coupons.filter(c => c.status === 'expired').length,
+      totalCouponsGenerated: coupons.length,
+      totalCouponsUsed: coupons.filter(c => c.status === 'used').length,
+      totalCouponsExpired: coupons.filter(c => c.status === 'expired').length,
+      totalCouponsActive: coupons.filter(c => c.status === 'active').length,
       conversionRate: coupons.length > 0 
         ? Math.round((coupons.filter(c => c.status === 'used').length / coupons.length) * 100)
         : 0,
-      activeLubricentros: data.stats.activeLubricentros || 0
+      activeLubricentros: data.stats.activeLubricentros || 0,
+      creditsAvailable: data.credits?.available || 0,
+      creditsPurchased: data.credits?.purchased || 0,
+      creditsUsed: data.credits?.used || 0
     };
 
     return stats;
@@ -295,7 +409,7 @@ export const getDistributorStats = async (distributorId: string) => {
   }
 };
 
-// Comprar créditos (para distribuidores)
+// ✅ FUNCIÓN PARA COMPRAR CRÉDITOS (para distribuidores)
 export const purchaseCredits = async (
   distributorId: string,
   quantity: number,
@@ -342,15 +456,17 @@ export const purchaseCredits = async (
   }
 };
 
-// Funciones auxiliares
+// ✅ FUNCIONES AUXILIARES MEJORADAS
 function generateUniqueCode(prefix: string, type: string): string {
   const year = new Date().getFullYear();
   const typeCode = type.substring(0, 3).toUpperCase();
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return `${prefix}-${year}-${typeCode}-${random}`;
+  const timestamp = Date.now().toString().slice(-4); // Últimos 4 dígitos del timestamp
+  return `${prefix}-${year}-${typeCode}-${random}${timestamp}`;
 }
 
 function calculateUnitPrice(quantity: number): number {
+  // Precios por escala
   if (quantity >= 100) return 7;
   if (quantity >= 50) return 8;
   if (quantity >= 25) return 9;
@@ -358,11 +474,97 @@ function calculateUnitPrice(quantity: number): number {
   return 10;
 }
 
-// Exportar todas las funciones
+// ✅ NUEVA FUNCIÓN: Calcular costo del cupón
+function calculateCouponCost(
+  type: string, 
+  months: number, 
+  options: {
+    totalServicesContracted?: number;
+    unlimitedServices?: boolean;
+    additionalServices?: string[];
+  }
+): number {
+  let baseCost = months * 1000; // $1000 por mes base
+
+  // Incremento por servicios ilimitados
+  if (options.unlimitedServices) {
+    baseCost += months * 2000; // +$2000 por mes por servicios ilimitados
+  }
+  
+  // Incremento por servicios contratados específicos
+  if (options.totalServicesContracted && options.totalServicesContracted > 100) {
+    baseCost += (options.totalServicesContracted - 100) * 10; // +$10 por servicio adicional sobre 100
+  }
+
+  // Incremento por servicios adicionales
+  if (options.additionalServices && options.additionalServices.length > 0) {
+    baseCost += options.additionalServices.length * 500; // +$500 por servicio adicional
+  }
+
+  return baseCost;
+}
+
+// ✅ NUEVA FUNCIÓN: Validar disponibilidad de créditos
+export const validateDistributorCredits = async (distributorId: string, requiredCredits: number = 1): Promise<boolean> => {
+  try {
+    const distributorDoc = await getDoc(doc(db, 'distributors', distributorId));
+    
+    if (!distributorDoc.exists()) {
+      return false;
+    }
+
+    const data = distributorDoc.data() as Distributor;
+    const availableCredits = data.credits?.available || 0;
+    
+    return availableCredits >= requiredCredits;
+
+  } catch (error) {
+    console.error('Error validando créditos:', error);
+    return false;
+  }
+};
+
+// ✅ NUEVA FUNCIÓN: Marcar cupón como usado (para uso interno)
+export const markCouponAsUsed = async (
+  couponCode: string,
+  lubricentroInfo: {
+    lubricentroId: string;
+    lubricentroName: string;
+    activatedBy: string;
+  }
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const couponRef = doc(db, 'coupons', couponCode);
+    
+    await updateDoc(couponRef, {
+      status: 'used',
+      usedBy: {
+        lubricentroId: lubricentroInfo.lubricentroId,
+        lubricentroName: lubricentroInfo.lubricentroName,
+        usedAt: serverTimestamp(),
+        activatedBy: lubricentroInfo.activatedBy
+      },
+      updatedAt: serverTimestamp()
+    });
+
+    return { success: true };
+
+  } catch (error: any) {
+    console.error('Error marcando cupón como usado:', error);
+    return {
+      success: false,
+      error: error.message || 'Error al marcar el cupón como usado'
+    };
+  }
+};
+
+// ✅ EXPORTAR TODAS LAS FUNCIONES
 export default {
   validateCouponCode,
   generateCoupon,
   getDistributorCoupons,
   getDistributorStats,
-  purchaseCredits
+  purchaseCredits,
+  validateDistributorCredits,
+  markCouponAsUsed
 };

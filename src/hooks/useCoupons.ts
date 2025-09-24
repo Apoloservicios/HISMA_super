@@ -1,4 +1,4 @@
-// src/hooks/useCoupons.ts
+// src/hooks/useCoupons.ts - VERSIÓN CORREGIDA
 import { useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
@@ -22,10 +22,11 @@ import {
   ICoupon, 
   IDistributor, 
   ICouponValidationResult,
-  CouponType
+  CouponType,
+  ICouponGenerationOptions
 } from '../types/coupon.types';
 
-// Hook para validar cupones
+// ✅ Hook para validar cupones
 export const useCouponValidation = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export const useCouponValidation = () => {
   };
 };
 
-// Hook para distribuidores - gestionar cupones
+// ✅ Hook para distribuidores - gestionar cupones
 export const useDistributorCoupons = (distributorId: string | null) => {
   const [coupons, setCoupons] = useState<ICoupon[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -125,19 +126,40 @@ export const useDistributorCoupons = (distributorId: string | null) => {
     return () => clearInterval(interval);
   }, [distributorId]);
 
-  // Generar nuevo cupón
+  // ✅ CORREGIDO: Generar nuevo cupón con opciones completas
   const createCoupon = useCallback(async (
     type: CouponType,
-    additionalServices?: string[]
+    options?: ICouponGenerationOptions  // ✅ Usar el tipo correcto
   ) => {
     if (!distributorId) {
       return { success: false, error: 'No hay distribuidor seleccionado' };
     }
 
     try {
-      // Asegurar que el tipo sea compatible
-      const validType = type as 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'custom';
-      const result = await generateCoupon(distributorId, validType, additionalServices);
+      // ✅ CORREGIDO: Validar tipos permitidos y convertir si es necesario
+      const allowedTypes = ['monthly', 'quarterly', 'semiannual', 'annual', 'custom', 'unlimited'] as const;
+      type AllowedCouponType = typeof allowedTypes[number];
+      
+      let validType: AllowedCouponType;
+      
+      if (allowedTypes.includes(type as AllowedCouponType)) {
+        validType = type as AllowedCouponType;
+      } else {
+        // Mapear tipos no soportados a tipos válidos
+        switch (type) {
+          case 'trial_extension':
+            validType = 'custom';
+            break;
+          case 'premium_upgrade':
+            validType = 'custom';
+            break;
+          default:
+            validType = 'custom';
+        }
+      }
+      
+      // ✅ Llamar la función con los parámetros correctos
+      const result = await generateCoupon(distributorId, validType, options || {});
       
       // Recargar estadísticas
       if (result.success) {
@@ -185,7 +207,7 @@ export const useDistributorCoupons = (distributorId: string | null) => {
   };
 };
 
-// Hook para información del distribuidor
+// ✅ Hook para información del distribuidor
 export const useDistributor = (distributorId: string | null) => {
   const [distributor, setDistributor] = useState<IDistributor | null>(null);
   const [loading, setLoading] = useState(true);
@@ -227,7 +249,7 @@ export const useDistributor = (distributorId: string | null) => {
   };
 };
 
-// Hook para estadísticas de cupones
+// ✅ CORREGIDO: Hook para estadísticas de cupones
 export const useCouponStats = (distributorId: string | null) => {
   const [stats, setStats] = useState({
     total: 0,
@@ -249,13 +271,14 @@ export const useCouponStats = (distributorId: string | null) => {
       try {
         const distributorStats = await getDistributorStats(distributorId);
         if (distributorStats) {
+          // ✅ CORREGIDO: Mapear correctamente las propiedades
           setStats({
-            total: distributorStats.totalCoupons,
-            active: distributorStats.activeCoupons,
-            used: distributorStats.usedCoupons,
-            expired: distributorStats.expiredCoupons,
-            conversionRate: distributorStats.conversionRate,
-            creditsAvailable: distributorStats.creditsAvailable
+            total: distributorStats.totalCouponsGenerated || 0,           // ✅ CORREGIDO
+            active: distributorStats.totalCouponsActive || 0,             // ✅ CORREGIDO  
+            used: distributorStats.totalCouponsUsed || 0,                 // ✅ CORREGIDO
+            expired: distributorStats.totalCouponsExpired || 0,           // ✅ CORREGIDO
+            conversionRate: distributorStats.conversionRate || 0,
+            creditsAvailable: distributorStats.creditsAvailable || 0
           });
         }
       } catch (err) {
@@ -271,7 +294,7 @@ export const useCouponStats = (distributorId: string | null) => {
   return { stats, loading };
 };
 
-// Hook para verificar si un lubricentro tiene patrocinio
+// ✅ Hook para verificar si un lubricentro tiene patrocinio
 export const useLubricentroSponsorship = (lubricentroId: string | null) => {
   const [sponsorship, setSponsorship] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -301,4 +324,123 @@ export const useLubricentroSponsorship = (lubricentroId: string | null) => {
   }, [lubricentroId]);
 
   return { sponsorship, loading };
+};
+
+// ✅ NUEVO: Hook para métricas avanzadas
+export const useCouponMetrics = (distributorId: string | null) => {
+  const [metrics, setMetrics] = useState({
+    averageActivationTime: 0,
+    topPerformingTypes: [] as { type: CouponType; count: number; conversionRate: number }[],
+    monthlyTrend: [] as { month: string; generated: number; used: number }[],
+    lubricentroRetention: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!distributorId) {
+      setLoading(false);
+      return;
+    }
+
+    const calculateMetrics = async () => {
+      try {
+        // Aquí implementarías la lógica para calcular métricas avanzadas
+        // Por ahora, valores por defecto
+        setMetrics({
+          averageActivationTime: 0,
+          topPerformingTypes: [],
+          monthlyTrend: [],
+          lubricentroRetention: 0
+        });
+      } catch (err) {
+        console.error('Error calculating metrics:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    calculateMetrics();
+  }, [distributorId]);
+
+  return { metrics, loading };
+};
+
+// ✅ NUEVO: Hook para gestión de créditos
+export const useCreditManagement = (distributorId: string | null) => {
+  const [creditInfo, setCreditInfo] = useState({
+    available: 0,
+    purchased: 0,
+    used: 0,
+    lastPurchase: null as Date | null,
+    history: [] as any[]
+  });
+  const [loading, setLoading] = useState(true);
+  const [purchasing, setPurchasing] = useState(false);
+
+  useEffect(() => {
+    if (!distributorId) {
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(
+      doc(db, 'distributors', distributorId),
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data();
+          const credits = data.credits || {};
+          
+          setCreditInfo({
+            available: credits.available || 0,
+            purchased: credits.purchased || 0,
+            used: credits.used || 0,
+            lastPurchase: credits.lastPurchase?.toDate() || null,
+            history: credits.purchaseHistory || []
+          });
+        }
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [distributorId]);
+
+  // ✅ CORREGIDO: Función con tipos explícitos y parámetros correctos
+  const buyCreditsFn = useCallback(async (
+    quantity: number,
+    paymentInfo: { method: string; reference: string; amount: number }
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!distributorId) {
+      return { success: false, error: 'No hay distribuidor seleccionado' };
+    }
+
+    setPurchasing(true);
+    try {
+      // ✅ CORREGIDO: Usar la función importada correctamente
+      const result = await purchaseCredits(distributorId, quantity, paymentInfo);
+      return result;
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al comprar créditos' };
+    } finally {
+      setPurchasing(false);
+    }
+  }, [distributorId]);
+
+  return {
+    creditInfo,
+    loading,
+    purchasing,
+    purchaseCredits: buyCreditsFn  // ✅ RENOMBRADO para evitar conflicto
+  };
+};
+
+// ✅ EXPORTAR TODOS LOS HOOKS
+export default {
+  useCouponValidation,
+  useDistributorCoupons,
+  useDistributor,
+  useCouponStats,
+  useLubricentroSponsorship,
+  useCouponMetrics,
+  useCreditManagement
 };

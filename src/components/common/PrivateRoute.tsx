@@ -1,4 +1,4 @@
-// src/components/common/PrivateRoute.tsx - VERSIÓN CORREGIDA
+// src/components/common/PrivateRoute.tsx - VERSIÓN ACTUALIZADA PARA CUPONES
 import React, { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -13,28 +13,27 @@ const LoadingScreen = () => (
   </div>
 );
 
-
-// ✅ Rutas permitidas para usuarios con trial expirado
-const isAllowedRouteForExpiredTrial = (pathname: string): boolean => {
+// ✅ ACTUALIZADO: Rutas permitidas para usuarios con suscripción expirada/limitada
+const isAllowedRouteForLimitedAccess = (pathname: string): boolean => {
   const allowedRoutes = [
-    '/dashboard',           // ✅ CRÍTICO: Permitir dashboard (tiene botones de renovación)
+    '/dashboard',           // ✅ CRÍTICO: Permitir dashboard (botones de renovación/cupones)
     '/perfil',              
     '/usuarios',            
-           
-    '/admin',
-
+    '/admin',               // Panel de administración
+    '/pagos',               // ✅ NUEVO: Sección de pagos/cupones
+    '/suscripcion',         // ✅ NUEVO: Gestión de suscripción
   ];
 
-  // Permitir rutas de visualización (no creación)
-const isViewRoute = Boolean(pathname.match(/^\/cambios-aceite\/[^\/]+$/)) && 
-                   !pathname.includes('/nuevo') && 
-                   !pathname.includes('/editar');
+  // Permitir rutas de visualización (no creación/edición)
+  const isViewRoute = Boolean(pathname.match(/^\/cambios-aceite\/[^\/]+$/)) && 
+                     !pathname.includes('/nuevo') && 
+                     !pathname.includes('/editar') &&
+                     !pathname.includes('/clone');
 
   return allowedRoutes.some(route => pathname.startsWith(route)) || isViewRoute;
 };
 
-
-// Componente para mostrar cuando el período de prueba ha expirado
+// ✅ ACTUALIZADO: Pantalla para cuando el período de prueba ha expirado
 const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
   <div className="min-h-screen bg-gray-50 flex items-center justify-center">
     <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
@@ -53,17 +52,15 @@ const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
         </p>
         
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
-          <h4 className="text-sm font-medium text-blue-800 mb-2">Contactar Soporte</h4>
+          <h4 className="text-sm font-medium text-blue-800 mb-2">💳 Opciones de Activación</h4>
           <p className="text-sm text-blue-700 mb-3">
-            Nuestro equipo está listo para ayudarte a activar tu cuenta y elegir el plan que mejor se adapte a tus necesidades.
+            Puedes activar tu suscripción de varias maneras:
           </p>
-          <div className="space-y-2">
-            <p className="text-xs text-blue-600">
-              📧 Email: ventas@hisma.com.ar
-            </p>
-            <p className="text-xs text-blue-600">
-              📱 WhatsApp: +54 (260) 4515854
-            </p>
+          <div className="space-y-1 text-xs text-blue-600">
+            <p>🎁 Con cupón de distribuidor</p>
+            <p>💳 Pago con MercadoPago</p>
+            <p>📧 Contactar soporte: ventas@hisma.com.ar</p>
+            <p>📱 WhatsApp: +54 (260) 4515854</p>
           </div>
         </div>
 
@@ -71,9 +68,9 @@ const TrialExpiredScreen = ({ lubricentro }: { lubricentro: Lubricentro }) => (
           <Button
             color="primary"
             fullWidth
-            onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
+            onClick={() => window.location.href = '/dashboard'}
           >
-            Contactar por Email
+            Ir a Activar Suscripción
           </Button>
           <Button
             color="success"
@@ -161,11 +158,17 @@ const EmailVerificationRequired = () => {
   );
 };
 
-// ✅ NUEVO: Componente para límite de prueba alcanzado
-const TrialLimitReachedScreen = ({ lubricentro, currentServices, limit }: { 
+// ✅ ACTUALIZADO: Componente para límite de servicios alcanzado
+const ServiceLimitReachedScreen = ({ 
+  lubricentro, 
+  currentServices, 
+  limit, 
+  hasUnlimitedServices 
+}: { 
   lubricentro: Lubricentro; 
   currentServices: number; 
-  limit: number; 
+  limit: number | null;
+  hasUnlimitedServices: boolean;
 }) => (
   <div className="min-h-screen bg-gray-50 flex items-center justify-center">
     <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
@@ -176,19 +179,38 @@ const TrialLimitReachedScreen = ({ lubricentro, currentServices, limit }: {
           </svg>
         </div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">
-          Límite de Prueba Alcanzado
+          {lubricentro.estado === 'trial' ? 'Límite de Prueba Alcanzado' : 'Límite de Plan Alcanzado'}
         </h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Has utilizado <strong>{currentServices} de {limit}</strong> servicios disponibles durante el período de prueba.
-        </p>
-        <p className="text-sm text-gray-600 mb-6">
-          Para continuar registrando cambios de aceite, necesitas activar tu suscripción.
-        </p>
+        
+        {lubricentro.estado === 'trial' ? (
+          <>
+            <p className="text-sm text-gray-600 mb-4">
+              Has utilizado <strong>{currentServices} de {limit}</strong> servicios disponibles durante el período de prueba.
+            </p>
+            <p className="text-sm text-gray-600 mb-6">
+              Para continuar registrando cambios de aceite, necesitas activar tu suscripción.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-gray-600 mb-4">
+              Has alcanzado el límite de <strong>{limit}</strong> servicios de tu plan actual este mes.
+            </p>
+            <p className="text-sm text-gray-600 mb-6">
+              Considera upgrade a un plan superior o espera al próximo ciclo.
+            </p>
+          </>
+        )}
         
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
-          <h4 className="text-sm font-medium text-blue-800 mb-2">¿Necesitas más servicios?</h4>
+          <h4 className="text-sm font-medium text-blue-800 mb-2">
+            {lubricentro.estado === 'trial' ? '🎁 Activa tu cuenta' : '⬆️ Mejora tu plan'}
+          </h4>
           <p className="text-sm text-blue-700 mb-3">
-            Contáctanos para activar tu cuenta y elegir el plan que mejor se adapte a tus necesidades.
+            {lubricentro.estado === 'trial' 
+              ? 'Usa un cupón de distribuidor o contacta soporte para activar tu cuenta.'
+              : 'Contacta soporte para upgrade o gestiona tu suscripción desde el dashboard.'
+            }
           </p>
           <div className="space-y-1">
             <p className="text-xs text-blue-600">📧 ventas@hisma.com.ar</p>
@@ -197,26 +219,87 @@ const TrialLimitReachedScreen = ({ lubricentro, currentServices, limit }: {
         </div>
 
         <div className="space-y-3">
+          {lubricentro.estado === 'trial' ? (
+            <Button
+              color="primary"
+              fullWidth
+              onClick={() => window.location.href = '/dashboard'}
+            >
+              Activar con Cupón
+            </Button>
+          ) : (
+            <Button
+              color="primary"
+              fullWidth
+              onClick={() => window.location.href = '/dashboard'}
+            >
+              Ver Opciones de Upgrade
+            </Button>
+          )}
           <Button
-            color="primary"
+            color="success"
+            variant="outline"
             fullWidth
-            onClick={() => window.location.href = 'mailto:ventas@hisma.com.ar?subject=Activar%20suscripción%20-%20' + encodeURIComponent(lubricentro.fantasyName)}
+            onClick={() => window.open('https://wa.me/5492604515854?text=' + encodeURIComponent(`Hola, necesito ayuda con mi plan para ${lubricentro.fantasyName}`))}
           >
             Contactar Soporte
-          </Button>
-          <Button
-            variant="outline"
-            color="secondary"
-            fullWidth
-            onClick={() => window.history.back()}
-          >
-            Volver
           </Button>
         </div>
       </div>
     </div>
   </div>
 );
+
+// ✅ NUEVA FUNCIÓN: Verificar límites de servicios de manera unificada
+const checkServiceLimits = (lubricentro: Lubricentro, isCreationRoute: boolean) => {
+  if (!isCreationRoute) {
+    return { canProceed: true, reason: '' };
+  }
+
+  const currentServices = lubricentro.servicesUsedThisMonth || 0;
+
+  // ✅ CASO 1: Período de prueba
+  if (lubricentro.estado === 'trial') {
+    const trialLimit = 10; // Constante del sistema
+    
+    if (currentServices >= trialLimit) {
+      return {
+        canProceed: false,
+        reason: 'trial_limit',
+        data: { currentServices, limit: trialLimit, hasUnlimitedServices: false }
+      };
+    }
+    return { canProceed: true, reason: 'trial_ok' };
+  }
+
+  // ✅ CASO 2: Suscripción activa con servicios ilimitados
+  if (lubricentro.estado === 'activo' && (lubricentro as any).hasUnlimitedServices) {
+    return { canProceed: true, reason: 'unlimited_services' };
+  }
+
+  // ✅ CASO 3: Suscripción activa con límite específico
+  if (lubricentro.estado === 'activo' && (lubricentro as any).totalServicesContracted) {
+    const contractedLimit = (lubricentro as any).totalServicesContracted;
+    const remainingServices = (lubricentro as any).servicesRemaining || 0;
+
+    if (remainingServices <= 0) {
+      return {
+        canProceed: false,
+        reason: 'plan_limit',
+        data: { currentServices, limit: contractedLimit, hasUnlimitedServices: false }
+      };
+    }
+    return { canProceed: true, reason: 'plan_ok' };
+  }
+
+  // ✅ CASO 4: Suscripción activa sin límites específicos (servicios ilimitados por defecto)
+  if (lubricentro.estado === 'activo') {
+    return { canProceed: true, reason: 'active_unlimited' };
+  }
+
+  // ✅ CASO 5: Estado inactivo
+  return { canProceed: false, reason: 'inactive' };
+};
 
 interface PrivateRouteProps {
   children: ReactNode;
@@ -273,48 +356,57 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({
   // Si hay requisitos de roles, verificar el rol del usuario
   if (requiredRoles.length > 0 && userProfile) {
     if (!requiredRoles.includes(userProfile.role)) {
-      // Redirigir al dashboard si no tiene los permisos
       return <Navigate to="/dashboard" replace />;
     }
   }
   
-  // ✅ CORRECCIÓN: Verificar estado del lubricentro y período de prueba de manera más precisa
+  // ✅ LÓGICA ACTUALIZADA: Verificación de estado del lubricentro
   if (userProfile && userProfile.role !== 'superadmin' && lubricentro) {
-    // Si el lubricentro está inactivo
-   if (lubricentro.estado === 'inactivo' && !isAllowedRouteForExpiredTrial(location.pathname)) {
+    
+    // ✅ CASO 1: Lubricentro inactivo
+    if (lubricentro.estado === 'inactivo' && !isAllowedRouteForLimitedAccess(location.pathname)) {
       return <TrialExpiredScreen lubricentro={lubricentro} />;
     }
     
-    // Si está en período de prueba, verificar si ha expirado
+    // ✅ CASO 2: Período de prueba expirado por fecha
     if (lubricentro.estado === 'trial' && lubricentro.trialEndDate) {
       const now = new Date();
       const trialEnd = new Date(lubricentro.trialEndDate);
       
-      if (trialEnd < now) {
+      if (trialEnd < now && !isAllowedRouteForLimitedAccess(location.pathname)) {
         return <TrialExpiredScreen lubricentro={lubricentro} />;
       }
     }
     
-    // ✅ CORRECCIÓN: Verificar límites durante el período de prueba para rutas específicas
-    if (requiresActiveSubscription && lubricentro.estado === 'trial') {
-      const trialServiceLimit = 10; // Límite coherente con constants.ts
-      const currentServices = lubricentro.servicesUsedThisMonth || 0;
-      
-      // ✅ MEJORA: Solo bloquear si ha alcanzado exactamente el límite, permitir edición
+    // ✅ CASO 3: Verificar límites de servicios (solo para rutas que lo requieren)
+    if (requiresActiveSubscription) {
       const isCreationRoute = location.pathname.includes('/nuevo') || 
                              (location.pathname.includes('/cambios-aceite') && location.search.includes('clone='));
       
-      if (isCreationRoute && currentServices >= trialServiceLimit) {
-        return <TrialLimitReachedScreen 
-          lubricentro={lubricentro} 
-          currentServices={currentServices} 
-          limit={trialServiceLimit} 
-        />;
+      const limitsCheck = checkServiceLimits(lubricentro, isCreationRoute);
+      
+      if (!limitsCheck.canProceed) {
+        console.log(`🚫 Acceso denegado por límites: ${limitsCheck.reason}`, limitsCheck.data);
+        
+        if (limitsCheck.reason === 'trial_limit' || limitsCheck.reason === 'plan_limit') {
+          return (
+            <ServiceLimitReachedScreen 
+              lubricentro={lubricentro} 
+              currentServices={limitsCheck.data?.currentServices || 0}
+              limit={limitsCheck.data?.limit || 0}
+              hasUnlimitedServices={limitsCheck.data?.hasUnlimitedServices || false}
+            />
+          );
+        }
+        
+        if (limitsCheck.reason === 'inactive') {
+          return <TrialExpiredScreen lubricentro={lubricentro} />;
+        }
       }
     }
   }
   
-  // Verificar si la cuenta del usuario está activa
+  // ✅ Verificar si la cuenta del usuario está activa
   if (userProfile && userProfile.estado === 'inactivo') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -349,7 +441,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({
     return <Navigate to="/registro-pendiente" replace />;
   }
   
-  // Si pasa todas las validaciones, renderizar los hijos
+  // ✅ Si pasa todas las validaciones, renderizar los hijos
   return <>{children}</>;
 };
 

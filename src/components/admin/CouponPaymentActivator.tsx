@@ -1,4 +1,4 @@
-// src/components/admin/CouponPaymentActivator.tsx
+// src/components/admin/CouponPaymentActivator.tsx - VERSIÓN CORREGIDA
 import React, { useState } from 'react';
 import { Card, CardBody, Button, Alert, Spinner } from '../ui';
 import { CheckCircleIcon, XCircleIcon, GiftIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
@@ -22,6 +22,8 @@ interface CouponValidationResult {
     benefits: {
       membershipMonths: number;
       additionalServices?: string[];
+      totalServicesContracted?: number; // ✅ NUEVO: Límite de servicios
+      unlimitedServices?: boolean;       // ✅ NUEVO: Servicios ilimitados
     };
     expiresAt: Date;
   };
@@ -67,7 +69,7 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
     }
   };
 
-  // Activar la membresía con el cupón
+  // ✅ FUNCIÓN CORREGIDA: Activar la membresía con el cupón
   const handleActivateWithCoupon = async () => {
     if (!validationResult?.couponData) {
       setError('Por favor valida el cupón primero');
@@ -100,14 +102,16 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
         const monthsToAdd = validationResult.couponData?.benefits?.membershipMonths || 3;
         expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
 
-        // Preparar datos de actualización del lubricentro
+        // ✅ PREPARAR DATOS DE ACTUALIZACIÓN CORREGIDOS
         const lubricentroUpdate: any = {
           subscriptionStatus: 'active',
-          estado: 'activo', // Asegurar que el estado también se actualice
+          estado: 'activo', // ✅ Estado activo
           subscriptionStartDate: serverTimestamp(),
           subscriptionEndDate: expirationDate,
           paymentMethod: 'coupon',
           lastPaymentDate: serverTimestamp(),
+          
+          // ✅ CORRECCIÓN: Información del patrocinador
           sponsorship: {
             distributorId: couponData.distributorId,
             distributorName: couponData.distributorName,
@@ -117,27 +121,60 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
             expiresAt: expirationDate,
             showBranding: true
           },
+          
+          // ✅ CORRECCIÓN: Configuración de branding
           brandingSettings: {
             showDistributorLogo: true,
             showDistributorMessage: true,
             position: 'footer'
           },
+          
           updatedAt: serverTimestamp()
         };
 
-        // Si el cupón tiene límite de servicios, actualizar los contadores
-        if (couponData.benefits?.totalServicesContracted) {
-          lubricentroUpdate.totalServicesContracted = couponData.benefits.totalServicesContracted;
-          lubricentroUpdate.servicesRemaining = couponData.benefits.totalServicesContracted;
+        // ✅ NUEVA LÓGICA: Manejar límites de servicios según el cupón
+        const couponBenefits = validationResult.couponData?.benefits;
+        
+        if (couponBenefits?.unlimitedServices === true) {
+          // 🎯 SERVICIOS ILIMITADOS
+          console.log('✅ Aplicando servicios ILIMITADOS');
+          lubricentroUpdate.subscriptionPlan = 'unlimited';
+          lubricentroUpdate.totalServicesContracted = null; // Sin límites
+          lubricentroUpdate.servicesRemaining = null;       // Sin límites
+          lubricentroUpdate.hasUnlimitedServices = true;
+          lubricentroUpdate.servicesUsed = 0;               // Resetear contador
+          lubricentroUpdate.servicesUsedThisMonth = 0;      // Resetear contador mensual
+          
+        } else if (couponBenefits?.totalServicesContracted && couponBenefits.totalServicesContracted > 0) {
+          // 🎯 SERVICIOS LIMITADOS (CON CANTIDAD ESPECÍFICA)
+          const contractedServices = couponBenefits.totalServicesContracted;
+          console.log(`✅ Aplicando ${contractedServices} servicios contratados`);
+          
+          lubricentroUpdate.subscriptionPlan = `PLAN${contractedServices}`;
+          lubricentroUpdate.totalServicesContracted = contractedServices;
+          lubricentroUpdate.servicesRemaining = contractedServices;
+          lubricentroUpdate.hasUnlimitedServices = false;
+          lubricentroUpdate.servicesUsed = 0;               // Resetear contador
+          lubricentroUpdate.servicesUsedThisMonth = 0;      // Resetear contador mensual
+          
+        } else {
+          // 🎯 PLAN ESTÁNDAR (por defecto - servicios ilimitados durante membresía)
+          console.log('✅ Aplicando plan estándar con servicios ilimitados');
+          lubricentroUpdate.subscriptionPlan = 'standard';
+          lubricentroUpdate.totalServicesContracted = null; // Sin límites durante membresía activa
+          lubricentroUpdate.servicesRemaining = null;
+          lubricentroUpdate.hasUnlimitedServices = true;    // Durante la membresía activa
           lubricentroUpdate.servicesUsed = 0;
           lubricentroUpdate.servicesUsedThisMonth = 0;
         }
+
+        console.log('🔄 Datos de actualización:', lubricentroUpdate);
 
         // Actualizar el lubricentro
         const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
         transaction.update(lubricentroRef, lubricentroUpdate);
 
-        // Marcar el cupón como usado
+        // ✅ Marcar el cupón como usado
         transaction.update(couponRef, {
           status: 'used',
           usedBy: {
@@ -149,7 +186,7 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
           updatedAt: serverTimestamp()
         });
 
-        // Actualizar estadísticas del distribuidor
+        // ✅ Actualizar estadísticas del distribuidor
         const distributorRef = doc(db, 'distributors', couponData.distributorId);
         const distributorDoc = await transaction.get(distributorRef);
         
@@ -162,7 +199,7 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
           });
         }
 
-        // Crear registro de pago/activación
+        // ✅ Crear registro de pago/activación
         const paymentRef = doc(collection(db, 'payments'));
         transaction.set(paymentRef, {
           lubricentroId: lubricentroId,
@@ -174,6 +211,12 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
           distributorId: couponData.distributorId,
           distributorName: couponData.distributorName,
           membershipMonths: validationResult.couponData?.benefits?.membershipMonths || 3,
+          appliedBenefits: {
+            membershipMonths: validationResult.couponData?.benefits?.membershipMonths || 3,
+            totalServicesContracted: couponBenefits?.totalServicesContracted,
+            unlimitedServices: couponBenefits?.unlimitedServices,
+            additionalServices: couponBenefits?.additionalServices || []
+          },
           createdAt: serverTimestamp(),
           processedAt: serverTimestamp()
         });
@@ -204,6 +247,7 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
     setSuccess(false);
   };
 
+  // ✅ PANTALLA DE ÉXITO MEJORADA
   if (success) {
     return (
       <Card>
@@ -213,14 +257,28 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
             <h3 className="text-2xl font-bold text-gray-900 mb-2">
               ¡Membresía Activada con Éxito!
             </h3>
-            <p className="text-gray-600 mb-4">
-              Tu membresía ha sido activada por {validationResult?.couponData?.benefits?.membershipMonths || 0} meses
-            </p>
-            {validationResult?.couponData?.distributorName && (
-              <p className="text-sm text-gray-500 mb-4">
-                Patrocinado por: <strong>{validationResult.couponData.distributorName}</strong>
-              </p>
-            )}
+            
+            {/* ✅ INFORMACIÓN DETALLADA DE LA ACTIVACIÓN */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+              <div className="space-y-2 text-sm text-green-800">
+                <p>
+                  <strong>Duración:</strong> {validationResult?.couponData?.benefits?.membershipMonths || 0} meses
+                </p>
+                
+                {validationResult?.couponData?.benefits?.unlimitedServices ? (
+                  <p><strong>Servicios:</strong> ✅ Ilimitados durante la membresía</p>
+                ) : validationResult?.couponData?.benefits?.totalServicesContracted ? (
+                  <p><strong>Servicios contratados:</strong> {validationResult.couponData.benefits.totalServicesContracted}</p>
+                ) : (
+                  <p><strong>Servicios:</strong> ✅ Ilimitados durante la membresía</p>
+                )}
+                
+                {validationResult?.couponData?.distributorName && (
+                  <p><strong>Patrocinado por:</strong> {validationResult.couponData.distributorName}</p>
+                )}
+              </div>
+            </div>
+            
             <Button color="primary" onClick={handleReset}>
               Activar Otro Cupón
             </Button>
@@ -263,7 +321,7 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
                   type="text"
                   value={couponCode}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="Ej: SHELL-2024-TRI-ABC123"
+                  placeholder="Ej: SHELL-2025-TRI-ABC123"
                   className="flex-1 font-mono px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={validating || loading || !!validationResult}
                 />
@@ -297,7 +355,7 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
               </p>
             </div>
 
-            {/* Resultado de validación */}
+            {/* ✅ RESULTADO DE VALIDACIÓN MEJORADO */}
             {validationResult && validationResult.valid && validationResult.couponData && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-start">
@@ -313,13 +371,38 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
                       <p>
                         <span className="font-medium">Duración:</span> {validationResult.couponData.benefits.membershipMonths} meses
                       </p>
+                      
+                      {/* ✅ MOSTRAR INFORMACIÓN DE SERVICIOS */}
+                      {validationResult.couponData.benefits.unlimitedServices ? (
+                        <p>
+                          <span className="font-medium">Servicios:</span> 
+                          <span className="ml-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                            ✅ Ilimitados
+                          </span>
+                        </p>
+                      ) : validationResult.couponData.benefits.totalServicesContracted ? (
+                        <p>
+                          <span className="font-medium">Servicios contratados:</span> 
+                          <span className="ml-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                            {validationResult.couponData.benefits.totalServicesContracted}
+                          </span>
+                        </p>
+                      ) : (
+                        <p>
+                          <span className="font-medium">Servicios:</span> 
+                          <span className="ml-1 px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
+                            ✅ Ilimitados durante membresía
+                          </span>
+                        </p>
+                      )}
+                      
                       {validationResult.couponData.benefits.additionalServices && 
                        validationResult.couponData.benefits.additionalServices.length > 0 && (
                         <p>
                           <span className="font-medium">Beneficios adicionales:</span>
                           <br />
                           {validationResult.couponData.benefits.additionalServices.map((service, idx) => (
-                            <span key={idx} className="inline-block mt-1 mr-2">
+                            <span key={idx} className="inline-block mt-1 mr-2 px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
                               • {service}
                             </span>
                           ))}

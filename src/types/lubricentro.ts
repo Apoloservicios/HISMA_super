@@ -19,6 +19,8 @@ export interface Lubricentro {
   logoBase64?: string;
   createdAt: Date;
   updatedAt?: Date;
+
+  hasUnlimitedServices?: boolean;
   
   // Campos para ubicación
   location?: {
