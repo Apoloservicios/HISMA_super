@@ -17,9 +17,11 @@ import {
   limit, 
   onSnapshot,
   doc,
+  where,  // ✅ AGREGAR ESTE IMPORT
+  getDocs, // ✅ AGREGAR ESTE IMPORT
   updateDoc,
   serverTimestamp,
-  Timestamp
+  Timestamp,setDoc
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
@@ -30,6 +32,8 @@ interface Coupon {
   status: 'active' | 'used' | 'expired';
   benefits: {
     membershipMonths: number;
+    totalServicesContracted?: number; // ✅ AGREGAR ESTE CAMPO
+    additionalServices?: string[];
   };
   createdAt: any;
   validUntil: any;
@@ -46,13 +50,14 @@ const SuperAdminCouponGenerator: React.FC = () => {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   
   // Estados del formulario
-  const [formData, setFormData] = useState({
-    distributorName: '',
-    quantity: 1,
-    membershipMonths: 3,
-    validityDays: 90,
-    prefix: 'HISMA'
-  });
+const [formData, setFormData] = useState({
+  distributorName: '',
+  quantity: 1,
+  membershipMonths: 3,
+  totalServicesContracted: 100, // ✅ AGREGAR ESTE CAMPO
+  validityDays: 90,
+  prefix: 'HISMA'
+});
 
   // Cargar cupones existentes
   useEffect(() => {
@@ -85,61 +90,68 @@ const SuperAdminCouponGenerator: React.FC = () => {
 
   // Generar cupones
   const handleGenerateCoupons = async () => {
-    if (!formData.distributorName.trim()) {
-      alert('Por favor ingresa el nombre del distribuidor');
-      return;
-    }
+   if (!formData.distributorName.trim()) {
+    alert('Por favor ingresa el nombre del distribuidor');
+    return;
+  }
 
     setLoading(true);
     const generatedCodes: string[] = [];
 
     try {
-      const validUntil = new Date();
-      validUntil.setDate(validUntil.getDate() + formData.validityDays);
+    const validUntil = new Date();
+    validUntil.setDate(validUntil.getDate() + formData.validityDays);
 
-      for (let i = 0; i < formData.quantity; i++) {
-        const code = generateUniqueCode(formData.prefix.toUpperCase(), i);
-        
-        await addDoc(collection(db, 'coupons'), {
-          code,
-          distributorName: formData.distributorName,
-          distributorId: 'manual', // Generado manualmente por SuperAdmin
-          status: 'active',
-          benefits: {
-            membershipMonths: formData.membershipMonths,
-            additionalServices: []
-          },
-          createdAt: serverTimestamp(),
-          validFrom: serverTimestamp(),
-          validUntil: Timestamp.fromDate(validUntil),
-          generatedBy: 'superadmin',
-          metadata: {
-            note: `Generado para ${formData.distributorName}`
-          }
-        });
-
-        generatedCodes.push(code);
-      }
-
-      alert(`✅ ${generatedCodes.length} cupones generados exitosamente`);
-      setShowGenerateModal(false);
+    for (let i = 0; i < formData.quantity; i++) {
+      const code = generateUniqueCode(formData.prefix.toUpperCase(), i);
       
-      // Reset form
-      setFormData({
-        distributorName: '',
-        quantity: 1,
-        membershipMonths: 3,
-        validityDays: 90,
-        prefix: 'HISMA'
+      // ✅ CAMBIO IMPORTANTE: Usar setDoc en lugar de addDoc para usar el código como ID
+      const { setDoc } = await import('firebase/firestore');
+      
+      await setDoc(doc(db, 'coupons', code), {
+        code,
+        distributorName: formData.distributorName,
+        distributorId: 'manual',
+        status: 'active',
+        benefits: {
+          membershipMonths: formData.membershipMonths,
+          totalServicesContracted: formData.totalServicesContracted, // ✅ AGREGAR
+          additionalServices: []
+        },
+        createdAt: serverTimestamp(),
+        validFrom: serverTimestamp(),
+        validUntil: Timestamp.fromDate(validUntil),
+        generatedBy: 'superadmin',
+        metadata: {
+          note: `Generado para ${formData.distributorName}`
+        }
       });
 
-    } catch (error) {
-      console.error('Error generando cupones:', error);
-      alert('Error al generar los cupones');
-    } finally {
-      setLoading(false);
+      generatedCodes.push(code);
     }
-  };
+
+    alert(`✅ ${generatedCodes.length} cupones generados exitosamente`);
+    setShowGenerateModal(false);
+    
+    // Reset form incluyendo el nuevo campo
+    setFormData({
+      distributorName: '',
+      quantity: 1,
+      membershipMonths: 3,
+      totalServicesContracted: 100, // ✅ AGREGAR
+      validityDays: 90,
+      prefix: 'HISMA'
+    });
+
+  } catch (error) {
+    console.error('Error generando cupones:', error);
+    alert('Error al generar los cupones');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   // Copiar código al portapapeles
   const copyToClipboard = (code: string) => {
@@ -265,7 +277,12 @@ const SuperAdminCouponGenerator: React.FC = () => {
                       {coupon.distributorName}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {coupon.benefits.membershipMonths} meses
+                      <div>
+                        <p>{coupon.benefits.membershipMonths} meses</p>
+                        <p className="text-xs text-gray-500">
+                          {coupon.benefits.totalServicesContracted || 100} servicios
+                        </p>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge 
@@ -361,6 +378,26 @@ const SuperAdminCouponGenerator: React.FC = () => {
                 <option value="12">12 meses</option>
               </select>
             </div>
+               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Cantidad de Servicios
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10000"
+                  value={formData.totalServicesContracted}
+                  onChange={(e) => setFormData({
+                    ...formData, 
+                    totalServicesContracted: parseInt(e.target.value) || 100
+                  })}
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="100"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Número de cambios de aceite incluidos
+                </p>
+              </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

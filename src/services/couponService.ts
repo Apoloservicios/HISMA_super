@@ -7,6 +7,7 @@ import {
   addDoc, 
   query, 
   where, 
+  
   getDocs, 
   serverTimestamp,
   runTransaction,
@@ -108,9 +109,9 @@ export interface CouponValidationResult {
     benefits: {
       membershipMonths: number;
       additionalServices?: string[];
-      totalServicesContracted?: number; // ✅ NUEVO
-      unlimitedServices?: boolean;       // ✅ NUEVO
-      customPlan?: string;               // ✅ NUEVO
+      totalServicesContracted?: number;
+      unlimitedServices?: boolean;
+      customPlan?: string; // ✅ ASEGURARSE QUE ESTÉ AQUÍ
     };
     expiresAt: Date;
     metadata?: {
@@ -125,23 +126,55 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
   try {
     console.log(`🔍 Validando cupón: ${code}`);
     
+    // Primero intentar buscar usando el código como ID del documento
     const couponRef = doc(db, 'coupons', code);
     const couponDoc = await getDoc(couponRef);
 
-    if (!couponDoc.exists()) {
-      console.log(`❌ Cupón no existe: ${code}`);
+    let couponData: Coupon | null = null;
+    let documentRef = couponRef;
+
+    if (couponDoc.exists()) {
+      console.log('✅ Cupón encontrado por ID');
+      couponData = couponDoc.data() as Coupon;
+    } else {
+      // Si no existe por ID, buscar por campo código
+      console.log('📋 Buscando por campo código...');
+      
+      const q = query(
+        collection(db, 'coupons'),
+        where('code', '==', code)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        console.log(`❌ Cupón no existe: ${code}`);
+        return {
+          valid: false,
+          message: 'El código de cupón no existe'
+        };
+      }
+      
+      // Usar el primer documento encontrado
+      const foundDoc = querySnapshot.docs[0];
+      couponData = foundDoc.data() as Coupon;
+      documentRef = foundDoc.ref;
+      console.log('✅ Cupón encontrado por campo código');
+    }
+
+    // Verificar que tenemos datos
+    if (!couponData) {
       return {
         valid: false,
-        message: 'El código de cupón no existe'
+        message: 'Error al obtener datos del cupón'
       };
     }
 
-    const couponData = couponDoc.data() as Coupon;
     console.log('📋 Datos del cupón:', couponData);
 
     // Verificar estado
     if (couponData.status === 'used') {
-      console.log(`❌ Cupón ya usado: ${code}`);
+      console.log(`❌ Cupón ya usado`);
       return {
         valid: false,
         message: 'Este cupón ya ha sido utilizado'
@@ -149,7 +182,7 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
     }
 
     if (couponData.status === 'expired') {
-      console.log(`❌ Cupón expirado: ${code}`);
+      console.log(`❌ Cupón expirado`);
       return {
         valid: false,
         message: 'Este cupón ha expirado'
@@ -161,10 +194,10 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
     const validUntil = couponData.validUntil.toDate();
 
     if (now > validUntil) {
-      console.log(`⏰ Cupón vencido por fecha: ${code}`);
+      console.log(`⏰ Cupón vencido por fecha`);
       
       // Actualizar estado a expirado
-      await updateDoc(couponRef, { 
+      await updateDoc(documentRef, { 
         status: 'expired',
         updatedAt: serverTimestamp()
       });
@@ -186,7 +219,7 @@ export const validateCouponCode = async (code: string): Promise<CouponValidation
         benefits: {
           membershipMonths: couponData.benefits.membershipMonths,
           additionalServices: couponData.benefits.additionalServices || [],
-          totalServicesContracted: couponData.benefits.totalServicesContracted,
+          totalServicesContracted: couponData.benefits.totalServicesContracted || 100, // ✅ Valor por defecto
           unlimitedServices: couponData.benefits.unlimitedServices || false,
           customPlan: couponData.benefits.customPlan
         },
