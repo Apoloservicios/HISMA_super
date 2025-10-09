@@ -15,7 +15,8 @@ import {
   limit,
   startAfter,
   QueryDocumentSnapshot,
-  DocumentData
+  DocumentData,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { OilChange, OilChangeStats,OilChangeStatus } from '../types';
@@ -653,15 +654,7 @@ export const updateOilChange = async (id: string, data: Partial<OilChange>): Pro
   }
 };
 
-// Eliminar cambio de aceite
-export const deleteOilChange = async (id: string): Promise<void> => {
-  try {
-    await deleteDoc(doc(db, COLLECTION_NAME, id));
-  } catch (error) {
-    console.error('Error al eliminar el cambio de aceite:', error);
-    throw error;
-  }
-};
+
 
 // Generar próximo número de cambio
 export const getNextOilChangeNumber = async (lubricentroId: string, prefix: string): Promise<string> => {
@@ -1690,6 +1683,98 @@ export const duplicateOilChangeToLubricentro = async (
     return docRef.id;
   } catch (error) {
     console.error('❌ Error al duplicar servicio:', error);
+    throw error;
+  }
+};
+
+/**
+ * Eliminar un cambio de aceite definitivamente
+ * SOLO para superadmin - elimina el registro completamente de Firebase
+ */
+export const deleteOilChange = async (oilChangeId: string): Promise<void> => {
+  try {
+    console.log(`🗑️ Eliminando servicio: ${oilChangeId}`);
+    
+    // Obtener el documento antes de eliminar para actualizar contadores si es necesario
+    const docRef = doc(db, COLLECTION_NAME, oilChangeId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      throw new Error('El servicio no existe');
+    }
+    
+    const oilChangeData = docSnap.data();
+    const lubricentroId = oilChangeData.lubricentroId;
+    
+    // Eliminar el documento
+    await deleteDoc(docRef);
+    
+    // Actualizar contadores del lubricentro si es necesario
+    if (lubricentroId) {
+      const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
+      const lubricentroSnap = await getDoc(lubricentroRef);
+      
+      if (lubricentroSnap.exists()) {
+        const lubricentroData = lubricentroSnap.data();
+        
+        // Actualizar el contador de servicios usados si el servicio estaba completo
+        if (oilChangeData.estado === 'completo' || oilChangeData.estado === 'enviado') {
+          const updates: any = {
+            updatedAt: serverTimestamp()
+          };
+          
+          // Decrementar servicios usados
+          if (lubricentroData.servicesUsed > 0) {
+            updates.servicesUsed = lubricentroData.servicesUsed - 1;
+            updates.servicesRemaining = (lubricentroData.servicesRemaining || 0) + 1;
+          }
+          
+          // Decrementar servicios usados este mes si corresponde
+          const serviceDate = oilChangeData.fechaServicio instanceof Date 
+            ? oilChangeData.fechaServicio 
+            : oilChangeData.fechaServicio?.toDate?.() 
+            ? oilChangeData.fechaServicio.toDate()
+            : new Date();
+            
+          const currentMonth = new Date().getMonth();
+          const serviceMonth = serviceDate.getMonth();
+          
+          if (currentMonth === serviceMonth && lubricentroData.servicesUsedThisMonth > 0) {
+            updates.servicesUsedThisMonth = lubricentroData.servicesUsedThisMonth - 1;
+          }
+          
+          await updateDoc(lubricentroRef, updates);
+        }
+      }
+    }
+    
+    console.log(`✅ Servicio ${oilChangeId} eliminado correctamente`);
+  } catch (error) {
+    console.error('❌ Error al eliminar servicio:', error);
+    throw error;
+  }
+};
+
+/**
+ * Eliminar múltiples cambios de aceite
+ * Versión batch para eliminar varios servicios de manera eficiente
+ */
+export const deleteBatchOilChanges = async (oilChangeIds: string[]): Promise<void> => {
+  try {
+    console.log(`🗑️ Eliminando ${oilChangeIds.length} servicios...`);
+    
+    const batch = writeBatch(db);
+    
+    for (const id of oilChangeIds) {
+      const docRef = doc(db, COLLECTION_NAME, id);
+      batch.delete(docRef);
+    }
+    
+    await batch.commit();
+    
+    console.log(`✅ ${oilChangeIds.length} servicios eliminados correctamente`);
+  } catch (error) {
+    console.error('❌ Error al eliminar servicios en batch:', error);
     throw error;
   }
 };

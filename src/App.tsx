@@ -73,6 +73,8 @@ import PaymentFailurePage from './pages/payment/PaymentFailurePage';
 
 
 import SuperAdminCouponsPage from './pages/admin/SuperAdminCouponsPage';
+import LubricentroManagementPage from './pages/superadmin/LubricentroManagementPage';
+
 
 // Components
 import PrivateRoute from './components/common/PrivateRoute';
@@ -228,10 +230,12 @@ const App: React.FC = () => {
                   path="/superadmin/lubricentros" 
                   element={
                     <PrivateRoute requiredRoles={['superadmin']}>
-                      <LubricentroDashboardPage />
+                      <LubricentroManagementPage />
                     </PrivateRoute>
                   } 
                 />
+
+
                 
                 <Route 
                   path="/superadmin/lubricentros/nuevo" 

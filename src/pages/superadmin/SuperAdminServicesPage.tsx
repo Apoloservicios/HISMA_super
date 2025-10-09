@@ -1,30 +1,47 @@
-// src/pages/superadmin/SuperAdminServicesPage.tsx - VERSIÓN SIMPLIFICADA
+// src/pages/superadmin/SuperAdminServicesPage.tsx - VERSIÓN CORREGIDA
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
+  getAllOilChangesForSuperAdmin, 
+  deleteOilChange 
+} from '../../services/oilChangeService';
+import { getAllLubricentros } from '../../services/lubricentroService';
+import { OilChange, Lubricentro } from '../../types';
+import { 
+  deleteDoc, 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  serverTimestamp,
+  writeBatch 
+} from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+
+// Componentes UI
+import { 
   PageContainer, 
   Card, 
-  CardHeader, 
   CardBody, 
   Button, 
   Alert, 
-  Spinner 
+  Spinner,
+  Badge,
+  Modal
 } from '../../components/ui';
+
+// Iconos
 import { 
-  MagnifyingGlassIcon,
-  FunnelIcon,
   DocumentTextIcon,
+  FunnelIcon,
+  ArrowDownTrayIcon,
+  MagnifyingGlassIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   EyeIcon,
   PencilIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon
+  TrashIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
-import { formatDate } from '../../services/reportService/utils';
-import { OilChange, OilChangeStatus  } from '../../types';
-import { 
-  getAllOilChangesForSuperAdmin 
-} from '../../services/oilChangeService';
-import { getAllLubricentros } from '../../services/lubricentroService';
 
 interface FilterOptions {
   lubricentroId: string;
@@ -35,30 +52,42 @@ interface FilterOptions {
   sortOrder: 'asc' | 'desc';
 }
 
-
-// Función helper para obtener configuración del estado
-const getStatusConfig = (estado: OilChangeStatus) => {
-  switch (estado) {
-    case 'pendiente':
-      return {
-        label: 'Pendiente',
-        className: 'bg-yellow-100 text-yellow-800'
-      };
-    case 'completo':
-      return {
-        label: 'Completo',
-        className: 'bg-blue-100 text-blue-800'
-      };
-    case 'enviado':
-      return {
-        label: 'Enviado',
-        className: 'bg-green-100 text-green-800'
-      };
-    default:
-      return {
-        label: 'Desconocido',
-        className: 'bg-gray-100 text-gray-800'
-      };
+// Agregar función de eliminación si no existe en el servicio
+const deleteOilChangeLocal = async (oilChangeId: string): Promise<void> => {
+  try {
+    const docRef = doc(db, 'cambiosAceite', oilChangeId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      throw new Error('El servicio no existe');
+    }
+    
+    const oilChangeData = docSnap.data();
+    const lubricentroId = oilChangeData.lubricentroId;
+    
+    // Eliminar el documento
+    await deleteDoc(docRef);
+    
+    // Actualizar contadores del lubricentro si es necesario
+    if (lubricentroId && (oilChangeData.estado === 'completo' || oilChangeData.estado === 'enviado')) {
+      const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
+      const lubricentroSnap = await getDoc(lubricentroRef);
+      
+      if (lubricentroSnap.exists()) {
+        const lubricentroData = lubricentroSnap.data();
+        const updates: any = { updatedAt: serverTimestamp() };
+        
+        if (lubricentroData.servicesUsed > 0) {
+          updates.servicesUsed = lubricentroData.servicesUsed - 1;
+          updates.servicesRemaining = (lubricentroData.servicesRemaining || 0) + 1;
+        }
+        
+        await updateDoc(lubricentroRef, updates);
+      }
+    }
+  } catch (error) {
+    console.error('Error al eliminar servicio:', error);
+    throw error;
   }
 };
 
@@ -68,7 +97,7 @@ const SuperAdminServicesPage: React.FC = () => {
   // Estados principales
   const [services, setServices] = useState<OilChange[]>([]);
   const [filteredServices, setFilteredServices] = useState<OilChange[]>([]);
-  const [lubricentros, setLubricentros] = useState<any[]>([]);
+  const [lubricentros, setLubricentros] = useState<Lubricentro[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -88,6 +117,10 @@ const SuperAdminServicesPage: React.FC = () => {
   
   // Estados de UI
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [servicesToDelete, setServicesToDelete] = useState<OilChange[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -104,7 +137,6 @@ const SuperAdminServicesPage: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Cargar servicios y lubricentros en paralelo
       const [servicesData, lubricentrosData] = await Promise.all([
         getAllOilChangesForSuperAdmin(),
         getAllLubricentros()
@@ -112,6 +144,7 @@ const SuperAdminServicesPage: React.FC = () => {
       
       setServices(servicesData);
       setLubricentros(lubricentrosData);
+      setSelectedServices(new Set());
       
     } catch (err) {
       console.error('Error al cargar datos:', err);
@@ -121,86 +154,72 @@ const SuperAdminServicesPage: React.FC = () => {
     }
   };
 
+  // Aplicar filtros y ordenamiento
   const applyFilters = () => {
     let filtered = [...services];
-
-    // Filtro por lubricentro
+    
+    // Aplicar búsqueda
+    if (filters.searchTerm) {
+      const term = filters.searchTerm.toLowerCase();
+      filtered = filtered.filter(s => 
+        s.nombreCliente?.toLowerCase().includes(term) ||
+        s.dominioVehiculo?.toLowerCase().includes(term) ||
+        s.nroCambio?.toLowerCase().includes(term) ||
+        s.marcaVehiculo?.toLowerCase().includes(term) ||
+        s.modeloVehiculo?.toLowerCase().includes(term)
+      );
+    }
+    
+    // Filtrar por lubricentro
     if (filters.lubricentroId) {
-      filtered = filtered.filter(service => 
-        service.lubricentroId === filters.lubricentroId
-      );
+      filtered = filtered.filter(s => s.lubricentroId === filters.lubricentroId);
     }
-
-    // Filtro por búsqueda (cliente, dominio, número de cambio)
-    if (filters.searchTerm.trim()) {
-      const searchLower = filters.searchTerm.toLowerCase();
-      filtered = filtered.filter(service =>
-        service.nombreCliente?.toLowerCase().includes(searchLower) ||
-        service.dominioVehiculo?.toLowerCase().includes(searchLower) ||
-        service.nroCambio?.toString().includes(searchLower) ||
-        service.marcaVehiculo?.toLowerCase().includes(searchLower) ||
-        service.modeloVehiculo?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    // Filtro por estado
+    
+    // Filtrar por estado
     if (filters.estado) {
-      filtered = filtered.filter(service => service.estado === filters.estado);
+      filtered = filtered.filter(s => s.estado === filters.estado);
     }
-
-    // Filtro por rango de fechas
+    
+    // Filtrar por rango de fechas
     if (filters.dateRange) {
-      const now = new Date();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       let startDate: Date;
       
       switch (filters.dateRange) {
         case 'today':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          startDate = today;
           break;
         case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          startDate = new Date(today);
+          startDate.setDate(today.getDate() - 7);
           break;
         case 'month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          startDate = new Date(today);
+          startDate.setMonth(today.getMonth() - 1);
           break;
-        case 'quarter':
-          startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+        case 'year':
+          startDate = new Date(today);
+          startDate.setFullYear(today.getFullYear() - 1);
           break;
         default:
           startDate = new Date(0);
       }
       
-      filtered = filtered.filter(service => {
-        const serviceDate = new Date(service.fechaServicio);
+      filtered = filtered.filter(s => {
+        const serviceDate = s.fechaServicio ? new Date(s.fechaServicio) : new Date();
         return serviceDate >= startDate;
       });
     }
-
-    // Ordenamiento
+    
+    // Aplicar ordenamiento
     filtered.sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
+      let aValue: any = a[filters.sortBy as keyof OilChange];
+      let bValue: any = b[filters.sortBy as keyof OilChange];
       
-      switch (filters.sortBy) {
-        case 'fechaServicio':
-          aValue = new Date(a.fechaServicio);
-          bValue = new Date(b.fechaServicio);
-          break;
-        case 'nombreCliente':
-          aValue = a.nombreCliente || '';
-          bValue = b.nombreCliente || '';
-          break;
-        case 'dominioVehiculo':
-          aValue = a.dominioVehiculo || '';
-          bValue = b.dominioVehiculo || '';
-          break;
-        case 'nroCambio':
-          aValue = a.nroCambio || 0;
-          bValue = b.nroCambio || 0;
-          break;
-        default:
-          aValue = a.fechaServicio;
-          bValue = b.fechaServicio;
+      if (filters.sortBy === 'fechaServicio') {
+        aValue = a.fechaServicio ? new Date(a.fechaServicio).getTime() : 0;
+        bValue = b.fechaServicio ? new Date(b.fechaServicio).getTime() : 0;
       }
       
       if (filters.sortOrder === 'asc') {
@@ -211,7 +230,7 @@ const SuperAdminServicesPage: React.FC = () => {
     });
 
     setFilteredServices(filtered);
-    setCurrentPage(1); // Reset pagination when filters change
+    setCurrentPage(1);
   };
 
   // Obtener datos paginados
@@ -247,15 +266,107 @@ const SuperAdminServicesPage: React.FC = () => {
     });
   };
 
-  // Ver detalles del servicio
-  const viewServiceDetails = (serviceId: string) => {
-    navigate(`/superadmin/servicios/${serviceId}`);
+  // Manejar selección de servicios
+  const toggleServiceSelection = (serviceId: string) => {
+    const newSelection = new Set(selectedServices);
+    if (newSelection.has(serviceId)) {
+      newSelection.delete(serviceId);
+    } else {
+      newSelection.add(serviceId);
+    }
+    setSelectedServices(newSelection);
   };
 
-  // Editar servicio (usar la ruta estándar de edición)
+  // Seleccionar todos los servicios de la página actual
+  const toggleSelectAll = () => {
+    const currentPageServices = getPaginatedData();
+    const allSelected = currentPageServices.every(s => selectedServices.has(s.id));
+    
+    if (allSelected) {
+      const newSelection = new Set(selectedServices);
+      currentPageServices.forEach(s => newSelection.delete(s.id));
+      setSelectedServices(newSelection);
+    } else {
+      const newSelection = new Set(selectedServices);
+      currentPageServices.forEach(s => newSelection.add(s.id));
+      setSelectedServices(newSelection);
+    }
+  };
+
+  // Preparar eliminación
+  const handleDeleteSelected = () => {
+    const toDelete = services.filter(s => selectedServices.has(s.id));
+    if (toDelete.length === 0) return;
+    
+    setServicesToDelete(toDelete);
+    setShowDeleteModal(true);
+  };
+
+  // Eliminar un solo servicio
+  const handleDeleteSingle = (service: OilChange) => {
+    setServicesToDelete([service]);
+    setShowDeleteModal(true);
+  };
+
+  // Confirmar eliminación
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      // Eliminar servicios uno por uno
+      for (const service of servicesToDelete) {
+        // Usar la función local o la del servicio si existe
+        try {
+          await deleteOilChange(service.id);
+        } catch {
+          await deleteOilChangeLocal(service.id);
+        }
+      }
+      
+      await loadData();
+      setShowDeleteModal(false);
+      setServicesToDelete([]);
+      setSelectedServices(new Set());
+      alert(`✅ ${servicesToDelete.length} servicio(s) eliminado(s) correctamente`);
+      
+    } catch (error) {
+      console.error('Error al eliminar servicios:', error);
+      setError('Error al eliminar los servicios seleccionados');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Ver detalles del servicio
+  const viewServiceDetails = (serviceId: string) => {
+    navigate(`/cambios-aceite/${serviceId}`);
+  };
+
+  // Editar servicio
   const editService = (service: OilChange) => {
-    // Usar la ruta estándar de edición que ya existe
     navigate(`/cambios-aceite/editar/${service.id}`);
+  };
+
+  // Exportar servicios filtrados
+  const exportToCSV = () => {
+    const csvContent = [
+      ['Fecha', 'Cliente', 'Vehículo', 'Dominio', 'Lubricentro', 'Estado', 'Km Actuales'],
+      ...filteredServices.map(s => [
+        s.fechaServicio ? new Date(s.fechaServicio).toLocaleDateString() : '',
+        s.nombreCliente || '',
+        `${s.marcaVehiculo || ''} ${s.modeloVehiculo || ''}`,
+        s.dominioVehiculo || '',
+        getLubricentroName(s.lubricentroId),
+        s.estado || '',
+        s.kmActuales?.toString() || '0'
+      ])
+    ].map(row => row.join(',')).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `servicios_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
   };
 
   if (loading) {
@@ -287,11 +398,33 @@ const SuperAdminServicesPage: React.FC = () => {
 
   const totalPages = Math.ceil(filteredServices.length / itemsPerPage);
   const paginatedData = getPaginatedData();
+  const currentPageSelected = paginatedData.length > 0 && paginatedData.every(s => selectedServices.has(s.id));
 
   return (
     <PageContainer
       title="Gestión Global de Servicios"
       subtitle={`${filteredServices.length} servicios encontrados en ${lubricentros.length} lubricentros`}
+      action={
+        <div className="flex gap-2">
+          {selectedServices.size > 0 && (
+            <Button
+              color="error"
+              variant="outline"
+              onClick={handleDeleteSelected}
+              icon={<TrashIcon className="h-4 w-4" />}
+            >
+              Eliminar ({selectedServices.size})
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            onClick={exportToCSV}
+            icon={<ArrowDownTrayIcon className="h-4 w-4" />}
+          >
+            Exportar CSV
+          </Button>
+        </div>
+      }
     >
       {/* Controles de búsqueda y filtros */}
       <Card className="mb-6">
@@ -305,95 +438,64 @@ const SuperAdminServicesPage: React.FC = () => {
                   placeholder="Buscar por cliente, dominio, número de cambio..."
                   value={filters.searchTerm}
                   onChange={(e) => handleFilterChange('searchTerm', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <Button
-                variant={showFilters ? "solid" : "outline"}
+                variant={showFilters ? 'solid' : 'outline'}
                 onClick={() => setShowFilters(!showFilters)}
                 icon={<FunnelIcon className="h-4 w-4" />}
               >
-                Filtros {showFilters && filteredServices.length !== services.length && 
-                  `(${filteredServices.length})`}
+                Filtros
               </Button>
             </div>
-
-            {/* Filtros expandidos */}
+            
+            {/* Filtros expandibles */}
             {showFilters && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t">
-                {/* Filtro por lubricentro */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Lubricentro</label>
-                  <select
-                    value={filters.lubricentroId}
-                    onChange={(e) => handleFilterChange('lubricentroId', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Todos los lubricentros</option>
-                    {lubricentros.map((lubricentro) => (
-                      <option key={lubricentro.id} value={lubricentro.id}>
-                        {lubricentro.fantasyName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Filtro por estado */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-                    <select
-                    value={filters.estado}
-                    onChange={(e) => handleFilterChange('estado', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                    <option value="">Todos los estados</option>
-                    <option value="pendiente">Pendiente</option>
-                    <option value="completo">Completo</option>
-                    <option value="enviado">Enviado</option> {/* ✅ AGREGAR ESTA LÍNEA */}
-                    </select>
-                </div>
-
-                {/* Filtro por fecha */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Período</label>
-                  <select
-                    value={filters.dateRange}
-                    onChange={(e) => handleFilterChange('dateRange', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Todo el tiempo</option>
-                    <option value="today">Hoy</option>
-                    <option value="week">Última semana</option>
-                    <option value="month">Este mes</option>
-                    <option value="quarter">Últimos 3 meses</option>
-                  </select>
-                </div>
-
-                {/* Ordenamiento */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ordenar por</label>
-                  <select
-                    value={filters.sortBy}
-                    onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="fechaServicio">Fecha de servicio</option>
-                    <option value="nombreCliente">Cliente</option>
-                    <option value="dominioVehiculo">Dominio</option>
-                    <option value="nroCambio">Número de cambio</option>
-                  </select>
-                </div>
-
-                {/* Botón limpiar filtros */}
-                <div className="flex items-end">
-                  <Button 
-                    variant="outline" 
-                    onClick={clearFilters}
-                    fullWidth
-                  >
-                    Limpiar filtros
-                  </Button>
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
+                <select
+                  value={filters.lubricentroId}
+                  onChange={(e) => handleFilterChange('lubricentroId', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">Todos los lubricentros</option>
+                  {lubricentros.map(lub => (
+                    <option key={lub.id} value={lub.id}>
+                      {lub.fantasyName}
+                    </option>
+                  ))}
+                </select>
+                
+                <select
+                  value={filters.estado}
+                  onChange={(e) => handleFilterChange('estado', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">Todos los estados</option>
+                  <option value="pendiente">Pendiente</option>
+                  <option value="completo">Completo</option>
+                  <option value="enviado">Enviado</option>
+                </select>
+                
+                <select
+                  value={filters.dateRange}
+                  onChange={(e) => handleFilterChange('dateRange', e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">Todo el tiempo</option>
+                  <option value="today">Hoy</option>
+                  <option value="week">Última semana</option>
+                  <option value="month">Último mes</option>
+                  <option value="year">Último año</option>
+                </select>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearFilters}
+                >
+                  Limpiar filtros
+                </Button>
               </div>
             )}
           </div>
@@ -402,87 +504,111 @@ const SuperAdminServicesPage: React.FC = () => {
 
       {/* Tabla de servicios */}
       <Card>
-        <CardBody className="p-0">
+        <CardBody>
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Servicio
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={currentPageSelected}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 text-blue-600 rounded"
+                    />
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cliente & Vehículo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Lubricentro
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Fecha
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Cliente
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Vehículo
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Lubricentro
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Estado
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    Km
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {paginatedData.map((service) => (
-                  <tr key={service.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={service.id} className={selectedServices.has(service.id) ? 'bg-blue-50' : ''}>
+                    <td className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedServices.has(service.id)}
+                        onChange={() => toggleServiceSelection(service.id)}
+                        className="h-4 w-4 text-blue-600 rounded"
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {service.fechaServicio 
+                        ? new Date(service.fechaServicio).toLocaleDateString() 
+                        : 'Sin fecha'}
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">
-                        #{service.nroCambio}
+                        {service.nombreCliente || 'Sin cliente'}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {service.marcaAceite} {service.sae}
+                        {service.dominioVehiculo}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {service.nombreCliente}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {service.dominioVehiculo} - {service.marcaVehiculo} {service.modeloVehiculo}
-                      </div>
+                    <td className="px-6 py-4 text-sm">
+                      {service.marcaVehiculo} {service.modeloVehiculo}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {getLubricentroName(service.lubricentroId)}
-                      </div>
+                    <td className="px-6 py-4 text-sm">
+                      {getLubricentroName(service.lubricentroId)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(service.fechaServicio)}
+                    <td className="px-6 py-4">
+                      <Badge
+                        text={service.estado || 'Pendiente'}
+                        color={
+                          service.estado === 'completo' ? 'success' :
+                          service.estado === 'enviado' ? 'info' :
+                          'warning'
+                        }
+                      />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                    {(() => {
-                        const statusConfig = getStatusConfig(service.estado);
-                        return (
-                        <span
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusConfig.className}`}
-                        >
-                            {statusConfig.label}
-                        </span>
-                        );
-                    })()}
+                    <td className="px-6 py-4 text-sm">
+                      {service.kmActuales || 0}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-2">
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => viewServiceDetails(service.id)}
-                          icon={<EyeIcon className="h-4 w-4" />}
-                        >
-                          Ver
+                        > 
+                        {<EyeIcon className="h-4 w-4" />}
                         </Button>
+
+               
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => editService(service)}
-                          icon={<PencilIcon className="h-4 w-4" />}
+                          
                         >
-                          Editar
+                        {<PencilIcon className="h-4 w-4" />}
+                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          color="error"
+                          onClick={() => handleDeleteSingle(service)}
+                          >
+                              {<TrashIcon className="h-4 w-4" />} 
                         </Button>
                       </div>
                     </td>
@@ -492,7 +618,7 @@ const SuperAdminServicesPage: React.FC = () => {
             </table>
           </div>
 
-          {/* Paginación simple */}
+          {/* Paginación */}
           {totalPages > 1 && (
             <div className="flex justify-center items-center space-x-2 p-4 border-t">
               <Button
@@ -533,19 +659,79 @@ const SuperAdminServicesPage: React.FC = () => {
                   ? 'No se encontraron servicios con los filtros aplicados.'
                   : 'No hay servicios registrados en el sistema.'}
               </p>
-              {(filters.searchTerm || filters.lubricentroId || filters.estado || filters.dateRange) && (
-                <Button
-                  variant="outline"
-                  onClick={clearFilters}
-                  className="mt-4"
-                >
-                  Limpiar filtros
-                </Button>
-              )}
             </div>
           )}
         </CardBody>
       </Card>
+
+      {/* Modal de confirmación de eliminación */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => {
+          if (!isDeleting) {
+            setShowDeleteModal(false);
+            setServicesToDelete([]);
+          }
+        }}
+        title="Confirmar eliminación"
+        size="md"
+      >
+        <div className="p-6">
+          <div className="flex items-center mb-4">
+            <ExclamationTriangleIcon className="h-8 w-8 text-red-500 mr-3" />
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                ¿Estás seguro de eliminar {servicesToDelete.length} servicio(s)?
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Esta acción no se puede deshacer.
+              </p>
+            </div>
+          </div>
+          
+          {servicesToDelete.length > 0 && (
+            <div className="mb-6 max-h-40 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+              {servicesToDelete.slice(0, 5).map(service => (
+                <div key={service.id} className="text-sm text-gray-700 mb-1">
+                  • {service.nombreCliente || 'Sin cliente'} - {service.marcaVehiculo} {service.modeloVehiculo} ({service.dominioVehiculo})
+                </div>
+              ))}
+              {servicesToDelete.length > 5 && (
+                <div className="text-sm text-gray-500 mt-2">
+                  y {servicesToDelete.length - 5} más...
+                </div>
+              )}
+            </div>
+          )}
+          
+          <div className="flex justify-end space-x-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteModal(false);
+                setServicesToDelete([]);
+              }}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              color="error"
+              onClick={confirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Eliminando...
+                </>
+              ) : (
+                `Eliminar ${servicesToDelete.length} servicio(s)`
+              )}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </PageContainer>
   );
 };

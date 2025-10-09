@@ -118,12 +118,12 @@ const MainLayout: React.FC = () => {
           path: '/superadmin/cupones',
           divider: false
         },
-        { 
+     /*    { 
           text: 'Renovaciones Manuales', 
           icon: <CalendarIcon className="w-5 h-5" />, 
           path: '/superadmin/renovaciones',
           divider: false
-        },
+        }, */
         { 
           text: 'Estadísticas Globales', 
           icon: <ChartBarIcon className="w-5 h-5" />, 
