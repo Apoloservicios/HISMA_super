@@ -48,6 +48,11 @@ interface Coupon {
   distributorId?: string;
   distributorName?: string;
   membershipMonths: number;
+  benefits?: { // ✅ AGREGADO
+    membershipMonths: number;
+    totalServicesContracted?: number;
+    additionalServices?: string[];
+  };
   status: 'active' | 'used' | 'expired';
   usedBy?: string;
   usedByLubricentro?: string;
@@ -99,11 +104,12 @@ const SuperAdminCouponManager: React.FC = () => {
   const [selectedCoupons, setSelectedCoupons] = useState<Set<string>>(new Set());
   const [couponsToDelete, setCouponsToDelete] = useState<Coupon[]>([]);
   
-  // Formulario de generación
+  // ✅ Formulario de generación CORREGIDO
   const [formData, setFormData] = useState({
     distributorName: '',
     quantity: 1,
     membershipMonths: 3,
+    totalServicesContracted: 100, // ✅ AGREGADO
     validityDays: 90,
     prefix: 'HISMA'
   });
@@ -259,7 +265,7 @@ const SuperAdminCouponManager: React.FC = () => {
     });
     
     setFilteredCoupons(filtered);
-    setCurrentPage(1); // Reset página al filtrar
+    setCurrentPage(1);
   };
 
   const calculateStats = () => {
@@ -282,7 +288,7 @@ const SuperAdminCouponManager: React.FC = () => {
     return code;
   };
 
-  // Generar cupones
+  // ✅ Generar cupones CORREGIDO
   const handleGenerateCoupons = async () => {
     try {
       setLoading(true);
@@ -298,13 +304,18 @@ const SuperAdminCouponManager: React.FC = () => {
           code,
           distributorName: formData.distributorName,
           membershipMonths: formData.membershipMonths,
+          benefits: { // ✅ AGREGADO
+            membershipMonths: formData.membershipMonths,
+            totalServicesContracted: formData.totalServicesContracted,
+            additionalServices: []
+          },
           status: 'active',
           createdAt: serverTimestamp(),
           validFrom: serverTimestamp(),
           validUntil: Timestamp.fromDate(validUntil),
           generatedBy: 'superadmin',
           metadata: {
-            note: `Generado para ${formData.distributorName}`
+            note: `Generado para ${formData.distributorName} - ${formData.totalServicesContracted} servicios`
           }
         });
         
@@ -314,11 +325,12 @@ const SuperAdminCouponManager: React.FC = () => {
       alert(`✅ ${generatedCodes.length} cupones generados exitosamente`);
       setShowGenerateModal(false);
       
-      // Reset form
+      // ✅ Reset form CORREGIDO
       setFormData({
         distributorName: '',
         quantity: 1,
         membershipMonths: 3,
+        totalServicesContracted: 100, // ✅ AGREGADO
         validityDays: 90,
         prefix: 'HISMA'
       });
@@ -415,12 +427,13 @@ const SuperAdminCouponManager: React.FC = () => {
   // Exportar a CSV
   const exportToCSV = () => {
     const csvContent = [
-      ['Código', 'Estado', 'Distribuidor', 'Meses', 'Creado', 'Válido hasta', 'Usado por'],
+      ['Código', 'Estado', 'Distribuidor', 'Meses', 'Servicios', 'Creado', 'Válido hasta', 'Usado por'],
       ...filteredCoupons.map(c => [
         c.code,
         c.status,
         c.distributorName || '',
         c.membershipMonths.toString(),
+        c.benefits?.totalServicesContracted?.toString() || 'N/A', // ✅ AGREGADO
         c.createdAt?.toDate?.()?.toLocaleDateString() || '',
         c.validUntil?.toDate?.()?.toLocaleDateString() || '',
         c.usedByLubricentro || ''
@@ -618,7 +631,7 @@ const SuperAdminCouponManager: React.FC = () => {
                     Distribuidor
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Duración
+                    Beneficios
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     Estado
@@ -665,7 +678,15 @@ const SuperAdminCouponManager: React.FC = () => {
                       {coupon.distributorName || 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {coupon.membershipMonths} meses
+                      <div>
+                        <p className="font-medium">{coupon.membershipMonths} mes(es)</p>
+                        {/* ✅ MOSTRAR SERVICIOS */}
+                        {coupon.benefits?.totalServicesContracted && (
+                          <p className="text-xs text-gray-500">
+                            {coupon.benefits.totalServicesContracted} servicios
+                          </p>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge
@@ -676,13 +697,10 @@ const SuperAdminCouponManager: React.FC = () => {
                         }
                         text={coupon.status}
                       >
-
                         {coupon.status === 'active' ? 'Activo' :
                          coupon.status === 'used' ? 'Usado' :
                          'Expirado'}
-                         
                       </Badge>
-                      
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {coupon.validUntil?.toDate?.()?.toLocaleDateString() || 'N/A'}
@@ -773,7 +791,7 @@ const SuperAdminCouponManager: React.FC = () => {
         </CardBody>
       </Card>
 
-      {/* Modal de generación de cupones */}
+      {/* ✅ Modal de generación de cupones CORREGIDO */}
       <Modal
         isOpen={showGenerateModal}
         onClose={() => setShowGenerateModal(false)}
@@ -781,6 +799,19 @@ const SuperAdminCouponManager: React.FC = () => {
         size="md"
       >
         <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Nombre del Distribuidor *
+            </label>
+            <input
+              type="text"
+              value={formData.distributorName}
+              onChange={(e) => setFormData({...formData, distributorName: e.target.value})}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Ej: Shell Lubricantes"
+            />
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Cantidad de Cupones
@@ -810,6 +841,28 @@ const SuperAdminCouponManager: React.FC = () => {
               <option value="12">12 meses</option>
             </select>
           </div>
+
+          {/* ✅ NUEVO CAMPO: Cantidad de Servicios */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Cantidad de Servicios Incluidos *
+            </label>
+            <input
+              type="number"
+              value={formData.totalServicesContracted}
+              onChange={(e) => setFormData({
+                ...formData, 
+                totalServicesContracted: parseInt(e.target.value) || 100
+              })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              min="1"
+              max="10000"
+              placeholder="100"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Cantidad total de cambios de aceite incluidos
+            </p>
+          </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -838,6 +891,13 @@ const SuperAdminCouponManager: React.FC = () => {
               maxLength={10}
             />
           </div>
+
+          {/* ✅ Alert mejorado */}
+          <Alert type="info">
+            Se generarán {formData.quantity} cupón(es) de {formData.membershipMonths} mes(es) 
+            con {formData.totalServicesContracted} servicios incluidos
+            {formData.distributorName && ` para ${formData.distributorName}`}
+          </Alert>
           
           <div className="flex justify-end space-x-3 pt-4">
             <Button

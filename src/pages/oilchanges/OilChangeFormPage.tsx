@@ -670,6 +670,25 @@ const [sinCambioAceite, setSinCambioAceite] = useState(false);
     
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+    const createDateWithoutTimezone = (dateString: string | Date): Date => {
+  if (!dateString) return new Date();
+  
+  if (dateString instanceof Date) return dateString;
+  
+  // Si es string en formato YYYY-MM-DD del input, crear fecha directamente
+  if (typeof dateString === 'string' && dateString.includes('-')) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    // Usar mediodía (12:00) para evitar problemas con timezone
+    return new Date(year, month - 1, day, 12, 0, 0);
+  }
+  
+  return new Date(dateString);
+};
+
+
+
+
   // PARTE 7: FUNCIÓN DE SUBMIT
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -751,9 +770,9 @@ const handleSubmit = async (e: React.FormEvent) => {
         cantidadAceite: sinCambioAceite ? 0 : (formData.cantidadAceite || 0),
         
         // Fechas
-        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
-        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
-        fechaProximoCambio: formData.fechaProximoCambio ? new Date(formData.fechaProximoCambio) : new Date(),
+        fecha: createDateWithoutTimezone(formData.fecha || new Date()),
+        fechaServicio: createDateWithoutTimezone(formData.fechaServicio || new Date()),
+        fechaProximoCambio: createDateWithoutTimezone(formData.fechaProximoCambio || new Date()),
         
         // Estado
         estado: 'completo' as OilChangeStatus,
@@ -835,14 +854,14 @@ const handleSubmit = async (e: React.FormEvent) => {
           
 
         // Fechas
-        fecha: formData.fecha ? new Date(formData.fecha) : new Date(),
-        fechaServicio: formData.fechaServicio ? new Date(formData.fechaServicio) : new Date(),
+        fecha: createDateWithoutTimezone(formData.fecha || new Date()),
+        fechaServicio: createDateWithoutTimezone(formData.fechaServicio || new Date()),
         fechaProximoCambio: formData.fechaProximoCambio ? 
-          new Date(formData.fechaProximoCambio) : 
+          createDateWithoutTimezone(formData.fechaProximoCambio) : 
           (() => {
-            const nextDate = new Date();
-            nextDate.setMonth(nextDate.getMonth() + (formData.perioricidad_servicio || 6));
-            return nextDate;
+            const baseDate = formData.fechaServicio ? createDateWithoutTimezone(formData.fechaServicio || new Date()) : new Date();
+            baseDate.setMonth(baseDate.getMonth() + (formData.perioricidad_servicio || 6));
+            return baseDate;
           })(),
         
         // Estado y control
@@ -915,20 +934,17 @@ const handleSubmit = async (e: React.FormEvent) => {
     setSaving(false);
   }
 };
-  // PARTE 8: FUNCIONES DE FORMATO
-  const formatDateForInput = (date: Date | undefined): string => {
-    if (!date) return '';
-    
-    const d = new Date(date);
-    const offsetMinutes = d.getTimezoneOffset();
-    const adjustedDate = new Date(d.getTime() - (offsetMinutes * 60000));
-    
-    const year = adjustedDate.getFullYear();
-    const month = String(adjustedDate.getMonth() + 1).padStart(2, '0');
-    const day = String(adjustedDate.getDate()).padStart(2, '0');
-    
-    return `${year}-${month}-${day}`;
-  };
+   const formatDateForInput = (date: Date | undefined): string => {
+     if (!date) return '';
+     
+     const d = date instanceof Date ? date : new Date(date);
+     
+     const year = d.getFullYear();
+     const month = String(d.getMonth() + 1).padStart(2, '0');
+     const day = String(d.getDate()).padStart(2, '0');
+     
+     return `${year}-${month}-${day}`;
+   };
   
   const formatDateForDisplay = (date: Date | undefined): string => {
     if (!date) return 'No especificada';
