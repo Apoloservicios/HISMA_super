@@ -1,4 +1,11 @@
-# ============ FORZAR HTTPS (CRÍTICO PARA MERCADOPAGO) ============
+# ======================================================================
+# HISMA - .htaccess COMPLETO
+# Combinación de configuración existente + mejoras de seguridad críticas
+# ======================================================================
+
+# ============================================
+# 1. FORZAR HTTPS (CRÍTICO PARA MERCADOPAGO)
+# ============================================
 RewriteEngine On
 
 # Forzar HTTPS (MercadoPago lo requiere)
@@ -9,13 +16,124 @@ RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
 RewriteRule ^(.*)$ https://%1%{REQUEST_URI} [R=301,L]
 
-# ============ SPA ROUTING PARA REACT ============
+# ============================================
+# 2. SEGURIDAD: BLOQUEAR ARCHIVOS SENSIBLES
+# ============================================
+
+# Bloquear acceso a archivos .env
+<FilesMatch "^\.env">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Proteger archivos de configuración y código fuente
+<FilesMatch "\.(env|env\.local|env\.production|git|gitignore|htaccess|htpasswd|ini|log|sh|sql|sqlite|md5|gz|tar|zip)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Bloquear acceso a carpetas del sistema
+RedirectMatch 403 /\.git
+RedirectMatch 403 /node_modules
+RedirectMatch 403 /src
+
+# Proteger package.json y archivos de configuración
+<Files "package.json">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "package-lock.json">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "composer.json">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Deshabilitar listado de directorios
+Options -Indexes
+
+# ============================================
+# 3. HEADERS DE SEGURIDAD MEJORADOS
+# ============================================
+<IfModule mod_headers.c>
+  # Headers de seguridad básicos
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set X-XSS-Protection "1; mode=block"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  
+  # Permissions Policy (limitar acceso a APIs del navegador)
+  Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+  
+  # Ocultar información del servidor
+  Header unset Server
+  Header unset X-Powered-By
+  
+  # Content Security Policy MEJORADO para MercadoPago + Firebase
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.mercadopago.com https://www.mercadopago.com https://sdk.mercadopago.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.firebaseapp.com https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net https://firebasestorage.googleapis.com https://api.mercadopago.com https://hisma-api.vercel.app https://cdn.jsdelivr.net; frame-src https://www.mercadopago.com https://mercadopago.com; media-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self' https://www.mercadopago.com;"
+  
+  # HSTS (HTTP Strict Transport Security) - Forzar HTTPS permanentemente
+  Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+  
+  # Cache busting para archivos estáticos
+  <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|woff|woff2|webp|ico)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  
+  # Sin cache para index.html
+  <Files "index.html">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </Files>
+  
+  # Sin cache para manifest y service worker
+  <FilesMatch "^(manifest\.json|service-worker\.js)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+</IfModule>
+
+# ============================================
+# 4. PREVENCIÓN DE ATAQUES
+# ============================================
+
+# Bloquear inyecciones SQL y XSS en URLs
+<IfModule mod_rewrite.c>
+    RewriteCond %{QUERY_STRING} (\<|%3C).*script.*(\>|%3E) [NC,OR]
+    RewriteCond %{QUERY_STRING} GLOBALS(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} _REQUEST(=|\[|\%[0-9A-Z]{0,2}) [OR]
+    RewriteCond %{QUERY_STRING} ^.*(\[|\]|\(|\)|<|>|ê|"|;|\?|\*|=$).* [NC,OR]
+    RewriteCond %{QUERY_STRING} ^.*(&#x22;|&#x27;|&#x3C;|&#x3E;|&#x5C;|&#x7B;|&#x7C;).* [NC,OR]
+    RewriteCond %{QUERY_STRING} ^.*(%24&x).* [NC,OR]
+    RewriteCond %{QUERY_STRING} ^.*(%0|%A|%B|%C|%D|%E|%F|127\.0).* [NC]
+    RewriteRule ^(.*)$ - [F,L]
+</IfModule>
+
+# Proteger contra hotlinking (robo de ancho de banda)
+<IfModule mod_rewrite.c>
+    RewriteCond %{HTTP_REFERER} !^$
+    RewriteCond %{HTTP_REFERER} !^https?://(www\.)?hisma\.com\.ar [NC]
+    RewriteRule \.(jpg|jpeg|png|gif|svg|webp)$ - [F,L]
+</IfModule>
+
+# ============================================
+# 5. SPA ROUTING PARA REACT
+# ============================================
 Options -MultiViews
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_URI} !^/api/
 RewriteRule . /index.html [L]
 
-# ============ CACHE OPTIMIZADO PARA REACT BUILD ============
+# ============================================
+# 6. CACHE OPTIMIZADO PARA REACT BUILD
+# ============================================
 <IfModule mod_expires.c>
   ExpiresActive on
   
@@ -62,7 +180,9 @@ RewriteRule . /index.html [L]
   </IfModule>
 </Files>
 
-# ============ COMPRESIÓN GZIP ============
+# ============================================
+# 7. COMPRESIÓN GZIP
+# ============================================
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/plain
   AddOutputFilterByType DEFLATE text/html
@@ -80,43 +200,44 @@ RewriteRule . /index.html [L]
   AddOutputFilterByType DEFLATE image/svg+xml
 </IfModule>
 
-# ============ HEADERS DE SEGURIDAD ============
-<IfModule mod_headers.c>
-  # Headers de seguridad básicos
-  Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "DENY"
-  Header always set X-XSS-Protection "1; mode=block"
-  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+# ============================================
+# 8. PROTECCIÓN PHP (SI SE USA)
+# ============================================
+<IfModule mod_php7.c>
+  # Deshabilitar funciones peligrosas en producción
+  php_flag display_errors Off
+  php_flag log_errors On
+  php_flag expose_php Off
   
-  # Content Security Policy para MercadoPago
-
-Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.mercadopago.com https://www.mercadopago.com https://sdk.mercadopago.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.firebaseapp.com https://*.googleapis.com https://api.mercadopago.com https://hisma-1b0p0eujm-andresmartin2609-gmailcoms-projects.vercel.app https://hisma-api.vercel.app https://cdn.jsdelivr.net"
-  
-  # Cache busting para archivos estáticos
-  <FilesMatch "\.(css|js|png|jpg|jpeg|gif|svg|woff|woff2)$">
-    Header set Cache-Control "public, max-age=31536000, immutable"
-  </FilesMatch>
-  
-  # Sin cache para index.html
-  <Files "index.html">
-    Header set Cache-Control "no-cache, no-store, must-revalidate"
-    Header set Pragma "no-cache"
-    Header set Expires "0"
-  </Files>
+  # Límites de upload y ejecución
+  php_value upload_max_filesize 10M
+  php_value post_max_size 10M
+  php_value max_execution_time 30
+  php_value max_input_time 30
+  php_value memory_limit 128M
 </IfModule>
 
-# ============ PROTECCIÓN DE ARCHIVOS ============
-<Files ".env">
-  Order allow,deny
-  Deny from all
-</Files>
-
-<Files "*.json">
-  <If "%{REQUEST_URI} !~ m#^/static/#">
-    Order allow,deny
-    Deny from all
-  </If>
-</Files>
-
-# ============ ERROR PAGES ============
+# ============================================
+# 9. ERROR PAGES
+# ============================================
 ErrorDocument 404 /index.html
+ErrorDocument 403 /index.html
+
+# ============================================
+# 10. MEJORAS DE RENDIMIENTO
+# ============================================
+
+# Habilitar Keep-Alive
+<IfModule mod_headers.c>
+    Header set Connection keep-alive
+</IfModule>
+
+# ETags para validación de caché
+<IfModule mod_headers.c>
+    Header unset ETag
+</IfModule>
+FileETag None
+
+# ======================================================================
+# FIN DE CONFIGURACIÓN
+# ======================================================================

@@ -1,33 +1,64 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ==============================
+# ARCHIVOS SENSIBLES - NUNCA SUBIR
+# ==============================
+.env
+.env.local
+.env.production
+.env.development
+.env*.local
 
-# dependencies
-/node_modules
+# ==============================
+# CONFIGURACIÓN DE PHP SENSIBLE
+# ==============================
+src/api/send-email.php
+*.php
+
+# ==============================
+# DEPENDENCIAS
+# ==============================
+node_modules/
+vendor/
 /.pnp
 .pnp.js
 
-# testing
-/coverage
-
-# production
+# ==============================
+# ARCHIVOS DE CONSTRUCCIÓN
+# ==============================
 /build
+/dist
+*.local
 
-# misc
+# ==============================
+# LOGS Y DEBUGGING
+# ==============================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# ==============================
+# CACHÉ Y TEMPORALES
+# ==============================
 .DS_Store
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.vercel
+# ==============================
+# TESTING
+# ==============================
+/coverage
+*.log
 
-# Environment variables
-.env.local
-.env.production.local
-.env.development.local
-.env.test.local
-
-# Keep .env.example for reference
-!.env.example
+# ==============================
+# ARCHIVOS DE SISTEMA
+# ==============================
+Thumbs.db
+desktop.ini
