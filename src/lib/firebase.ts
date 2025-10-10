@@ -8,44 +8,55 @@ import { getStorage } from 'firebase/storage';
 // CONFIGURACIÓN DE FIREBASE CON VARIABLES DE ENTORNO
 // ============================================
 
-// Detectar si estamos usando Vite o Create React App
-const getEnvVar = (key: string): string => {
-  // Vite usa import.meta.env
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    return import.meta.env[key] || '';
+// Función helper para obtener variables de entorno
+const getEnvVar = (viteKey: string, reactKey: string): string => {
+  // Intenta con Vite primero
+  if (import.meta.env && import.meta.env[viteKey]) {
+    return import.meta.env[viteKey];
   }
   
-  // Create React App usa process.env
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env[key] || '';
+  // Fallback a REACT_APP
+  if (import.meta.env && import.meta.env[reactKey]) {
+    return import.meta.env[reactKey];
   }
   
-  console.error(`Variable de entorno ${key} no encontrada`);
+  console.error(`❌ Variable de entorno no encontrada: ${viteKey} / ${reactKey}`);
   return '';
 };
 
 // Configuración de Firebase
 const firebaseConfig = {
-  apiKey: getEnvVar('VITE_FIREBASE_API_KEY') || getEnvVar('REACT_APP_FIREBASE_API_KEY'),
-  authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN') || getEnvVar('REACT_APP_FIREBASE_AUTH_DOMAIN'),
-  projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID') || getEnvVar('REACT_APP_FIREBASE_PROJECT_ID'),
-  storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET') || getEnvVar('REACT_APP_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID') || getEnvVar('REACT_APP_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getEnvVar('VITE_FIREBASE_APP_ID') || getEnvVar('REACT_APP_FIREBASE_APP_ID'),
-  measurementId: getEnvVar('VITE_FIREBASE_MEASUREMENT_ID') || getEnvVar('REACT_APP_FIREBASE_MEASUREMENT_ID')
+  apiKey: getEnvVar('VITE_FIREBASE_API_KEY', 'REACT_APP_FIREBASE_API_KEY'),
+  authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN', 'REACT_APP_FIREBASE_AUTH_DOMAIN'),
+  projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID', 'REACT_APP_FIREBASE_PROJECT_ID'),
+  storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET', 'REACT_APP_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID', 'REACT_APP_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getEnvVar('VITE_FIREBASE_APP_ID', 'REACT_APP_FIREBASE_APP_ID'),
+  measurementId: getEnvVar('VITE_FIREBASE_MEASUREMENT_ID', 'REACT_APP_FIREBASE_MEASUREMENT_ID') || undefined
 };
 
-// Validar configuración
-const validateConfig = () => {
-  const requiredFields = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'appId'];
-  const missingFields = requiredFields.filter(field => !firebaseConfig[field as keyof typeof firebaseConfig]);
+// Validar configuración antes de inicializar
+const validateConfig = (): boolean => {
+  const requiredFields: (keyof typeof firebaseConfig)[] = [
+    'apiKey', 
+    'authDomain', 
+    'projectId', 
+    'storageBucket', 
+    'appId'
+  ];
+  
+  const missingFields = requiredFields.filter(
+    field => !firebaseConfig[field]
+  );
   
   if (missingFields.length > 0) {
-    console.error('❌ Configuración de Firebase incompleta. Campos faltantes:', missingFields);
-    console.error('Verifica tu archivo .env.local');
+    console.error('❌ Configuración de Firebase incompleta');
+    console.error('📋 Campos faltantes:', missingFields);
+    console.error('💡 Verifica tu archivo .env.local en la raíz del proyecto');
     return false;
   }
   
+  console.log('✅ Configuración de Firebase validada');
   return true;
 };
 
@@ -65,8 +76,8 @@ export type Timestamp = import('firebase/firestore').Timestamp;
 export type DocumentReference = import('firebase/firestore').DocumentReference;
 export type CollectionReference = import('firebase/firestore').CollectionReference;
 
-// Log de inicialización (solo en desarrollo)
-if (process.env.NODE_ENV === 'development') {
-  console.log('✅ Firebase inicializado correctamente');
+// Log de inicialización en desarrollo
+if (import.meta.env.DEV) {
+  console.log('🔥 Firebase inicializado');
   console.log('📋 Project ID:', firebaseConfig.projectId);
 }
