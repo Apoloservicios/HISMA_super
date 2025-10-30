@@ -2,9 +2,11 @@
 import React, { useState } from 'react';
 import { Card, CardBody, Button, Alert, Spinner } from '../ui';
 import { CheckCircleIcon, XCircleIcon, GiftIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, runTransaction } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, runTransaction ,query, where, getDocs  } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { validateCouponCode } from '../../services/couponService';
+
+
 
 interface CouponPaymentActivatorProps {
   lubricentroId: string;
@@ -71,190 +73,159 @@ const CouponPaymentActivator: React.FC<CouponPaymentActivatorProps> = ({
   };
 
   // ✅ FUNCIÓN CORREGIDA: Activar la membresía con el cupón
-    const handleActivateWithCoupon = async () => {
-    if (!validationResult?.couponData) {
-        setError('Por favor valida el cupón primero');
-        return;
+const handleActivateWithCoupon = async () => {
+  if (!validationResult?.couponData) {
+    setError('Por favor valida el cupón primero');
+    return;
+  }
+
+  setLoading(true);
+  setError(null);
+
+  try {
+    // ✅ PASO 1: Buscar el cupón de la MISMA forma que en la validación
+    const couponCodeUpper = couponCode.toUpperCase().trim();
+    
+    // Primero intentar por ID de documento
+    let couponRef = doc(db, 'coupons', couponCodeUpper);
+    let couponSnapshot = await getDoc(couponRef);
+    
+    // Si no existe por ID, buscar por campo 'code'
+    if (!couponSnapshot.exists()) {
+      console.log('📋 Buscando cupón por campo código...');
+      
+      const q = query(
+        collection(db, 'coupons'),
+        where('code', '==', couponCodeUpper)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        throw new Error('El cupón no existe');
+      }
+      
+      // Usar el primer documento encontrado
+      const foundDoc = querySnapshot.docs[0];
+      couponRef = foundDoc.ref; // ✅ Actualizar la referencia
+      couponSnapshot = foundDoc; // ✅ Actualizar el snapshot
+      
+      console.log('✅ Cupón encontrado por campo código');
+    } else {
+      console.log('✅ Cupón encontrado por ID de documento');
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-        await runTransaction(db, async (transaction) => {
-        // Obtener el cupón
-        const couponRef = doc(db, 'coupons', couponCode.toUpperCase().trim());
-        const couponDoc = await transaction.get(couponRef);
-        
-        if (!couponDoc.exists()) {
-            throw new Error('El cupón no existe');
-        }
-
-        const couponData = couponDoc.data();
-        
-        // Verificar que el cupón esté activo
-        if (couponData.status !== 'active') {
-            throw new Error(`El cupón está ${couponData.status === 'used' ? 'usado' : 'expirado'}`);
-        }
-
-        // Calcular fecha de expiración de la membresía
-        const now = new Date();
-        const expirationDate = new Date();
-        const monthsToAdd = validationResult?.couponData?.benefits?.membershipMonths || 3;
-        expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
-
-        // ✅ Preparar benefits sin campos undefined
-        const cleanBenefits: any = {
-            membershipMonths: validationResult?.couponData?.benefits?.membershipMonths || 3,
-            totalServicesContracted: validationResult?.couponData?.benefits?.totalServicesContracted || 10,
-            unlimitedServices: validationResult?.couponData?.benefits?.unlimitedServices || false,
-            additionalServices: validationResult?.couponData?.benefits?.additionalServices || []
-        };
-        
-        // Solo agregar customPlan si existe
-        const benefitsWithCustom = validationResult?.couponData?.benefits as any;
-        if (benefitsWithCustom?.customPlan) {
-            cleanBenefits.customPlan = benefitsWithCustom.customPlan;
-        }
-
-        // ✅ DATOS ACTUALIZADOS - Solo campos necesarios para beneficios
-        const lubricentroUpdate: any = {
-            // Estados generales
-            subscriptionStatus: 'active',
-            estado: 'activo',
-            paymentStatus: 'paid',
-            
-            // ✅ NO CAMBIAR EL PLAN - Solo actualizar fechas y servicios
-            // El plan existente se mantiene, solo aplicamos beneficios
-            
-            // ✅ FECHAS CORRECTAS
-            subscriptionStartDate: serverTimestamp(),
-            subscriptionEndDate: expirationDate,
-            trialEndDate: expirationDate,
-            lastPaymentDate: serverTimestamp(),
-            
-            // ✅ MÉTODO DE PAGO
-            paymentMethod: 'coupon',
-            paymentMethodCoupon: couponCode.toUpperCase().trim(),
-            
-            // ✅ SERVICIOS - CAMPOS CORRECTOS (servicesRemaining no remainingServices)
-            servicesRemaining: cleanBenefits.totalServicesContracted || 10,
-            serviceLimit: cleanBenefits.totalServicesContracted || 10,
-            servicesUsed: 0,
-            servicesUsedThisMonth: 0,
-            
-            // ✅ INFORMACIÓN DEL PATROCINADOR (regalo/beneficio)
-            sponsorship: {
-            distributorId: couponData.distributorId || 'manual',
-            distributorName: couponData.distributorName || 'Manual',
-            activatedWith: couponCode.toUpperCase().trim(),
-            activatedAt: serverTimestamp(),
-            benefits: cleanBenefits,
-            expiresAt: expirationDate,
-            showBranding: true,
-            isGift: true // ✅ Indicar que es un regalo/beneficio
-            },
-            
-            // ✅ CONFIGURACIÓN DE BRANDING
-            brandingSettings: {
-            showDistributorLogo: true,
-            showDistributorMessage: true,
-            position: 'footer'
-            },
-            
-            // ✅ CAMPOS ADICIONALES
-            qrEnablePublicConsult: true,
-            qrShowLubricentroName: true,
-            
-            // Timestamp de actualización
-            updatedAt: serverTimestamp()
-        };
-
-        // ✅ Si tiene servicios ilimitados, ajustar campos
-        if (cleanBenefits.unlimitedServices === true) {
-            lubricentroUpdate.servicesRemaining = 9999;
-            lubricentroUpdate.serviceLimit = null;
-            lubricentroUpdate.hasUnlimitedServices = true;
-        } else {
-            lubricentroUpdate.hasUnlimitedServices = false;
-        }
-
-        console.log('🔄 Aplicando beneficios del cupón:', lubricentroUpdate);
-
-        // Actualizar el lubricentro
-        const lubricentroRef = doc(db, 'lubricentros', lubricentroId);
-        transaction.update(lubricentroRef, lubricentroUpdate);
-
-        // ✅ Marcar el cupón como usado
-        transaction.update(couponRef, {
-            status: 'used',
-            usedBy: {
-            lubricentroId: lubricentroId,
-            lubricentroName: lubricentroInfo?.fantasyName || lubricentroInfo?.name || 'N/A',
-            usedAt: serverTimestamp(),
-            activatedBy: lubricentroInfo?.email || lubricentroInfo?.responsable || 'N/A'
-            },
-            updatedAt: serverTimestamp()
-        });
-
-        // ✅ Actualizar estadísticas del distribuidor (si existe)
-        if (couponData.distributorId && couponData.distributorId !== 'manual') {
-            try {
-            const distributorRef = doc(db, 'distributors', couponData.distributorId);
-            const distributorDoc = await transaction.get(distributorRef);
-            
-            if (distributorDoc.exists()) {
-                const currentStats = distributorDoc.data().stats || {};
-                transaction.update(distributorRef, {
-                'stats.totalCouponsUsed': (currentStats.totalCouponsUsed || 0) + 1,
-                'stats.activeLubricentros': (currentStats.activeLubricentros || 0) + 1,
-                updatedAt: serverTimestamp()
-                });
-            }
-            } catch (error) {
-            console.log('Distribuidor no encontrado, continuando...');
-            }
-        }
-
-        // ✅ Crear registro de pago/activación
-        const paymentRef = doc(collection(db, 'payments'));
-        transaction.set(paymentRef, {
-            lubricentroId: lubricentroId,
-            lubricentroName: lubricentroInfo?.fantasyName || lubricentroInfo?.name || 'N/A',
-            amount: 0, // Sin costo - es un regalo/beneficio
-            currency: 'ARS',
-            method: 'coupon',
-            status: 'completed',
-            type: 'benefit', // ✅ Tipo: beneficio/regalo
-            couponCode: couponCode.toUpperCase().trim(),
-            distributorId: couponData.distributorId || 'manual',
-            distributorName: couponData.distributorName || 'Manual',
-            membershipMonths: cleanBenefits.membershipMonths,
-            servicesIncluded: cleanBenefits.totalServicesContracted,
-            unlimitedServices: cleanBenefits.unlimitedServices || false,
-            appliedBenefits: cleanBenefits,
-            note: 'Beneficio aplicado mediante cupón de distribuidor',
-            createdAt: serverTimestamp(),
-            processedAt: serverTimestamp()
-        });
-        });
-
-        setSuccess(true);
-        
-        // Llamar al callback de éxito
-        if (onSuccess) {
-        setTimeout(() => {
-            onSuccess();
-        }, 2000);
-        }
-
-    } catch (err: any) {
-        console.error('Error activando con cupón:', err);
-        setError(err.message || 'Error al activar la membresía con el cupón');
-    } finally {
-        setLoading(false);
+    // ✅ PASO 2: Obtener información del lubricentro
+    const lubricentroDocRef = doc(db, 'lubricentros', lubricentroId);
+    const lubricentroSnapshot = await getDoc(lubricentroDocRef);
+    
+    if (!lubricentroSnapshot.exists()) {
+      throw new Error('Lubricentro no encontrado');
     }
-    };
+    
+    const lubricentroData = lubricentroSnapshot.data();
+    const lubricentroName = lubricentroData.fantasyName || lubricentroData.nombre || 'Sin nombre';
+
+    // ✅ PASO 3: Verificar estado del cupón
+    const couponData = couponSnapshot.data();
+
+    if (!couponData) {
+      throw new Error('Error al obtener datos del cupón');
+    }
+    
+    if (couponData.status !== 'active') {
+      throw new Error(`El cupón está ${couponData.status === 'used' ? 'usado' : 'inactivo'}`);
+    }
+
+    // ✅ PASO 4: Preparar datos de actualización
+    const now = new Date();
+    const expirationDate = new Date();
+    const monthsToAdd = validationResult?.couponData?.benefits?.membershipMonths || 3;
+    expirationDate.setMonth(expirationDate.getMonth() + monthsToAdd);
+
+    // ✅ PASO 5: Ejecutar transacción
+    await runTransaction(db, async (transaction) => {
+      // Leer cupón dentro de la transacción
+      const couponInTransaction = await transaction.get(couponRef);
+      
+      if (!couponInTransaction.exists()) {
+        throw new Error('El cupón no está disponible');
+      }
+
+      const couponInTransactionData = couponInTransaction.data();
+      
+      // Verificar nuevamente el estado dentro de la transacción
+      if (couponInTransactionData.status !== 'active') {
+        throw new Error('El cupón ya no está disponible');
+      }
+
+      // Preparar benefits sin campos undefined
+      const cleanBenefits: any = {
+        membershipMonths: validationResult?.couponData?.benefits?.membershipMonths || 3,
+        totalServicesContracted: validationResult?.couponData?.benefits?.totalServicesContracted || 50,
+        unlimitedServices: validationResult?.couponData?.benefits?.unlimitedServices || false,
+        additionalServices: validationResult?.couponData?.benefits?.additionalServices || []
+      };
+      
+      // Solo agregar customPlan si existe
+      const benefitsWithCustom = validationResult?.couponData?.benefits as any;
+      if (benefitsWithCustom?.customPlan) {
+        cleanBenefits.customPlan = benefitsWithCustom.customPlan;
+      }
+
+      // ✅ Datos de actualización del lubricentro
+      const lubricentroUpdate: any = {
+        // Estados generales
+        subscriptionStatus: 'active',
+        estado: 'activo',
+        paymentStatus: 'paid',
+        
+        // ✅ Fechas
+        subscriptionStartDate: serverTimestamp(),
+        subscriptionEndDate: expirationDate,
+        trialEndDate: null, // Limpiar trial
+        lastPaymentDate: serverTimestamp(),
+        
+        // ✅ Método de pago
+        paymentMethod: 'coupon',
+        lastCouponUsed: couponCodeUpper,
+        
+        // ✅ Beneficios del cupón
+        ...cleanBenefits,
+        
+        // ✅ Contador de servicios
+        servicesUsedThisMonth: 0,
+        servicesRemaining: cleanBenefits.unlimitedServices ? 
+          null : cleanBenefits.totalServicesContracted
+      };
+
+      // ✅ Actualizar lubricentro
+      transaction.update(lubricentroDocRef, lubricentroUpdate);
+
+      // ✅ Marcar cupón como usado
+      transaction.update(couponRef, {
+        status: 'used',
+        usedBy: lubricentroId,
+        usedAt: serverTimestamp(),
+        usedByName: lubricentroName
+      });
+    });
+
+    console.log('✅ Membresía activada exitosamente con cupón');
+    
+    // Mostrar mensaje de éxito
+    alert('¡Membresía activada exitosamente! Redirigiendo al dashboard...');
+    
+    // Recargar la página para reflejar cambios
+    window.location.href = '/dashboard';
+    
+  } catch (error: any) {
+    console.error('❌ Error al activar con cupón:', error);
+    setError(error.message || 'Error al activar la membresía. Por favor intenta nuevamente.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Reset del formulario
   const handleReset = () => {
