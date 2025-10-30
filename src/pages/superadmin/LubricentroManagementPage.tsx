@@ -38,6 +38,11 @@ import { Lubricentro, LubricentroStatus } from '../../types';
 // Modal de edición existente
 import SuperAdminEditLubricentroModal from '../../components/SuperAdminEditLubricentroModal';
 
+
+import PurchaseAdditionalServicesModal from '../../components/admin/PurchaseAdditionalServicesModal';
+import { purchaseAdditionalServices } from '../../services/planRenewalService';
+import { ShoppingCartIcon } from '@heroicons/react/24/outline';
+
 // Iconos
 import { 
   BuildingOfficeIcon,
@@ -77,6 +82,10 @@ const LubricentroManagementPage: React.FC<LubricentroManagementPageProps> = () =
   // Estado para confirmación de eliminación
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [lubricentroToDelete, setLubricentroToDelete] = useState<Lubricentro | null>(null);
+
+  // 🆕 AGREGAR
+const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+const [selectedLubricentroForPurchase, setSelectedLubricentroForPurchase] = useState<any>(null);
   
   // Estados de filtros
   const [statusFilter, setStatusFilter] = useState<'todos' | 'activo' | 'inactivo' | 'trial'>('todos');
@@ -92,10 +101,12 @@ const LubricentroManagementPage: React.FC<LubricentroManagementPageProps> = () =
     serviciosTotal: 0
   });
 
+
   // Cargar datos
   useEffect(() => {
     loadLubricentros();
   }, []);
+
 
   // Aplicar filtros cuando cambien
   useEffect(() => {
@@ -182,6 +193,11 @@ const LubricentroManagementPage: React.FC<LubricentroManagementPageProps> = () =
     
     setFilteredLubricentros(filtered);
   };
+  
+const handleOpenPurchaseModal = (lubricentro: any) => {
+setSelectedLubricentroForPurchase(lubricentro);
+setIsPurchaseModalOpen(true);
+};
 
   // Función para abrir el modal de edición completa
   const handleEditLubricentro = (lubricentro: Lubricentro) => {
@@ -493,6 +509,19 @@ const LubricentroManagementPage: React.FC<LubricentroManagementPageProps> = () =
                           >
                             <TrashIcon className="h-5 w-5" />
                           </button>
+
+                          {/* 🆕 Botón Comprar (solo si tiene plan por servicios) */}
+                            {lubricentro.totalServicesContracted && (
+                              <Button
+                                size="sm"
+                                color="success"
+                                variant="solid"
+                                onClick={() => handleOpenPurchaseModal(lubricentro)}
+                                icon={<ShoppingCartIcon className="h-4 w-4" />}
+                              >
+                                Asignar
+                              </Button>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -633,6 +662,21 @@ const LubricentroManagementPage: React.FC<LubricentroManagementPageProps> = () =
           </div>
         </div>
       </Modal>
+
+
+          {/* 🆕 Modal de Compra de Servicios */}
+            <PurchaseAdditionalServicesModal
+              isOpen={isPurchaseModalOpen}
+              onClose={() => {
+                setIsPurchaseModalOpen(false);
+                setSelectedLubricentroForPurchase(null);
+              }}
+              lubricentro={selectedLubricentroForPurchase}
+              onSuccess={() => {
+                loadLubricentros();
+              }}
+            />
+
     </PageContainer>
   );
 };

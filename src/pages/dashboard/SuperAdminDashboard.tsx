@@ -24,7 +24,8 @@ import {
   getAllLubricentros, 
   updateLubricentroStatus, 
   extendTrialPeriod,
-  getLubricentroById
+  getLubricentroById,
+  deleteLubricentro 
 } from '../../services/lubricentroService';
 
 // Tipos
@@ -36,6 +37,14 @@ import SuperAdminEditLubricentroModal from '../../components/SuperAdminEditLubri
 
 // 🆕 NUEVO: Componente de acciones rápidas
 import QuickSubscriptionActions from '../../components/admin/QuickSubscriptionActions';
+
+import PurchaseAdditionalServicesModal from '../../components/admin/PurchaseAdditionalServicesModal';
+
+// Funciones de renovación de planes
+import { 
+  purchaseAdditionalServices,
+  resetMonthlyServicesCounter 
+} from '../../services/planRenewalService';
 
 // Iconos
 import { 
@@ -54,8 +63,13 @@ import {
   WrenchScrewdriverIcon,
   PencilIcon,
   GiftIcon,
-  CogIcon // 🆕 Nuevo icono para renovaciones
+  CogIcon ,
+  TrashIcon,          // Para botón de eliminar
+ 
+  ShoppingCartIcon// 🆕 Nuevo icono para renovaciones
 } from '@heroicons/react/24/outline';
+
+
 
 // Estado para almacenar los planes dinámicos
 let cachedPlans: any[] = [];
@@ -134,12 +148,14 @@ const fetchAllPlansFromFirebase = async (): Promise<any[]> => {
   }
 };
 
-// Función para obtener el nombre del plan
+
+// Función para obtener el nombre del plan (SIN HOOKS)
 const getDynamicPlanName = (lubricentro: Lubricentro): string => {
   if (!lubricentro.subscriptionPlan) return 'Sin Plan';
   
   console.log(`🔍 Plan para ${lubricentro.fantasyName}: "${lubricentro.subscriptionPlan}"`);
   
+  // Si tiene servicios contratados, mostrar PLANXXX
   if (lubricentro.totalServicesContracted) {
     const totalServices = lubricentro.totalServicesContracted;
     const displayName = `PLAN${totalServices}`;
@@ -147,6 +163,7 @@ const getDynamicPlanName = (lubricentro: Lubricentro): string => {
     return displayName;
   }
   
+  // Nombres amigables para planes estándar
   const friendlyNames: Record<string, string> = {
     'starter': 'Plan Iniciante',
     'basic': 'Plan Básico',
@@ -193,6 +210,8 @@ const needsRenewal = (lubricentro: Lubricentro): boolean => {
   
   return false;
 };
+
+
 
 // Funciones para badges
 const getStatusVariant = (estado: string): 'success' | 'warning' | 'error' | 'info' => {

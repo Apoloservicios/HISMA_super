@@ -166,7 +166,7 @@ const HybridOwnerDashboard: React.FC = () => {
         return {
           planName: 'Período de Prueba',
           isTrialPeriod: true,
-          userLimit: 10, // Límite de prueba
+          userLimit: 2, // Límite de prueba (según SUBSCRIPTION_CONSTANTS.TRIAL.MAX_USERS)
           currentUsers: usersList.length,
           serviceLimit: 10, // Límite de servicios de prueba
           currentServices: lub.servicesUsedThisMonth || 0,
@@ -184,13 +184,16 @@ const HybridOwnerDashboard: React.FC = () => {
       if (lub.totalServicesContracted !== undefined && lub.totalServicesContracted > 0) {
         console.log('✅ Es un plan por servicios');
         
-        // Obtener el nombre del plan
+        // Obtener el nombre del plan y maxUsers
         let planDisplayName = 'Plan por Servicios';
+        let maxUsers = 2; // Valor por defecto
+        
         if (lub.subscriptionPlan) {
           const plans = await getSubscriptionPlans();
           const plan = plans[lub.subscriptionPlan];
           if (plan) {
             planDisplayName = plan.name;
+            maxUsers = plan.maxUsers; // ✅ Usar el maxUsers del plan
           } else {
             // Si el plan no existe en la BD, construir nombre desde totalServicesContracted
             planDisplayName = `PLAN${lub.totalServicesContracted}`;
@@ -200,7 +203,7 @@ const HybridOwnerDashboard: React.FC = () => {
         return {
           planName: planDisplayName,
           isTrialPeriod: false,
-          userLimit: 10, // Ajustar según el plan real
+          userLimit: maxUsers, // ✅ Usar el límite del plan real
           currentUsers: usersList.length,
           serviceLimit: null, // No hay límite mensual, solo total
           currentServices: stats.thisMonth, // Servicios usados este mes
